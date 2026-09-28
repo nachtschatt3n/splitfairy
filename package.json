@@ -1,6 +1,6 @@
 {
   "name": "splitfairy",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -13,12 +13,13 @@
     "start": "node dist/server/apps/server/src/index.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "playwright test",
+    "test:e2e": "npm run build && playwright test",
     "check": "npm run typecheck && npm test && npm run build",
     "backup": "node dist/server/scripts/backup.js",
     "dev:ui": "vite --host 127.0.0.1",
     "backup:dev": "tsx scripts/backup.ts",
-    "smoke:ai": "tsx scripts/ai-smoke.ts"
+    "smoke:ai": "tsx scripts/ai-smoke.ts",
+    "test:e2e:real": "npm run build && playwright test --project=iphone-webkit --project=iphone-chromium --project=desktop-chromium"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.0",
@@ -36,6 +37,7 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.55.0",
     "@types/node": "^24.0.0",
     "@types/nodemailer": "^7.0.0",
