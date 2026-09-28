@@ -2,7 +2,7 @@ import {useState,type FormEvent} from 'react';
 import {ArrowRight,Mail,Pencil,Plus,Settings2,UserRound,Users} from 'lucide-react';
 import {api} from './api.js';
 import type {Command,Family,Member,Person,Trip,TripView,User} from '../../../packages/domain/src/model.js';
-import {Button,Empty,Sheet,ThemePicker,WEIGHTS,fmt,uid,weightLabel,type Remove,type Save} from './common.js';
+import {Button,Empty,Sheet,ThemePicker,WEIGHTS,fmt,uid,weightLabel,type Remove,type Save,getDisplay,type DisplaySettings} from './common.js';
 import {localDb,pendingFor} from './offline.js';
 import {useEffect} from 'react';
 
@@ -108,7 +108,7 @@ function TripSheet({trip,save,busy,onClose,onDeleted,onMessage}:{trip:Trip;save:
  </Sheet>;
 }
 
-export function People({trip,view,user,onRename,onLogout,save,remove,onInvite,pending,selected,onRefresh,onTripDeleted,onMessage,busy,describeActivity}:{trip:Trip;view:TripView;user:User|null|undefined;onRename:()=>void;onLogout:()=>void;save:Save;remove:Remove;onInvite:()=>void;pending:number;selected:string;onRefresh:()=>void;onTripDeleted:()=>void;onMessage:(m:string)=>void;busy:boolean;describeActivity:(s:string)=>string}){
+export function People({onDisplay,trip,view,user,onRename,onLogout,save,remove,onInvite,pending,selected,onRefresh,onTripDeleted,onMessage,busy,describeActivity}:{onDisplay:(next:DisplaySettings)=>void;trip:Trip;view:TripView;user:User|null|undefined;onRename:()=>void;onLogout:()=>void;save:Save;remove:Remove;onInvite:()=>void;pending:number;selected:string;onRefresh:()=>void;onTripDeleted:()=>void;onMessage:(m:string)=>void;busy:boolean;describeActivity:(s:string)=>string}){
  const [tripSheet,setTripSheet]=useState(false);
  const memberAction=async(work:()=>Promise<unknown>,done:string)=>{try{await work();onMessage(done);onRefresh();}catch(error){onMessage(error instanceof Error?error.message:'That did not work');}};
  const organizer=view.role==='organizer',members=view.members??[];
@@ -146,6 +146,11 @@ export function People({trip,view,user,onRename,onLogout,save,remove,onInvite,pe
     </div>;})}
     {organizer&&<Button kind="ghost" onClick={onInvite}><Mail size={17}/> Invite someone without adding them</Button>}
     {organizer&&<div className="settings-block"><span className="eyebrow">Trip settings</span><h3>{trip.name}{trip.archived?' · archived':''}</h3><p>{fmt(trip.start)} – {fmt(trip.end)}</p><Button kind="secondary" onClick={()=>setTripSheet(true)}><Settings2 size={16}/> Edit trip</Button></div>}
+    <div className="settings-block display-block"><span className="eyebrow">Display on this device</span>
+     <div className="form-stack"><div className="form-row">
+      <label>Dates<select value={getDisplay().date} onChange={e=>onDisplay({...getDisplay(),date:e.target.value as DisplaySettings['date']})}><option value="dmy">DD.MM.YY (03.10.26)</option><option value="written">Written (Sat 3 Oct)</option><option value="iso">YYYY-MM-DD (2026-10-03)</option></select></label>
+      <label>Times<select value={getDisplay().time} onChange={e=>onDisplay({...getDisplay(),time:e.target.value as DisplaySettings['time']})}><option value="24h">24-hour (20:30)</option><option value="12h">12-hour (8:30 pm)</option></select></label>
+     </div></div></div>
     <div className="settings-block account-block"><span className="eyebrow">Your account</span><div className="account-row"><span><strong>{user?.name}</strong> · {user?.email??'—'}</span><span className="account-actions"><button className="text-button" onClick={onRename}>Change name</button><button className="text-button" onClick={onLogout}>Sign out</button></span></div></div>
    </section>
    <section className="card">

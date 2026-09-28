@@ -170,6 +170,15 @@ describe('journey: stays, travel legs and routes',()=>{
   expect(()=>store.mutate(actor,id,cmd('stay',{id:'x',name:'Bad',from:'2026-10-05',to:'2026-10-04',version:0},0,'j6'))).toThrow(/Check-out/);
   expect(()=>store.mutate(actor,id,cmd('stay',{id:'y',name:'Bad',from:'2026-10-05',to:'2026-10-06',expenseId:'nope',version:0},0,'j7'))).toThrow(/booking cost/);
  });
+ it('keeps http recipe links and flight numbers, and refuses anything else',()=>{
+  const id=base();
+  const t=store.mutate(actor,id,cmd('event',{id:'d',title:'Cataplana',date:'2026-10-02',kind:'dinner',recipeUrl:'https://www.chefkoch.de/rezepte/123/cataplana.html',participants:[],version:0},0,'k1'));
+  expect(t.events[0].recipeUrl).toBe('https://www.chefkoch.de/rezepte/123/cataplana.html');
+  expect(()=>store.mutate(actor,id,cmd('event',{id:'x',title:'Bad',date:'2026-10-02',kind:'dinner',recipeUrl:'javascript:alert(1)',participants:[],version:0},0,'k2'))).toThrow();
+  const l=store.mutate(actor,id,cmd('leg',{id:'f',transportId:'plane',from:'FRA',to:'LIS',departDate:'2026-10-01',arriveDate:'2026-10-01',flightNo:'lh1172',version:0},0,'k3'));
+  expect(l.legs![0].flightNo).toBe('LH1172');
+  expect(()=>store.mutate(actor,id,cmd('leg',{id:'g',transportId:'plane',from:'FRA',to:'LIS',departDate:'2026-10-01',arriveDate:'2026-10-01',flightNo:'not a flight',version:0},0,'k4'))).toThrow(/flight number/);
+ });
  it('stores restaurants with an address and keeps shopping items off them',()=>{
   const id=base();
   const t=store.mutate(actor,id,cmd('event',{id:'r',title:'Tasca do Chico',date:'2026-10-02',kind:'restaurant',address:'Rua do Diário de Notícias 39, Lisboa',participants:[{id:'m',weight:1}],version:0},0,'r1'));

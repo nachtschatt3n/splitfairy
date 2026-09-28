@@ -1,9 +1,10 @@
 import {useMemo,useState} from 'react';
 import {CalendarDays,Check,Plus,Trash2,Users,X} from 'lucide-react';
 import type {Expense,ExpenseInput,Receipt,Trip} from '../../../packages/domain/src/model.js';
+import {fmt} from './common.js';
 import {draftFromReceipt,expenseFromDraft,formatCents,reviewSummary,type ReceiptDraft} from './receipt-draft.js';
 const euro=(n:number)=>new Intl.NumberFormat('en-IE',{style:'currency',currency:'EUR'}).format(n/100);
-const shortDate=(iso:string)=>new Intl.DateTimeFormat('en-GB',{weekday:'short',day:'numeric',month:'short'}).format(new Date(`${iso}T12:00:00`));
+const shortDate=fmt;
 export function ReceiptReview({trip,receipt,today,busy,onClose,onConfirm,onDismiss}:{trip:Trip;receipt:Receipt;today:string;busy:boolean;onClose:()=>void;onConfirm:(expense:ExpenseInput)=>void;onDismiss:()=>void}){
  const [draft,setDraft]=useState<ReceiptDraft>(()=>draftFromReceipt(receipt,trip,today,()=>crypto.randomUUID()));
  const [bulk,setBulk]=useState('');

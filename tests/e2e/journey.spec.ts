@@ -19,6 +19,7 @@ test('travel, stays and routed packing come together on the day timeline',async(
  await sheet(page).getByLabel('Car or flight').selectOption('__new');
  await sheet(page).getByLabel('Name',{exact:true}).fill('Uhl plane');await sheet(page).getByLabel('Type').selectOption('plane');
  await sheet(page).getByLabel('From').fill('Frankfurt (FRA)');await sheet(page).getByLabel('To').fill('Lisbon (LIS)');
+ await sheet(page).getByLabel('Flight number (optional)').fill('tp575');await expect(sheet(page)).toContainText('TAP Air Portugal');
  await sheet(page).getByLabel('At',{exact:true}).first().fill('07:10');await sheet(page).getByLabel('At',{exact:true}).last().fill('09:05');
  await sheet(page).locator('label.chip',{hasText:'Mathias'}).click();
  await sheet(page).getByRole('button',{name:'Add travel'}).click();await closed(page);
@@ -40,6 +41,7 @@ test('travel, stays and routed packing come together on the day timeline',async(
  await expect.poll(async()=>(await day.locator('.timeline article').evaluateAll(a=>a.map(x=>x.getAttribute('aria-label')))).join(' | '))
   .toBe('Pick up keys | Uhl plane: Frankfurt (FRA) → Lisbon (LIS) | Check in · Casa Alfama | Dinner in a tasca');
  await expect(day.getByRole('article',{name:'Check in · Casa Alfama'})).toContainText('€180.00');
+ await expect(day.getByRole('article',{name:/Uhl plane/})).toContainText('TAP Air Portugal TP 575');
  await expect(day.getByRole('article',{name:'Dinner in a tasca'})).toContainText('Book a table for 8');
  await expect(day.getByRole('link',{name:/Rua de São Miguel/})).toHaveAttribute('href',/google\.com\/maps/);
 
@@ -79,7 +81,7 @@ test('travel, stays and routed packing come together on the day timeline',async(
  if(!isPhone(page)){
   // The stay bar reaches into its check-out day.
   const overview=page.getByRole('region',{name:'Whole trip'});
-  const bar=await overview.locator('.ov-stay',{hasText:'Casa das Dunas'}).boundingBox(),out=await overview.getByRole('button',{name:new RegExp(`Open .* ${Number(iso(8).slice(-2))} `)}).boundingBox();
+  const bar=await overview.locator('.ov-stay',{hasText:'Casa das Dunas'}).boundingBox(),out=await overview.getByRole('button',{name:`Open ${new Date(`${iso(8)}T12:00:00`).toLocaleDateString('en-GB',{weekday:'short'})} ${iso(8).slice(8)}.${iso(8).slice(5,7)}.${iso(8).slice(2,4)}`}).boundingBox();
   expect(bar!.x+bar!.width).toBeGreaterThan(out!.x+out!.width*0.4);
   expect(bar!.x+bar!.width).toBeLessThan(out!.x+out!.width);
  }

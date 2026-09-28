@@ -215,6 +215,14 @@ describe('photos of places',()=>{
   expect((await a.inject({method:'DELETE',url:`/api/v1/trips/${trip.id}/photos/${byBea.json().id}`,headers:bea})).json().trip.photos).toHaveLength(1);
   expect(readdirSync(join(dataDir,'photos',trip.id)).sort()).toEqual([`${byAdmin.id}-thumb.jpg`,`${byAdmin.id}.jpg`]);
 
+  // Plans (e.g. a dinner) can have photos too; they go when the plan goes.
+  await cmd('save','event',{id:'dinner',title:'Cataplana',date:'2026-10-02',kind:'dinner',participants:[]});
+  const dish=await a.inject({method:'POST',url:`/api/v1/trips/${trip.id}/photos`,headers:bea,payload:{image:jpeg,eventId:'dinner'}});
+  expect(dish.statusCode).toBe(201);expect(dish.json().eventId).toBe('dinner');
+  expect((await a.inject({method:'POST',url:`/api/v1/trips/${trip.id}/photos`,headers:bea,payload:{image:jpeg,eventId:'dinner',stayId:'house'}})).statusCode).toBe(400);
+  const ev=(await a.inject({method:'GET',url:`/api/v1/trips/${trip.id}`,headers:admin})).json().trip.events[0];
+  expect((await cmd('delete','event',{id:'dinner'},ev.version)).json().trip.photos.some((p:any)=>p.eventId)).toBe(false);
+  expect(readdirSync(join(dataDir,'photos',trip.id)).some(f=>f.startsWith(dish.json().id))).toBe(false);
   // Deleting the stay takes its photos and their files with it.
   await upload(bea);
   const stay=(await a.inject({method:'GET',url:`/api/v1/trips/${trip.id}`,headers:admin})).json().trip.stays[0];

@@ -15,8 +15,9 @@ function ExpenseForm({trip,save,busy,onClose,forEvent}:{trip:Trip;save:Save;busy
  // Started from a plan (e.g. a restaurant's bill): linked to it, named and dated after it.
  const preset=trip.events.find(e=>e.id===forEvent);
  const [title,setTitle]=useState(preset?.title??''),[date,setDate]=useState(preset?.date??today()),[amount,setAmount]=useState(''),[payer,setPayer]=useState(trip.families[0]?.id??''),[eventId,setEventId]=useState(preset?.id??''),[category,setCategory]=useState<Expense['category']>('food');
- const [split,setSplit]=useState<SplitState>(()=>initialSplit(trip,trip.people,null,'shares'));
- const [notes,setNotes]=useState(''),[refund,setRefund]=useState(false),[multiPay,setMultiPay]=useState(false),[payAmounts,setPayAmounts]=useState<Record<string,string>>({}),[error,setError]=useState('');
+ // Starts as an equal split between all families, shown as one line; the full options open on request.
+ const [split,setSplit]=useState<SplitState>(()=>initialSplit(trip,trip.people,null,'families')),[showSplit,setShowSplit]=useState(false);
+ const [notes,setNotes]=useState(''),[showNotes,setShowNotes]=useState(false),[refund,setRefund]=useState(false),[multiPay,setMultiPay]=useState(false),[payAmounts,setPayAmounts]=useState<Record<string,string>>({}),[error,setError]=useState('');
  const total=(refund?-1:1)*(amount.trim()?cents(amount):0);
  const create=async(e:FormEvent)=>{
   e.preventDefault();setError('');
@@ -33,14 +34,17 @@ function ExpenseForm({trip,save,busy,onClose,forEvent}:{trip:Trip;save:Save;busy
  };
  return <Sheet title="Add an expense" eyebrow="Spend" onClose={onClose}>
   <form className="form-stack expense-form" id="quick-expense" onSubmit={create}>
-   <label className="amount-field">Amount in EUR<input inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00" autoFocus required/></label>
+   <label className="amount-field">Amount in EUR<span className="amount-input"><i aria-hidden="true">€</i><input inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00" autoFocus required/></span></label>
    <label>What was it?<input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Groceries for dinner" required/></label>
-   <div className="form-row"><label>Paid by<select value={payer} onChange={e=>setPayer(e.target.value)} disabled={multiPay}>{trip.families.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
-    <label>Date<input type="date" value={date} onChange={e=>setDate(e.target.value)} required/></label></div>
-   <div className="form-row"><label>Category<select value={category} onChange={e=>setCategory(e.target.value as Expense['category'])}>{CATEGORIES.map(([c,l])=><option key={c} value={c}>{l}</option>)}</select></label>
-    <label>For<select value={eventId} onChange={e=>setEventId(e.target.value)}><option value="">General expense</option>{trip.events.map(e=><option key={e.id} value={e.id} disabled={!e.participants.length}>{e.title}{e.participants.length?'':' (nobody joining yet)'}</option>)}</select></label></div>
-   <label>Notes (optional)<textarea rows={2} maxLength={2000} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Tip included, paid by card"/></label>
-   {eventId?<p className="helper">Shared by the people joining that plan, by their shares.</p>:<SplitEditor trip={trip} people={trip.people} total={total} value={split} onChange={setSplit}/>}
+   <label>Paid by<select value={payer} onChange={e=>setPayer(e.target.value)} disabled={multiPay}>{trip.families.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
+   <div className="form-row"><label>Date<input type="date" value={date} onChange={e=>setDate(e.target.value)} required/></label>
+    <label>Category<select value={category} onChange={e=>setCategory(e.target.value as Expense['category'])}>{CATEGORIES.map(([c,l])=><option key={c} value={c}>{l}</option>)}</select></label></div>
+   <label>For<select value={eventId} onChange={e=>setEventId(e.target.value)}><option value="">General expense</option>{trip.events.map(e=><option key={e.id} value={e.id} disabled={!e.participants.length}>{e.title}{e.participants.length?'':' (nobody joining yet)'}</option>)}</select></label>
+   {showNotes?<label>Notes (optional)<textarea rows={2} maxLength={2000} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Tip included, paid by card" autoFocus/></label>
+    :<button type="button" className="text-button add-note" onClick={()=>setShowNotes(true)}><Plus size={15}/> Add a note</button>}
+   {eventId?<p className="helper">Shared by the people joining that plan, by their shares.</p>
+    :showSplit?<SplitEditor trip={trip} people={trip.people} total={total} value={split} onChange={setSplit}/>
+    :<div className="split-summary"><span><strong>Split equally between families</strong><small>{trip.families.length} {trip.families.length===1?'family':'families'}{Number.isSafeInteger(total)&&total?(Math.abs(total)%Math.max(1,trip.families.length)?` · about ${euro(Math.round(Math.abs(total)/trip.families.length))} each`:` · ${euro(Math.abs(total)/trip.families.length)} each`):''}</small></span><button type="button" className="text-button" onClick={()=>setShowSplit(true)}>Other split options</button></div>}
    <details className="advanced"><summary>Several payers or a refund <ChevronDown size={16}/></summary>
     <label className="check-label"><input type="checkbox" checked={refund} onChange={e=>setRefund(e.target.checked)}/> This is a refund received by the payer</label>
     <label className="check-label"><input type="checkbox" checked={multiPay} onChange={e=>setMultiPay(e.target.checked)}/> More than one family paid</label>

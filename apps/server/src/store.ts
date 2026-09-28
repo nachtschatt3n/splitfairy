@@ -90,12 +90,15 @@ export class Store{
  }
  /** Remove expired sign-in state and old idempotency keys. */
  /** Adds a photo of a stay; anyone on the trip may. Re-sending the same upload ID is a no-op. */
- addPhoto(actor:User,tripId:string,photoId:string,stayId:string):Photo{
+ addPhoto(actor:User,tripId:string,photoId:string,target:{stayId?:string;eventId?:string}):Photo{
   return this.editTrip(actor,tripId,trip=>{
    const prior=(trip.photos??[]).find(p=>p.id===photoId);if(prior)return prior;
-   if(!(trip.stays??[]).some(s=>s.id===stayId))throw new InputError('Stay not found');
-   if((trip.photos??[]).filter(p=>p.stayId===stayId).length>=PHOTOS_PER_STAY)throw new InputError(`A stay can have up to ${PHOTOS_PER_STAY} photos`);
-   const photo:Photo={id:photoId,stayId,authorId:actor.id,author:actor.name,at:new Date().toISOString()};
+   const id=target.stayId??target.eventId;
+   if(target.stayId&&!(trip.stays??[]).some(s=>s.id===target.stayId))throw new InputError('Stay not found');
+   if(target.eventId&&!trip.events.some(e=>e.id===target.eventId))throw new InputError('Plan not found');
+   if(!id||(target.stayId&&target.eventId))throw new InputError('Choose a stay or a plan');
+   if((trip.photos??[]).filter(p=>(p.stayId??p.eventId)===id).length>=PHOTOS_PER_STAY)throw new InputError(`Up to ${PHOTOS_PER_STAY} photos each`);
+   const photo:Photo={id:photoId,...(target.stayId?{stayId:target.stayId}:{eventId:target.eventId}),authorId:actor.id,author:actor.name,at:new Date().toISOString()};
    trip.photos=[...(trip.photos??[]),photo];return photo;
   },'add photo');
  }
@@ -167,6 +170,7 @@ export class Store{
      list.splice(index,1);
      if(command.entity==='event')for(const item of trip.shopping)if(item.eventId===value.id){item.eventId=null;item.version++;}
      if(command.entity==='stay')trip.photos=(trip.photos??[]).filter(p=>p.stayId!==value.id);
+     if(command.entity==='event')trip.photos=(trip.photos??[]).filter(p=>p.eventId!==value.id);
      // Things a removed family was bringing go back to "not decided yet".
      if(command.entity==='family'){for(const item of trip.gear??[])if(item.familyId===value.id){item.familyId=null;item.version++;}for(const t of trip.transport??[])if(t.familyId===value.id){t.familyId=null;t.version++;}}
      // Items that were going in a removed car or flight stay on the list without a transport.

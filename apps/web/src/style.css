@@ -458,7 +458,7 @@ input[type=date]{min-width:150px}
 .spend-legend li{display:flex;align-items:center;gap:6px}
 .spend-legend b{color:var(--ink);font-variant-numeric:tabular-nums}
 .spend-legend i{width:10px;height:10px;border-radius:3px;display:block}
-.cat-food{--cat:var(--accent)}.cat-activity{--cat:var(--link)}.cat-transport{--cat:var(--primary)}.cat-stay{--cat:var(--accent-ink)}.cat-other{--cat:var(--muted)}
+.cat-food{--cat:var(--accent)}.cat-activity{--cat:#d99a1e}.cat-transport{--cat:var(--primary)}.cat-stay{--cat:var(--accent-ink)}.cat-other{--cat:var(--muted)}
 .spend-bar span,.spend-legend i{background:var(--cat)}
 .list-icon[class*=cat-]{color:var(--cat);background:color-mix(in srgb,var(--cat) 14%,var(--surface))}
 .expense-list .filter-chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:6px;scrollbar-width:none}
@@ -495,3 +495,24 @@ input[type=date]{min-width:150px}
 .event-bill p{margin:0}
 
 .expense-notes{margin:0 0 16px;padding:10px 12px;border-radius:12px;background:var(--surface-2);color:var(--ink)}
+.split-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2)}
+.split-summary span{display:grid;gap:2px}
+.split-summary small{color:var(--muted);font-variant-numeric:tabular-nums}
+.split-summary .text-button{min-height:44px}
+.photo-add-inline{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px}
+.photo-add-inline label{position:relative;display:inline-flex;align-items:center;gap:6px;min-height:44px;cursor:pointer}
+.photo-add-inline input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;font-size:16px}
+/* Add expense: amount first and large, short fields in pairs even on phones */
+.amount-input{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);padding:0 14px}
+.amount-input:focus-within{border-color:#2e8175;box-shadow:0 0 0 3px #cce8dc}
+.amount-input i{font:700 26px 'Outfit',sans-serif;font-style:normal;color:var(--muted)}
+.expense-form .amount-input input:not([type=checkbox]){border:0!important;box-shadow:none!important;background:transparent!important;padding:8px 0!important;min-height:58px!important;font:700 30px 'Outfit',sans-serif!important;font-variant-numeric:tabular-nums}
+.expense-form .add-note{justify-self:start;min-height:44px;display:inline-flex;align-items:center;gap:6px}
+@media(max-width:740px){.expense-form .form-row{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.expense-form .form-row>label{min-width:0}.expense-form .form-row input[type=date]{min-width:0!important}}
+.airline-badge{flex:none;display:grid;place-items:center;border-radius:9px 9px 9px 2px;font:800 12px/1 'Outfit',sans-serif;letter-spacing:.02em;box-shadow:inset 0 0 0 1px rgb(0 0 0/.08)}
+.flight-input{display:flex;align-items:center;gap:8px}
+.flight-input input{flex:1;text-transform:uppercase}
+.tl-card.travel .event-head{gap:12px}
+.tl-card .event-head>div{min-width:0;flex:1 1 auto}
+.expense-form .form-row{align-items:end}
+.flight-line{margin:2px 0 0;color:var(--ink);font-size:14px}

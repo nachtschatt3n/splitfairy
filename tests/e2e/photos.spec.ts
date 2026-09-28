@@ -17,6 +17,7 @@ test('everyone can add photos of a place, open them, and they become the trip co
  await sheet(page).getByRole('button',{name:'Add stay'}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
 
  const day=page.getByRole('region',{name:/Plans for/});
+ await expect(day.getByText('Add photos of Casa das Dunas')).toBeVisible();
  await day.getByRole('button',{name:'Edit Casa das Dunas'}).click();
  await sheet(page).getByLabel('Add photos').setInputFiles([{name:'house.jpg',mimeType:'image/jpeg',buffer:await picture('#3a7ca5')},{name:'beach.jpg',mimeType:'image/jpeg',buffer:await picture('#e9c46a')}]);
  await expect(sheet(page).locator('.photo-tile')).toHaveCount(2,{timeout:30_000});
@@ -34,6 +35,21 @@ test('everyone can add photos of a place, open them, and they become the trip co
  await expect(sheet(page)).toContainText('Photo 1 of 1');
  await sheet(page).getByRole('button',{name:'Close'}).click();
  await expect(day.getByRole('button',{name:'Photos of Casa das Dunas (1)'})).toBeVisible();
+ await expect(day.getByText('Add photos of Casa das Dunas')).toHaveCount(0);
+
+ // Meals get a recipe link and a photo of the dish.
+ await page.getByRole('button',{name:'Plan a meal or activity'}).click();
+ await sheet(page).getByLabel('What is it?').fill('Cataplana');await sheet(page).getByLabel('Type').selectOption('dinner');
+ await sheet(page).getByLabel('Recipe link (optional)').fill('https://www.chefkoch.de/rezepte/123/cataplana.html');
+ await sheet(page).getByRole('button',{name:'Add to plan'}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+ const dinner=day.getByRole('article',{name:'Cataplana'});
+ await expect(dinner.getByRole('link',{name:/Recipe · chefkoch\.de/})).toHaveAttribute('href','https://www.chefkoch.de/rezepte/123/cataplana.html');
+ await dinner.getByRole('button',{name:'Edit Cataplana'}).click();
+ await sheet(page).getByLabel('Add photos').setInputFiles({name:'dish.jpg',mimeType:'image/jpeg',buffer:await picture('#c1440e')});
+ await expect(sheet(page).locator('.photo-tile')).toHaveCount(1,{timeout:30_000});
+ await sheet(page).getByRole('button',{name:'Close'}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+ await expect(dinner.getByRole('button',{name:'Photos of Cataplana (1)'})).toBeVisible();
+ await shot(page,testInfo,'meal-photo');
 
  // The first photo is the trip's cover on Today and in the trip list.
  await openSection(page,'Today');

@@ -26,7 +26,7 @@ export const api={
  setRole:(id:string,email:string,role:'organizer'|'member')=>request<{members:Member[]}>(`/trips/${id}/members/${encodeURIComponent(email)}`,{method:'PUT',body:JSON.stringify({role})}),
  receiptAction:(id:string,receiptId:string,action:'retry'|'dismiss')=>request<TripView>(`/trips/${id}/receipts/${receiptId}/${action}`,{method:'POST',body:'{}'}),
  places:(q:string)=>request<{name:string;address:string}[]>(`/places?q=${encodeURIComponent(q)}`,{},10_000),
- photo:async(id:string,stayId:string,file:File,uploadId:string)=>request<Photo>(`/trips/${id}/photos`,{method:'POST',body:JSON.stringify({image:await base64(file),stayId,uploadId})},90_000),
+ photo:async(id:string,target:{stayId?:string;eventId?:string},file:File,uploadId:string)=>request<Photo>(`/trips/${id}/photos`,{method:'POST',body:JSON.stringify({image:await base64(file),...target,uploadId})},90_000),
  deletePhoto:(id:string,photoId:string)=>request<TripView>(`/trips/${id}/photos/${photoId}`,{method:'DELETE'}),
  receipt:async(id:string,file:File,uploadId?:string)=>{const image=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(reader.error);reader.readAsDataURL(file);});return request<{id:string}>(`/trips/${id}/receipts`,{method:'POST',body:JSON.stringify({image,uploadId})},120_000);},
 };

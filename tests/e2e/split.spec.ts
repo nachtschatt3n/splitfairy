@@ -3,7 +3,11 @@ import {addFamily,addPerson,createTrip,openExpenseForm,openSection,shot,signInAs
 const sheet=(page:Page)=>page.getByRole('dialog');
 const closed=(page:Page)=>expect(page.getByRole('dialog')).toHaveCount(0);
 const form=(page:Page)=>page.locator('#quick-expense');
-const mode=(scope:ReturnType<Page['locator']>,name:string)=>scope.getByRole('group',{name:'Split options'}).getByRole('button',{name,exact:true}).click();
+/** Picks a split option; in the add sheet the options first open from the one-line family split. */
+async function mode(scope:ReturnType<Page['locator']>,name:string){
+ const more=scope.getByRole('button',{name:'Other split options'});if(await more.isVisible())await more.click();
+ await scope.getByRole('group',{name:'Split options'}).getByRole('button',{name,exact:true}).click();
+}
 const row=(scope:ReturnType<Page['locator']>,name:string)=>scope.locator('.split-row',{hasText:name});
 /** Opens the expense and checks what each family owes. */
 async function owes(page:Page,title:string,expected:Record<string,string>){
@@ -30,7 +34,7 @@ test('every split option records the right amounts and can be edited in the same
  await addPerson(page,'Mathias','Uhl');await addPerson(page,'Andrea','Uhl');await addPerson(page,'Will','Moncrief');
  await openSection(page,'Spend');
 
- await add(page,'Taxi',"30",async f=>{await f.getByLabel('Notes (optional)').fill('Airport run, tip included');await mode(f,'Equally');await expect(f.locator('.split-footer')).toHaveText('€10.00 per person (3 people)');});
+ await add(page,'Taxi',"30",async f=>{await f.getByRole('button',{name:'Add a note'}).click();await f.getByLabel('Notes (optional)').fill('Airport run, tip included');await mode(f,'Equally');await expect(f.locator('.split-footer')).toHaveText('€10.00 per person (3 people)');});
  await owes(page,'Taxi',{Uhl:'€20.00',Moncrief:'€10.00'});
  // Notes show on the expense and can be changed.
  await page.getByRole('button',{name:'Open Taxi'}).click();
@@ -76,7 +80,7 @@ test('every split option records the right amounts and can be edited in the same
  });
  await owes(page,'Wine',{Uhl:'€4.00',Moncrief:'€6.00'});
 
- await add(page,'Parking',"9",async f=>{await mode(f,'By family');await expect(f.locator('.split-footer')).toHaveText('€4.50 per family');});
+ await add(page,'Parking',"9",async f=>{await expect(f.locator('.split-summary')).toContainText('2 families · €4.50 each');});
  await owes(page,'Parking',{Uhl:'€4.50',Moncrief:'€4.50'});
  await shot(page,testInfo,'split-spend');
 

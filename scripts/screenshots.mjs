@@ -32,7 +32,7 @@ async function seed(request){
  const people=[['ana','Ana','S',1,'ana@example.com'],['tiago','Tiago','S',1,''],['ines','Inês','S',.5,''],['ben','Ben','W',1,'ben@example.com'],['mia','Mia','W',1,''],['noah','Noah','W',.25,''],['giulia','Giulia','R',1,''],['marco','Marco','R',1,''],['lena','Lena','L',1,'']];
  for(const [id,name,familyId,weight,email] of people)await save('person',{id,name,familyId,weight,email});
  const all=people.map(p=>({id:p[0],weight:p[3]}));
- await save('event',{id:'dinner',title:'Grilled sardines on the terrace',date:day(0),time:'20:00',kind:'dinner',owner:'Tiago',notes:'Tiago brings the grill; sardines from the market in the morning',participants:all});
+ await save('event',{id:'dinner',title:'Grilled sardines on the terrace',date:day(0),time:'20:00',kind:'dinner',owner:'Tiago',recipeUrl:'https://www.chefkoch.de/rezepte/sardinhas-assadas',notes:'Tiago brings the grill; sardines from the market in the morning',participants:all});
  await save('event',{id:'surf',title:'Surf lesson in Ericeira',date:day(0),time:'10:00',kind:'activity',owner:'Ben',notes:'',participants:all.filter(p=>!['ines','noah'].includes(p.id))});
  await save('event',{id:'tasca',title:'Tasca do Chico',date:day(1),time:'20:30',kind:'restaurant',address:'Rua do Diário de Notícias 39, Lisboa',owner:'',notes:'Fado from 21:00; table for 11 booked',participants:all});
  await save('event',{id:'breakfast',title:'Pastéis de nata breakfast',date:day(1),time:'09:00',kind:'breakfast',owner:'',notes:'',participants:all});
@@ -46,9 +46,9 @@ async function seed(request){
  await expense('x5','Tasca do Chico',day(1),'food',21450,'W',all,'tasca');
  await expense('x4','Gelato at the harbour',day(-1),'food',3150,'L',all);
  // Getting there: the Webers fly in and ride on with the Silvas; one night in Lisbon, then the house in Ericeira.
- await save('leg',{id:'fly-in',transportId:'weber-plane',from:'Frankfurt (FRA)',to:'Lisbon (LIS)',departDate:day(-2),departTime:'07:10',arriveDate:day(-2),arriveTime:'09:05',people:['ben','mia','noah'],note:'LH 1172'});
+ await save('leg',{id:'fly-in',transportId:'weber-plane',from:'Frankfurt (FRA)',to:'Lisbon (LIS)',departDate:day(-2),departTime:'07:10',arriveDate:day(-2),arriveTime:'09:05',people:['ben','mia','noah'],note:'2 checked bags',flightNo:'LH 1172'});
  await save('leg',{id:'drive-in',transportId:'silva-car',from:'Lisbon',to:'Ericeira',departDate:day(-1),departTime:'11:00',arriveDate:day(-1),arriveTime:'11:45',people:['ana','tiago','ines','ben','mia','noah'],note:''});
- await save('leg',{id:'fly-home',transportId:'weber-plane',from:'Lisbon (LIS)',to:'Frankfurt (FRA)',departDate:day(7),departTime:'18:40',arriveDate:day(7),arriveTime:'22:35',people:['ben','mia','noah'],note:''});
+ await save('leg',{id:'fly-home',transportId:'weber-plane',from:'Lisbon (LIS)',to:'Frankfurt (FRA)',departDate:day(7),departTime:'18:40',arriveDate:day(7),arriveTime:'22:35',people:['ben','mia','noah'],note:'',flightNo:'LH 1173'});
  await save('stay',{id:'alfama',name:'Casa Alfama',address:'Rua de São Miguel 5, Lisboa',from:day(-2),to:day(-1),checkIn:'15:00',checkOut:'10:00',note:'Keys in the lockbox',guests:all.filter(p=>['ben','mia','noah'].includes(p.id)),expenseId:null});
  await save('stay',{id:'dunas',name:'Casa das Dunas',address:'Rua do Norte 12, Ericeira',from:day(-1),to:day(7),checkIn:'16:00',checkOut:'11:00',note:'',guests:all,expenseId:'x1'});
  // Illustrated place pictures (drawn for the example, not real photos).
@@ -87,6 +87,7 @@ try{
   if(scheme==='light'){
    await capture(context,tripId,'phone-today',{});
    await capture(context,tripId,'phone-plan',{tab:'Plan'});
+   await capture(context,tripId,'phone-journey',{tab:'Plan',action:async p=>{await p.locator('.day-strip button').first().click();await p.waitForTimeout(300);}});
    await capture(context,tripId,'phone-packing',{tab:'Pack',action:p=>p.evaluate(()=>{const el=document.querySelector('.transport-strip');window.scrollTo(0,(el?.getBoundingClientRect().top??0)+window.scrollY-90);})});
    await capture(context,tripId,'phone-receipt-review',{tab:'Spend',action:async p=>{await p.getByRole('button',{name:'Review'}).click();await p.getByRole('dialog').waitFor();await p.waitForTimeout(300);}});
    await capture(context,tripId,'phone-settle',{tab:'Settle'});
@@ -102,6 +103,7 @@ try{
  const context=await signedInContext(browser,{viewport:{width:1440,height:900},deviceScaleFactor:1,colorScheme:'light'});
  await capture(context,globalThis.tripId,'desktop-today',{});
  await capture(context,globalThis.tripId,'desktop-plan',{tab:'Plan'});
+ await capture(context,globalThis.tripId,'desktop-spend',{tab:'Spend'});
  await capture(context,globalThis.tripId,'desktop-settle',{tab:'Settle'});
  await browser.close();
  // The sign-in tour shows the same phone screenshots, smaller.

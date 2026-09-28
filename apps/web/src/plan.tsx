@@ -1,10 +1,10 @@
 import {useCallback,useEffect,useRef,useState,type FormEvent} from 'react';
-import {ArrowRight,BedDouble,CalendarDays,MapPin,Pencil,Plus,ReceiptText,Search,ShoppingBasket,Sun,UtensilsCrossed,Wine} from 'lucide-react';
-import {LegCard,LegSheet,StayCard,StaySheet,TripOverview,dayEntries,tripDays,type Who} from './journey.js';
-import {PhotoViewer,type PhotoActions} from './photos.js';
+import {ArrowRight,BedDouble,BookOpen,CalendarDays,MapPin,Pencil,Plus,ReceiptText,Search,ShoppingBasket,Sun,UtensilsCrossed,Wine} from 'lucide-react';
+import {LegCard,LegSheet,StayCard,StaySheet,TripOverview,dayEntries,stayPlace,tripDays,type Who} from './journey.js';
+import {PhotoViewer,StayCover,StayPhotos,photosOf,type PhotoActions,type Place} from './photos.js';
 import {TransportIcon} from './packing.js';
 import type {Event,Leg,Shopping,Stay,Trip} from '../../../packages/domain/src/model.js';
-import {Button,Empty,Sheet,euro,fmt,today,uid,type Remove,type Save} from './common.js';
+import {Button,Empty,Sheet,euro,fmt,fmtTime,today,uid,type Remove,type Save} from './common.js';
 import {api} from './api.js';
 
 const KINDS:[Event['kind'],string][]=[['breakfast','Breakfast'],['lunch','Lunch'],['dinner','Dinner'],['restaurant','Restaurant'],['activity','Activity']];
@@ -31,15 +31,18 @@ function PlaceLookup({name,address,onPick,onAddress}:{name:string;address:string
  </div>;
 }
 
-function EventSheet({trip,event,day,save,remove,busy,onClose}:{trip:Trip;event?:Event;day:string;save:Save;remove:Remove;busy:boolean;onClose:()=>void}){
- const [title,setTitle]=useState(event?.title??''),[kind,setKind]=useState<Event['kind']>(event?.kind??'dinner'),[date,setDate]=useState(event?.date??day),[time,setTime]=useState(event?.time??''),[owner,setOwner]=useState(event?.owner??''),[notes,setNotes]=useState(event?.notes??''),[address,setAddress]=useState(event?.address??'');
+const MEALS:Event['kind'][]=['breakfast','lunch','dinner'];
+export const eventPlace=(e:Event):Place=>({id:e.id,name:e.title,kind:'event'});
+function EventSheet({trip,event,day,save,remove,busy,photos,onPhoto,onClose}:{trip:Trip;event?:Event;day:string;save:Save;remove:Remove;busy:boolean;photos?:PhotoActions;onPhoto?:(index:number)=>void;onClose:()=>void}){
+ const [title,setTitle]=useState(event?.title??''),[kind,setKind]=useState<Event['kind']>(event?.kind??'dinner'),[date,setDate]=useState(event?.date??day),[time,setTime]=useState(event?.time??''),[owner,setOwner]=useState(event?.owner??''),[notes,setNotes]=useState(event?.notes??''),[address,setAddress]=useState(event?.address??''),[recipeUrl,setRecipeUrl]=useState(event?.recipeUrl??''),[error,setError]=useState('');
  // New plans start with everyone; it is easy to remove people or decide later.
  const [joining,setJoining]=useState<string[]>(event?event.participants.map(p=>p.id):trip.people.map(p=>p.id));
  const submit=async(e:FormEvent)=>{
-  e.preventDefault();if(!title.trim())return;
+  e.preventDefault();setError('');if(!title.trim())return;
+  if(MEALS.includes(kind)&&recipeUrl.trim()&&!/^https?:\/\/\S+\.\S+/.test(recipeUrl.trim())){setError('Paste the full recipe link, starting with https://');return;}
   // Weights come from the people's current share; existing expenses keep the split they were posted with.
   const participants=trip.people.filter(p=>joining.includes(p.id)).map(p=>({id:p.id,weight:p.weight}));
-  await save('event',{id:event?.id??uid(),title:title.trim(),kind,date,time,owner:owner.trim(),notes:notes.trim(),address:kind==='restaurant'?address.trim():'',participants,version:event?.version??0},event);
+  await save('event',{id:event?.id??uid(),title:title.trim(),kind,date,time,owner:owner.trim(),notes:notes.trim(),address:kind==='restaurant'?address.trim():'',recipeUrl:MEALS.includes(kind)?recipeUrl.trim():'',participants,version:event?.version??0},event);
   onClose();
  };
  const linked=event?trip.expenses.filter(x=>x.lines.some(l=>l.splits.some(sp=>sp.eventId===event.id))).length:0;
@@ -50,6 +53,8 @@ function EventSheet({trip,event,day,save,remove,busy,onClose}:{trip:Trip;event?:
    <div className="form-row"><label>Type<select value={kind} onChange={e=>setKind(e.target.value as Event['kind'])}>{KINDS.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select></label>
     <label>Day<input type="date" value={date} min={trip.start} max={trip.end} onChange={e=>setDate(e.target.value)} required/></label><label>Time (optional)<input type="time" value={time} onChange={e=>setTime(e.target.value)}/></label></div>
    {kind==='restaurant'&&<PlaceLookup name={title} address={address} onPick={(name,addr)=>{setAddress(addr);if(!title.trim()||name.toLowerCase().includes(title.trim().toLowerCase()))setTitle(name);}} onAddress={setAddress}/>}
+   {MEALS.includes(kind)&&<label>Recipe link (optional)<input type="url" inputMode="url" value={recipeUrl} onChange={e=>setRecipeUrl(e.target.value)} placeholder="https://www.chefkoch.de/rezepte/…"/></label>}
+   {event&&photos&&onPhoto&&<StayPhotos trip={trip} place={eventPlace(event)} actions={photos} onOpen={onPhoto}/>}
    {kind!=='restaurant'&&<label>Who's organizing? (optional)<input value={owner} onChange={e=>setOwner(e.target.value)} placeholder="Ben cooks"/></label>}
    <label>Notes (optional)<textarea rows={3} maxLength={2000} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Meet at the harbour, bring cash for the boat"/></label>
    <fieldset><legend>Who is joining?</legend>
@@ -59,6 +64,7 @@ function EventSheet({trip,event,day,save,remove,busy,onClose}:{trip:Trip;event?:
     </>:<p className="helper">No people on the trip yet. You can plan now and choose who joins later.</p>}
    </fieldset>
    {!joining.length&&trip.people.length>0&&<p className="helper">Nobody joining yet: costs for this can be split once someone joins.</p>}
+   {error&&<p className="form-error" role="alert">{error}</p>}
    <Button type="submit" disabled={busy}>{event?'Save changes':'Add to plan'} <ArrowRight size={17}/></Button>
    {event&&(linked?<p className="helper">{linked} expense{linked===1?' is':'s are'} split on this plan, so it cannot be deleted. Void or edit {linked===1?'it':'them'} first.</p>:<Button kind="ghost" disabled={busy} onClick={async()=>{if(!window.confirm(`Delete ${event.title}? Its shopping items stay on the general list.`))return;await remove('event',event);onClose();}}>Delete</Button>)}
   </form>
@@ -105,7 +111,7 @@ export function Plan({trip,save,remove,busy,photos,who,intent,onAddBill}:{trip:T
  const [target,setTarget]=useState(''),[itemSheet,setItemSheet]=useState<Shopping|null>(null);
  const days=tripDays(trip);
  const {staying,entries}=dayEntries(trip,day);
- const [legSheet,setLegSheet]=useState<{leg?:Leg}|null>(null),[staySheet,setStaySheet]=useState<{stay?:Stay}|null>(null),[viewer,setViewer]=useState<{stay:Stay;index:number}|null>(null);
+ const [legSheet,setLegSheet]=useState<{leg?:Leg}|null>(null),[staySheet,setStaySheet]=useState<{stay?:Stay}|null>(null),[viewer,setViewer]=useState<{place:Place;index:number}|null>(null);
  const closeViewer=useCallback(()=>setViewer(null),[]);
  // Only requests made while this trip is open count (the Plan remounts when switching trips).
  const seenIntent=useRef(intent?.n);
@@ -121,20 +127,20 @@ export function Plan({trip,save,remove,busy,photos,who,intent,onAddBill}:{trip:T
   <div className="two-column plan-grid">
    <section className="card" aria-label={`Plans for ${fmt(day)}`}>
     <div className="card-head"><div><span className="eyebrow">{fmt(day)}</span><h2>The day</h2></div></div>
-    {staying.map(s=><StayCard key={s.id} trip={trip} stay={s} mode="staying" day={day} onEdit={()=>setStaySheet({stay:s})} onPhoto={index=>setViewer({stay:s,index})}/>)}
+    {staying.map(s=><StayCard key={s.id} trip={trip} stay={s} mode="staying" day={day} onEdit={()=>setStaySheet({stay:s})} onPhoto={index=>setViewer({place:stayPlace(s),index})} photos={photos}/>)}
     <div className="timeline">
      {entries.map(x=><div className={`tl-item ${x.kind}`} key={x.key}>
-      <time className="tl-time">{x.time||''}</time>
+      <time className="tl-time" dateTime={x.time||undefined}>{fmtTime(x.time)}</time>
       <span className="tl-dot" aria-hidden="true">{x.kind==='event'?(x.event!.kind==='activity'?<Sun size={13}/>:x.event!.kind==='restaurant'?<Wine size={13}/>:<UtensilsCrossed size={13}/>):x.kind==='leg'||x.kind==='arrive'?<TransportIcon kind={(trip.transport??[]).find(t=>t.id===x.leg!.transportId)?.kind??'other'} size={13}/>:<BedDouble size={13}/>}</span>
       {x.kind==='event'?(()=>{const e=x.event!;const items=trip.shopping.filter(s=>s.eventId===e.id).sort(byDone);const cost=spent(e.id);return <article className="event-card tl-card" aria-label={e.title}>
-       <div className="event-head"><div><span className="event-type">{e.kind}</span><h3>{e.title}</h3><p>{joiningLabel(e,trip)}{e.owner?` · ${e.owner} organizes`:''}{cost?` · ${euro(cost)} spent`:''}</p>{e.address&&<a className="map-link" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.address)}`} target="_blank" rel="noreferrer"><MapPin size={14}/> {e.address}</a>}{e.notes&&<p className="event-notes">{e.notes}</p>}</div>
+       <div className="event-head">{photosOf(trip,e.id).length>0&&<StayCover trip={trip} place={eventPlace(e)} compact onOpen={index=>setViewer({place:eventPlace(e),index})}/>}<div><span className="event-type">{e.kind}</span><h3>{e.title}</h3><p>{joiningLabel(e,trip)}{e.owner?` · ${e.owner} organizes`:''}{cost?` · ${euro(cost)} spent`:''}</p>{e.address&&<a className="map-link" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.address)}`} target="_blank" rel="noreferrer"><MapPin size={14}/> {e.address}</a>}{e.recipeUrl&&<a className="map-link" href={e.recipeUrl} target="_blank" rel="noreferrer"><BookOpen size={14}/> Recipe · {(()=>{try{return new URL(e.recipeUrl).hostname.replace(/^www\./,'');}catch{return 'link';}})()}</a>}{e.notes&&<p className="event-notes">{e.notes}</p>}</div>
         <button type="button" className="icon-button subtle" aria-label={`Edit ${e.title}`} onClick={()=>setSheet({event:e})}><Pencil size={16}/></button></div>
        {e.kind==='restaurant'?<div className="event-bill">{cost?<p>The bill: <strong>{euro(cost)}</strong></p>:<p className="helper">No bill yet.</p>}<Button kind="secondary" disabled={!e.participants.length} onClick={()=>onAddBill?.(e.id)}><ReceiptText size={16}/> {cost?'Add another bill':'Add the bill'}</Button>{!e.participants.length&&<p className="helper">Choose who is joining first.</p>}</div>
        :<div className="event-shopping">{items.map(item=><ShoppingItem key={item.id} item={item} save={save} onEdit={setItemSheet}/>)}
         <QuickAdd label={`Add to shopping for ${e.title}`} placeholder="Add an ingredient…" busy={busy} onAdd={text=>addItem(text,e.id)}/></div>}
       </article>;})()
       :x.leg?<LegCard trip={trip} leg={x.leg} arriving={x.kind==='arrive'} onEdit={()=>setLegSheet({leg:x.leg})}/>
-      :<StayCard trip={trip} stay={x.stay!} mode={x.kind as 'checkin'|'checkout'} day={day} onEdit={()=>setStaySheet({stay:x.stay})} onPhoto={index=>setViewer({stay:x.stay!,index})}/>}
+      :<StayCard trip={trip} stay={x.stay!} mode={x.kind as 'checkin'|'checkout'} day={day} onEdit={()=>setStaySheet({stay:x.stay})} onPhoto={index=>setViewer({place:stayPlace(x.stay!),index})} photos={photos}/>}
      </div>)}
     </div>
     {!entries.length&&!staying.length&&<Empty icon={<CalendarDays/>} heading="Nothing planned" body="Add a meal, an activity, the travel or where you sleep."/>}
@@ -152,9 +158,9 @@ export function Plan({trip,save,remove,busy,photos,who,intent,onAddBill}:{trip:T
    </section>
   </div>
   {legSheet&&<LegSheet key={legSheet.leg?.id??'new-leg'} trip={trip} leg={legSheet.leg} day={day} save={save} remove={remove} busy={busy} onClose={()=>setLegSheet(null)}/>}
-  {staySheet&&<StaySheet key={staySheet.stay?.id??'new-stay'} trip={trip} stay={staySheet.stay} day={day} save={save} remove={remove} busy={busy} who={who} photos={photos} onPhoto={index=>staySheet.stay&&setViewer({stay:staySheet.stay,index})} onClose={()=>setStaySheet(null)}/>}
-  {viewer&&<PhotoViewer key={`${viewer.stay.id}-${viewer.index}`} trip={trip} stay={viewer.stay} start={viewer.index} actions={photos} onClose={closeViewer}/>}
-  {sheet&&<EventSheet trip={trip} event={sheet.event} day={day} save={save} remove={remove} busy={busy} onClose={()=>setSheet(null)}/>}
+  {staySheet&&<StaySheet key={staySheet.stay?.id??'new-stay'} trip={trip} stay={staySheet.stay} day={day} save={save} remove={remove} busy={busy} who={who} photos={photos} onPhoto={index=>staySheet.stay&&setViewer({place:stayPlace(staySheet.stay),index})} onClose={()=>setStaySheet(null)}/>}
+  {viewer&&<PhotoViewer key={`${viewer.place.id}-${viewer.index}`} trip={trip} place={viewer.place} start={viewer.index} actions={photos} onClose={closeViewer}/>}
+  {sheet&&<EventSheet trip={trip} event={sheet.event} day={day} save={save} remove={remove} busy={busy} photos={photos} onPhoto={index=>sheet.event&&setViewer({place:eventPlace(sheet.event),index})} onClose={()=>setSheet(null)}/>}
   {itemSheet&&<ShoppingSheet key={itemSheet.id} trip={trip} item={trip.shopping.find(s=>s.id===itemSheet.id)??itemSheet} save={save} remove={remove} busy={busy} onClose={()=>setItemSheet(null)}/>}
  </>;
 }

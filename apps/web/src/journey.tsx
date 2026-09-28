@@ -1,9 +1,11 @@
 import {useState,type FormEvent} from 'react';
 import {ArrowRight,BedDouble,MapPin,Pencil} from 'lucide-react';
 import type {Event,Leg,Stay,Transport,Trip} from '../../../packages/domain/src/model.js';
-import {Button,Sheet,cents,euro,fmt,uid,type Remove,type Save} from './common.js';
+import {Button,Sheet,cents,euro,fmt,fmtTime,uid,type Remove,type Save} from './common.js';
 import {TransportIcon} from './packing.js';
-import {StayCover,StayPhotos,type PhotoActions} from './photos.js';
+import {AirlineBadge,parseFlight} from './airlines.js';
+import {AddPhotosButton,StayCover,StayPhotos,photosOf,type PhotoActions,type Place} from './photos.js';
+export const stayPlace=(stay:Stay):Place=>({id:stay.id,name:stay.name,kind:'stay'});
 import {SplitEditor,compileSplit,initialSplit,type SplitState} from './split.js';
 
 export const tripDays=(trip:Trip)=>!trip.start||!trip.end?[]:Array.from({length:Math.min(62,Math.max(1,Math.round((new Date(`${trip.end}T12:00:00`).getTime()-new Date(`${trip.start}T12:00:00`).getTime())/86400000)+1))},(_,i)=>{const d=new Date(`${trip.start}T12:00:00`);d.setDate(d.getDate()+i);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;});
@@ -65,6 +67,7 @@ export function StaySheet({trip,stay,day,save,remove,busy,who,photos,onPhoto,onC
    <div className="form-row"><label>First night<input type="date" value={from} min={trip.start} max={trip.end} onChange={e=>setFrom(e.target.value)} required/></label><label>Check-out day<input type="date" value={to} min={from} onChange={e=>setTo(e.target.value)} required/></label></div>
    <div className="form-row"><label>Check-in time<input type="time" value={checkIn} onChange={e=>setCheckIn(e.target.value)}/></label><label>Check-out time<input type="time" value={checkOut} onChange={e=>setCheckOut(e.target.value)}/></label></div>
    <label>Notes (optional)<input value={note} onChange={e=>setNote(e.target.value)} placeholder="Key box at the gate, code in the booking email"/></label>
+   {stay&&photos&&onPhoto?<StayPhotos trip={trip} place={stayPlace(stay)} actions={photos} onOpen={onPhoto}/>:!stay&&<p className="helper">You can add photos of the place once it's saved.</p>}
    <fieldset><legend>Who is staying?</legend>
     {trip.people.length?<>
      <div className="chip-actions"><button type="button" className="text-button" onClick={()=>setStaying(trip.people.map(p=>p.id))}>Everyone</button><button type="button" className="text-button" onClick={()=>setStaying([])}>Nobody yet</button></div>
@@ -77,7 +80,6 @@ export function StaySheet({trip,stay,day,save,remove,busy,who,photos,onPhoto,onC
     {total>0&&guestPeople.length>0?<SplitEditor trip={trip} people={guestPeople} total={total} value={split} onChange={setSplit} legend="How is the booking split?"/>
      :<p className="helper">{linked?'Clear the cost to remove it from Spend (it is voided and can be restored).':'Add the cost and who paid to put it in Spend, split among the people staying.'}</p>}
    </>:linked&&<p className="helper">Booking cost: <strong>{euro(linked.total)}</strong>, recorded as “{linked.title}”. {mayEdit?'It was changed in Spend, so edit it there.':'Only the organizer or whoever added it can change it, in Spend.'}</p>}
-   {stay&&photos&&onPhoto?<StayPhotos trip={trip} stay={stay} actions={photos} onOpen={onPhoto}/>:!stay&&<p className="helper">You can add photos of the place once it's saved.</p>}
    {error&&<p className="form-error" role="alert">{error}</p>}
    <Button type="submit" disabled={busy}>{stay?'Save changes':'Add stay'} <ArrowRight size={17}/></Button>
    {stay&&<Button kind="ghost" disabled={busy} onClick={async()=>{if(!window.confirm(`Remove ${stay.name}?${linked?' Its booking cost stays in Spend.':''}`))return;await remove('stay',stay);onClose();}}>Remove stay</Button>}
@@ -92,15 +94,17 @@ export function LegSheet({trip,leg,day,save,remove,busy,onClose}:{trip:Trip;leg?
  const [transportId,setTransportId]=useState(leg?.transportId??transport[0]?.id??'__new'),[newName,setNewName]=useState(''),[newKind,setNewKind]=useState<Transport['kind']>('car');
  const [from,setFrom]=useState(leg?.from??''),[to,setTo]=useState(leg?.to??''),[departDate,setDepartDate]=useState(leg?.departDate??day),[departTime,setDepartTime]=useState(leg?.departTime??''),[arriveDate,setArriveDate]=useState(leg?.arriveDate??day),[arriveTime,setArriveTime]=useState(leg?.arriveTime??'');
  const vehicle=transport.find(t=>t.id===transportId);
+ const isPlane=transportId==='__new'?newKind==='plane':vehicle?.kind==='plane';
  const [people,setPeople]=useState<string[]>(leg?.people??(vehicle?.familyId?trip.people.filter(p=>p.familyId===vehicle.familyId).map(p=>p.id):[]));
- const [note,setNote]=useState(leg?.note??''),[error,setError]=useState('');
+ const [note,setNote]=useState(leg?.note??''),[flightNo,setFlightNo]=useState(leg?.flightNo??''),[error,setError]=useState('');
  const submit=async(e:FormEvent)=>{
   e.preventDefault();setError('');
   if(!from.trim()||!to.trim()){setError('Say where the trip starts and ends.');return;}
   if(`${arriveDate}${arriveTime||'99:99'}`<`${departDate}${departTime||'00:00'}`){setError('Arrival must be after departure.');return;}
+  if(isPlane&&flightNo.trim()&&!parseFlight(flightNo)){setError('Use a flight number like LH 1172.');return;}
   let id=transportId;
   if(id==='__new'){if(!newName.trim()){setError('Name the car or flight, for example “Uhl car”.');return;}id=uid();await save('transport',{id,name:newName.trim(),kind:newKind,familyId:null,note:'',version:0});}
-  await save('leg',{id:leg?.id??uid(),transportId:id,from:from.trim(),to:to.trim(),departDate,departTime,arriveDate,arriveTime,people,note:note.trim(),version:leg?.version??0},leg);onClose();
+  await save('leg',{id:leg?.id??uid(),transportId:id,from:from.trim(),to:to.trim(),departDate,departTime,arriveDate,arriveTime,people,note:note.trim(),flightNo:isPlane&&flightNo.trim()?parseFlight(flightNo)?.number??flightNo.trim():'',version:leg?.version??0},leg);onClose();
  };
  return <Sheet title={leg?'Edit travel':'Add travel'} eyebrow="On the way" onClose={onClose}>
   <form className="form-stack" onSubmit={submit}>
@@ -110,7 +114,8 @@ export function LegSheet({trip,leg,day,save,remove,busy,onClose}:{trip:Trip;leg?
    <div className="form-row"><label>Leaves<input type="date" value={departDate} onChange={e=>{setDepartDate(e.target.value);if(arriveDate<e.target.value)setArriveDate(e.target.value);}} required/></label><label>At<input type="time" value={departTime} onChange={e=>setDepartTime(e.target.value)}/></label></div>
    <div className="form-row"><label>Arrives<input type="date" value={arriveDate} min={departDate} onChange={e=>setArriveDate(e.target.value)} required/></label><label>At<input type="time" value={arriveTime} onChange={e=>setArriveTime(e.target.value)}/></label></div>
    <fieldset><legend>Who travels</legend><div className="chip-list">{trip.people.map(p=><label key={p.id} className={people.includes(p.id)?'chip checked':'chip'}><input type="checkbox" checked={people.includes(p.id)} onChange={()=>setPeople(x=>x.includes(p.id)?x.filter(i=>i!==p.id):[...x,p.id])}/>{p.name}</label>)}</div></fieldset>
-   <label>Notes (optional)<input value={note} onChange={e=>setNote(e.target.value)} placeholder="Flight TP 575, seats 12A–D"/></label>
+   {isPlane&&<label>Flight number (optional)<span className="flight-input"><AirlineBadge flightNo={flightNo} size={30}/><input value={flightNo} onChange={e=>setFlightNo(e.target.value)} placeholder="TP 575" autoCapitalize="characters"/></span>{parseFlight(flightNo)?.airline&&<small className="helper">{parseFlight(flightNo)!.airline!.name}</small>}</label>}
+   <label>Notes (optional)<input value={note} onChange={e=>setNote(e.target.value)} placeholder={isPlane?'Seats 12A–D, 2 checked bags':'Stop for lunch in Évora'}/></label>
    {error&&<p className="form-error" role="alert">{error}</p>}
    <Button type="submit" disabled={busy}>{leg?'Save changes':'Add travel'} <ArrowRight size={17}/></Button>
    {leg&&<Button kind="ghost" disabled={busy} onClick={async()=>{await remove('leg',leg);onClose();}}>Remove travel</Button>}
@@ -141,26 +146,27 @@ export function LegCard({trip,leg,arriving,onEdit}:{trip:Trip;leg:Leg;arriving?:
  const vehicle=(trip.transport??[]).find(t=>t.id===leg.transportId);
  const names=leg.people.map(id=>trip.people.find(p=>p.id===id)?.name).filter(Boolean);
  const load=legLoad(trip,leg);
- const label=`${vehicle?.name??'Travel'}: ${leg.from} → ${leg.to}`;
+ const label=`${vehicle?.name??'Travel'}: ${leg.from} → ${leg.to}`,flight=parseFlight(leg.flightNo);
  return <article className="tl-card travel" aria-label={label}>
-  <div className="event-head"><div><span className="event-type">{arriving?'Arriving':'Travel'} · {vehicle?.name??'Travel'}</span><h3>{leg.from} → {leg.to}</h3>
-   <p>{leg.departTime||'?'} → {leg.arriveTime||'?'}{leg.arriveDate!==leg.departDate?` (${fmt(leg.arriveDate)})`:''}{names.length?` · ${names.join(', ')}`:''}</p>
+  <div className="event-head"><AirlineBadge flightNo={leg.flightNo}/><div><span className="event-type">{arriving?'Arriving':'Travel'} · {vehicle?.name??'Travel'}</span><h3>{leg.from} → {leg.to}</h3>{flight&&<p className="flight-line">{flight.airline?`${flight.airline.name} `:''}<strong>{flight.number}</strong></p>}
+   <p>{fmtTime(leg.departTime)||'?'} → {fmtTime(leg.arriveTime)||'?'}{leg.arriveDate!==leg.departDate?` (${fmt(leg.arriveDate)})`:''}{names.length?` · ${names.join(', ')}`:''}</p>
    {leg.note&&<p>{leg.note}</p>}</div>
    <button type="button" className="icon-button subtle" aria-label={`Edit ${label}`} onClick={onEdit}><Pencil size={16}/></button></div>
   {load.length>0&&<div className="load-chips" aria-label={`Carries ${load.length} item${load.length===1?'':'s'}`}>{load.slice(0,6).map(g=><span key={g.id} className="load-chip">{g.quantity>1?`${g.quantity} × `:''}{g.text}</span>)}{load.length>6&&<span className="load-chip">+{load.length-6}</span>}</div>}
  </article>;
 }
 
-export function StayCard({trip,stay,mode,onEdit,onPhoto}:{trip:Trip;stay:Stay;mode:'checkin'|'checkout'|'staying';day:string;onEdit:()=>void;onPhoto?:(index:number)=>void}){
+export function StayCard({trip,stay,mode,onEdit,onPhoto,photos}:{trip:Trip;stay:Stay;mode:'checkin'|'checkout'|'staying';day:string;onEdit:()=>void;onPhoto?:(index:number)=>void;photos?:PhotoActions}){
  const cost=trip.expenses.find(e=>e.id===stay.expenseId&&e.status==='posted');
  const n=nights(stay);
  const title=mode==='checkin'?`Check in · ${stay.name}`:mode==='checkout'?`Check out · ${stay.name}`:`Staying at ${stay.name}`;
  return <article className={`tl-card stay ${mode}`} aria-label={title}>
-  {mode==='checkin'&&onPhoto&&<StayCover trip={trip} stay={stay} onOpen={onPhoto}/>}
-  <div className="event-head">{mode==='staying'&&onPhoto&&<StayCover trip={trip} stay={stay} compact onOpen={onPhoto}/>}<div><span className="event-type">{mode==='checkout'?'Leaving':`${n} night${n===1?'':'s'}`}{stay.guests?.length&&mode!=='checkout'?` · ${stay.guests.length} staying`:''}{cost?` · ${euro(cost.total)}`:''}</span><h3>{title}</h3>
-   <p>{mode==='checkin'&&stay.checkIn?`From ${stay.checkIn}`:mode==='checkout'&&stay.checkOut?`By ${stay.checkOut}`:`${fmt(stay.from)} – ${fmt(stay.to)}`}{stay.note&&mode!=='staying'?` · ${stay.note}`:''}</p>
+  {mode==='checkin'&&onPhoto&&<StayCover trip={trip} place={stayPlace(stay)} onOpen={onPhoto}/>}
+  <div className="event-head">{mode==='staying'&&onPhoto&&<StayCover trip={trip} place={stayPlace(stay)} compact onOpen={onPhoto}/>}<div><span className="event-type">{mode==='checkout'?'Leaving':`${n} night${n===1?'':'s'}`}{stay.guests?.length&&mode!=='checkout'?` · ${stay.guests.length} staying`:''}{cost?` · ${euro(cost.total)}`:''}</span><h3>{title}</h3>
+   <p>{mode==='checkin'&&stay.checkIn?`From ${fmtTime(stay.checkIn)}`:mode==='checkout'&&stay.checkOut?`By ${fmtTime(stay.checkOut)}`:`${fmt(stay.from)} – ${fmt(stay.to)}`}{stay.note&&mode!=='staying'?` · ${stay.note}`:''}</p>
    {stay.address&&mode!=='staying'&&<a className="map-link" href={mapsLink(stay.address)} target="_blank" rel="noreferrer"><MapPin size={14}/> {stay.address}</a>}</div>
    <button type="button" className="icon-button subtle" aria-label={`Edit ${stay.name}`} onClick={onEdit}><Pencil size={16}/></button></div>
+  {mode!=='checkout'&&photos&&!photosOf(trip,stay.id).length&&<AddPhotosButton place={stayPlace(stay)} actions={photos}/>}
  </article>;
 }
 

@@ -4,7 +4,27 @@ import type {Command} from '../../../packages/domain/src/model.js';
 /** The traveller's local calendar day (UTC would be yesterday just after midnight in Europe). */
 export const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
 export const euro=(n:number)=>new Intl.NumberFormat('en-IE',{style:'currency',currency:'EUR'}).format(n/100);
-export const fmt=(iso:string)=>{const d=new Date(`${iso}T12:00:00`);return Number.isNaN(d.getTime())?'':new Intl.DateTimeFormat('en-GB',{weekday:'short',day:'numeric',month:'short'}).format(d);};
+/** How dates and times are shown. Kept on this device for now (later per user); German style by default. */
+export type DisplaySettings={date:'dmy'|'written'|'iso';time:'24h'|'12h'};
+const DISPLAY_KEY='splitfairy-display';
+let display:DisplaySettings=(()=>{try{const saved=JSON.parse(localStorage.getItem(DISPLAY_KEY)??'{}');return {date:['dmy','written','iso'].includes(saved.date)?saved.date:'dmy',time:saved.time==='12h'?'12h':'24h'};}catch{return {date:'dmy',time:'24h'};}})();
+export const getDisplay=()=>display;
+export function setDisplay(next:DisplaySettings){display=next;try{localStorage.setItem(DISPLAY_KEY,JSON.stringify(next));}catch{/* private mode: the setting lasts until reload */}}
+const pad=(n:number)=>String(n).padStart(2,'0');
+/** A day as "Sat 03.10.26" (or "Sat 3 Oct" / "Sat 2026-10-03", per the display setting). */
+export const fmt=(iso:string)=>{
+ const d=new Date(`${iso}T12:00:00`);if(Number.isNaN(d.getTime()))return '';
+ const weekday=new Intl.DateTimeFormat('en-GB',{weekday:'short'}).format(d);
+ if(display.date==='written')return new Intl.DateTimeFormat('en-GB',{weekday:'short',day:'numeric',month:'short'}).format(d);
+ if(display.date==='iso')return `${weekday} ${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+ return `${weekday} ${pad(d.getDate())}.${pad(d.getMonth()+1)}.${String(d.getFullYear()).slice(2)}`;
+};
+/** A clock time "HH:MM" as 20:30 or 8:30 pm, per the display setting. */
+export const fmtTime=(hhmm:string|undefined)=>{
+ if(!hhmm||!/^\d{2}:\d{2}$/.test(hhmm))return hhmm??'';
+ if(display.time==='24h')return hhmm;
+ const [h,m]=hhmm.split(':').map(Number);return `${h%12||12}:${pad(m)} ${h<12?'am':'pm'}`;
+};
 export const uid=()=>crypto.randomUUID();
 export const cents=(s:string)=>Math.round(Number(s.replace(',','.'))*100);
 export const money=(n:number)=>String((n/100).toFixed(2));

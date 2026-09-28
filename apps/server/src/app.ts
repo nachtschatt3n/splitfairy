@@ -105,7 +105,7 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
   const user=auth(request),id=(request.params as any).tripId,command=commandSchema.parse(request.body);
   const known=new Set(command.entity==='person'?config.store.members(user,id).map(m=>m.email):[]);
   const trip=config.store.mutate(user,id,command);
-  if(command.entity==='stay'&&command.action==='delete')await prunePhotoFiles(id,trip);
+  if((command.entity==='stay'||command.entity==='event')&&command.action==='delete')await prunePhotoFiles(id,trip);
   // A person saved with a new email is invited to sign in; the mail is best effort because the change is already saved.
   const person=command.entity==='person'&&command.action==='save'?trip.people.find(p=>p.id===(command.value as any)?.id):undefined;
   if(person?.email&&!known.has(person.email)){
@@ -141,9 +141,11 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
  };
  app.post('/api/v1/trips/:tripId/photos',async(request,reply)=>{
   const user=auth(request),tripId=(request.params as any).tripId;
-  const body=z.object({image:z.string().max(15_000_000),stayId:z.string().min(1).max(80),uploadId:z.uuid().optional()}).parse(request.body);
+  // A photo belongs to a stay or to a plan (for example the dish of a dinner).
+  const body=z.object({image:z.string().max(15_000_000),stayId:z.string().min(1).max(80).optional(),eventId:z.string().min(1).max(80).optional(),uploadId:z.uuid().optional()}).refine(b=>!!b.stayId!==!!b.eventId,{message:'Choose a stay or a plan'}).parse(request.body);
   const trip=config.store.getTrip(user,tripId);if(trip.archived)throw new InputError('Trip is archived');
-  if(!(trip.stays??[]).some(s=>s.id===body.stayId))throw new InputError('Stay not found');
+  if(body.stayId&&!(trip.stays??[]).some(s=>s.id===body.stayId))throw new InputError('Stay not found');
+  if(body.eventId&&!trip.events.some(e=>e.id===body.eventId))throw new InputError('Plan not found');
   if(body.uploadId){const prior=(trip.photos??[]).find(p=>p.id===body.uploadId);if(prior)return prior;}
   const source=Buffer.from(body.image,'base64');if(source.length<100||source.length>10_000_000)throw new InputError('Invalid image size');
   let image:Buffer,thumb:Buffer;
@@ -155,7 +157,7 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
   }catch{throw new InputError('Invalid photo');}
   const id=body.uploadId??randomUUID();await mkdir(photoFolder(tripId),{recursive:true});
   await writeFile(join(photoFolder(tripId),`${id}.jpg`),image,{mode:0o600});await writeFile(join(photoFolder(tripId),`${id}-thumb.jpg`),thumb,{mode:0o600});
-  try{const photo=config.store.addPhoto(user,tripId,id,body.stayId);reply.status(201);return photo;}
+  try{const photo=config.store.addPhoto(user,tripId,id,{stayId:body.stayId,eventId:body.eventId});reply.status(201);return photo;}
   catch(error){await prunePhotoFiles(tripId,config.store.getTrip(user,tripId));throw error;}
  });
  app.get('/api/v1/trips/:tripId/photos/:photoId',async(request,reply)=>{

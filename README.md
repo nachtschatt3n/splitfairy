@@ -14,6 +14,7 @@ A self-hosted, installable app for group vacations: plan the journey, stays, mea
 <p align="center">
 <img src="docs/screenshots/phone-today.png" width="200" alt="Today: what's coming up and what needs a look">
 <img src="docs/screenshots/phone-plan.png" width="200" alt="Plan: the day as a timeline of stays, travel, meals and activities">
+<img src="docs/screenshots/phone-journey.png" width="200" alt="Arrival day: the Lufthansa flight with its airline badge, then check-in">
 <img src="docs/screenshots/phone-packing.png" width="200" alt="Packing list: who brings what">
 <img src="docs/screenshots/phone-receipt-review.png" width="200" alt="Receipt review: check what the AI read before it counts">
 </p>
@@ -21,20 +22,22 @@ A self-hosted, installable app for group vacations: plan the journey, stays, mea
 ## What it does
 
 - **Families and people.** Add families, people who travel on their own, and kids. Everyone has a share of costs: an adult pays a full share, a child half, a baby nothing, or any custom weight. Adults can get an email invitation and sign in; children don't need an account.
-- **Plan the days.** Each day is a timeline: breakfasts, dinners and activities with an optional time and notes, who joins and who organizes. Each meal has its own shopping items. Restaurants get an address (looked up on OpenStreetMap) and their bill instead of a shopping list.
-- **Getting there and where you sleep.** Add flights and car drives with times and who travels, and stays with address, check-in and check-out, and who is staying. They show up on the day's timeline, with a map link and what each vehicle carries. A booking cost, with who paid, becomes an expense split among the people staying, and stays editable from the stay. On a wide screen, the whole trip is laid out at a glance.
+- **Plan the days.** Each day is a timeline: breakfasts, dinners and activities with an optional time and notes, who joins and who organizes. Each meal has its own shopping items. Restaurants get an address (looked up on OpenStreetMap) and their bill instead of a shopping list. Meals can have a recipe link and a photo of the dish.
+- **Getting there and where you sleep.** Add flights (with the flight number, shown with the airline's colours) and car drives with times and who travels, and stays with address, check-in and check-out, and who is staying. They show up on the day's timeline, with a map link and what each vehicle carries. A booking cost, with who paid, becomes an expense split among the people staying, and stays editable from the stay. On a wide screen, the whole trip is laid out at a glance.
 - **Photos of the places.** Anyone on the trip can add photos of a stay. They show on the day's timeline, open full size, and the first one becomes the trip's cover.
 - **Shopping list.** Shared, grouped by meal, ticked off as people buy things.
 - **Packing and equipment.** Who brings the tent, the grill, the travel cot, and in which car or on which flight does it travel? Every item belongs to a family or waits for someone to take it, can travel in one car or flight or several in a row ("Weber plane → Silva car"), and gets ticked off when it's packed. The list can be grouped by family or by transport.
 - **Expenses.** Add what you paid in seconds, for a meal, an activity or everyone. Split it equally, by exact amounts, percentages, shares or adjustments, or equally per family; it also handles refunds and several payers. The Spend page shows the total, a breakdown by category, and every expense by day.
 - **Receipt scanning.** Take a photo. A private vision model (via [Ollama](https://ollama.com)) reads the items, and you check them next to the photo. Assign each item to a meal, an activity or everyone. Nothing counts until the items add up to the receipt total and a person confirms.
 - **Fair balances.** Costs are split by each person's share to the cent and rolled up per family. Settle up suggests the smallest number of payments. Splitfairy records repayments; it never moves money.
+- **Your date and time style.** Dates as 03.10.26 and 24-hour times by default; switch to written dates or 12-hour times in People & settings.
 - **A look for every trip.** Pick Coast, Alpine, City, Countryside or Classic when you create the trip; the whole app follows it, in light and dark mode.
 - **Works offline.** Edits and receipt photos are kept on the phone and sync when you're back online. Install it to the home screen like an app.
 - **Private by design.** Invitation-only sign-in with a six-digit email code, no passwords, no public signup. Everything runs in one container on your own server.
 
 <p align="center">
 <img src="docs/screenshots/desktop-plan.png" width="820" alt="The plan on a desktop: stays, travel and plans across the whole trip, and the day's timeline">
+<img src="docs/screenshots/desktop-spend.png" width="820" alt="Spend on a desktop: total, categories, and every expense by day with how it was split">
 <img src="docs/screenshots/desktop-settle.png" width="820" alt="Settle up on a desktop: who pays whom and family balances">
 </p>
 
