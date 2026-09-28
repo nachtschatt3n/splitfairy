@@ -6,6 +6,7 @@ RUN npm ci --no-audit --no-fund
 COPY tsconfig*.json vite.config.ts vitest.config.ts index.html ./
 COPY apps ./apps
 COPY packages ./packages
+COPY scripts ./scripts
 COPY public ./public
 RUN npm run build
 
