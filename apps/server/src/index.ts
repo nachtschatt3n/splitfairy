@@ -13,7 +13,7 @@ const store=new Store(db);
 store.prune();
 const smtpHost=process.env.SMTP_HOST;
 const transport=smtpHost?nodemailer.createTransport({host:smtpHost,port:Number(process.env.SMTP_PORT??587),secure:process.env.SMTP_SECURE==='true',auth:process.env.SMTP_USER?{user:process.env.SMTP_USER,pass:process.env.SMTP_PASSWORD}:undefined}):null;
-const app=await createApp({store,dataDir,adminEmail:process.env.ADMIN_EMAIL,secret:process.env.AUTH_SECRET,secureCookies:process.env.NODE_ENV==='production',ollamaUrl:process.env.OLLAMA_URL,ollamaModel:process.env.OLLAMA_MODEL,logLevel:process.env.LOG_LEVEL??'info',sendMail:async(to,subject,body)=>{if(!transport)throw new Error('SMTP is not configured');await transport.sendMail({from:process.env.SMTP_FROM,to,subject,text:body});}});
+const app=await createApp({store,dataDir,adminEmail:process.env.ADMIN_EMAIL,secret:process.env.AUTH_SECRET,secureCookies:process.env.NODE_ENV==='production',ollamaUrl:process.env.OLLAMA_URL,ollamaModel:process.env.OLLAMA_MODEL,logLevel:process.env.LOG_LEVEL??'info',sendMail:async(to,subject,body)=>{if(!transport)throw new Error('SMTP is not configured');const info=await transport.sendMail({from:process.env.SMTP_FROM,to,subject,text:body});app.log.info({to:to.replace(/^(.{2}).*(@.*)$/,'$1***$2'),subject,messageId:info.messageId,response:info.response},'email handed to SMTP server');}});
 const publicDir=resolve('dist/web');
 if(existsSync(publicDir)){await app.register(fastifyStatic,{root:publicDir,prefix:'/'});app.setNotFoundHandler((request,reply)=>{if(request.url.startsWith('/api/'))return reply.status(404).send({error:'Not found'});return reply.sendFile('index.html');});}
 await app.listen({host:'0.0.0.0',port:Number(process.env.PORT??3000)});

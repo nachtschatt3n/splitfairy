@@ -1,1 +1,1 @@
-{"extends":"./tsconfig.json","compilerOptions":{"module":"NodeNext","moduleResolution":"NodeNext","outDir":"dist/server","rootDir":".","declaration":false},"include":["apps/server","packages/domain","scripts/backup.ts"],"exclude":["tests","apps/web"]}
+{"extends":"./tsconfig.json","compilerOptions":{"module":"NodeNext","moduleResolution":"NodeNext","outDir":"dist/server","rootDir":".","declaration":false},"include":["apps/server","packages/domain","scripts/backup.ts","scripts/signin-code.ts"],"exclude":["tests","apps/web"]}
