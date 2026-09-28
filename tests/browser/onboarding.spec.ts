@@ -22,3 +22,14 @@ test('invited traveler enters a code and reaches a trip dashboard',async({page})
  await expect(page.getByText("Here's what's happening in Summer in Italy.")).toBeVisible();
  if(process.env.SCREENSHOT_PATH) await page.screenshot({path:process.env.SCREENSHOT_PATH,fullPage:true});
 });
+test('a code already in the inbox can be used without requesting another',async({page})=>{
+ let requested=0;
+ await page.route('**/api/v1/**',async route=>{const path=new URL(route.request().url()).pathname;if(path.endsWith('/auth/request'))requested++;const data=path.endsWith('/me')?null:path.endsWith('/auth/verify')?{id:'u',name:'A',email:'a@example.com',admin:true}:path.endsWith('/trips')?[]:{ok:true};await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});});
+ await page.goto('/');
+ await page.getByLabel('Email address').fill('a@example.com');
+ await page.getByRole('button',{name:'I already have a code'}).click();
+ await page.getByLabel('Your six-digit code').fill('123456');
+ await page.getByRole('button',{name:'Start planning'}).click();
+ await expect(page.getByText('Every shared trip')).toBeVisible();
+ expect(requested).toBe(0);
+});
