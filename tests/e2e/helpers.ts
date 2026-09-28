@@ -54,9 +54,9 @@ export async function createTrip(page:Page,name:string,start='2026-10-01',end='2
  await expect(page.getByText(`Here's what's happening in ${name}.`)).toBeVisible();
 }
 /** Section navigation works the same way a person would use it on each device. */
-export async function openSection(page:Page,section:'Today'|'Plan'|'Spend'|'Settle'|'People'){
+export async function openSection(page:Page,section:'Today'|'Plan'|'Pack'|'Spend'|'Settle'|'People'){
  if(isPhone(page)){await page.getByRole('navigation',{name:'Trip sections'}).getByRole('button',{name:section}).click();return;}
- const desktop={Today:'Today',Plan:'The plan',Spend:'Expenses',Settle:'Balances',People:'People & settings'}[section];
+ const desktop={Today:'Today',Plan:'The plan',Pack:'Packing list',Spend:'Expenses',Settle:'Balances',People:'People & settings'}[section];
  await page.locator('.sidebar .nav').getByRole('button',{name:desktop}).click();
 }
 export async function switchTrip(page:Page,name:string){

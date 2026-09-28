@@ -24,6 +24,9 @@ test('organizer plans a trip, splits a receipt, settles up and switches trips',a
   await page.getByRole('button',{name:'Email me a code'}).click();
   await expect(page.getByText(/six-digit code is on its way/)).toBeVisible();
   const code=await mailedCode(ADMIN,before);
+  // The styled email carries the code and the inline logo reference.
+  const mail=mailsTo(ADMIN).filter(m=>Date.parse(m.at)>=before).at(-1)!;
+  expect(mail.subject).toBe(`${code} is your Splitfairy sign-in code`);expect(mail.html).toContain('cid:logo@splitfairy');expect(mail.html).toContain(`${code.slice(0,3)} ${code.slice(3)}`);
   // A wrong code explains what to do; a code copied with spaces and the full stop still works.
   await page.getByLabel('Your six-digit code').fill(code==='000000'?'111111':'000000');await page.getByLabel('Your name').fill('Ana');
   await page.getByRole('button',{name:'Start planning'}).click();

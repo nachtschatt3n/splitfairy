@@ -10,12 +10,13 @@ import {Store,AccessError,ConflictError,InputError} from './store.js';
 import {balances,settle} from '../../../packages/domain/src/accounting.js';
 import {commandSchema,type User,type Receipt} from '../../../packages/domain/src/model.js';
 import {processReceipt,claimReceipt,resetInterruptedReceipts} from './receipt.js';
+import {inviteEmail,signInEmail} from './mail.js';
 
 const sha=(input:string)=>createHash('sha256').update(input).digest('hex');
 const emailSchema=z.string().trim().pipe(z.email()).transform(v=>v.toLowerCase());
 const inviteSchema=z.object({email:emailSchema,role:z.enum(['organizer','member']).default('member')});
 const codeSchema=z.object({email:emailSchema,code:z.string().max(40).transform(v=>v.replace(/\D/g,'')).pipe(z.string().regex(/^\d{6}$/)),name:z.string().trim().min(1).max(80)});
-export type Mail=(to:string,subject:string,body:string)=>Promise<void>;
+export type Mail=(to:string,subject:string,text:string,html?:string)=>Promise<void>;
 export type Config={store:Store;adminEmail:string;secret:string;sendMail:Mail;dataDir:string;startWorker?:boolean;secureCookies?:boolean;ollamaUrl?:string;ollamaModel?:string;logLevel?:string;/** Multiplies the per-IP sign-in limits; only the browser test server raises it. */authRateLimitFactor?:number};
 export function codeHash(secret:string,email:string,code:string){return createHmac('sha256',secret).update(`${email}:${code}`).digest('hex');}
 export async function createApp(config:Config):Promise<FastifyInstance>{
@@ -57,7 +58,8 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
    const code=String(randomInt(0,1_000_000)).padStart(6,'0');
    // 30 minutes: some mail providers deliver slowly; attempts per code and per hour stay limited.
    config.store.issueCode(email,codeHash(config.secret,email,code),Date.now()+30*60_000);
-   try{await config.sendMail(email,`${code} is your Splitfairy sign-in code`,`Your Splitfairy sign-in code:\n\n${code}\n\nIt works for 30 minutes. If you ask for another code, only the newest one works.\n\nOn the sign-in page choose "I already have a code" if you closed it.`);}
+   const mail=signInEmail(code);
+   try{await config.sendMail(email,mail.subject,mail.text,mail.html);}
    catch(error){request.log.error({err:error},'sign-in email failed');throw Object.assign(new Error('The sign-in email could not be sent. Please try again later.'),{statusCode:502});}
   }
   return {ok:true};
@@ -82,9 +84,8 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
  app.get('/api/v1/trips',async(request)=>config.store.listTrips(auth(request)).map(t=>({id:t.id,name:t.name,start:t.start,end:t.end,archived:t.archived})));
  app.post('/api/v1/trips',async(request,reply)=>{const body=z.object({name:z.string().trim().min(1).max(160),start:z.iso.date(),end:z.iso.date()}).parse(request.body);const trip=config.store.createTrip(auth(request),body.name,body.start,body.end);reply.status(201);return trip;});
  app.get('/api/v1/trips/:tripId',async(request)=>{const user=auth(request),id=(request.params as any).tripId;return {trip:config.store.getTrip(user,id),role:config.store.role(user,id),members:config.store.members(user,id)};});
- app.post('/api/v1/trips/:tripId/invites',async(request)=>{const user=auth(request),id=(request.params as any).tripId,body=inviteSchema.parse(request.body);config.store.addMember(user,id,body.email,body.role);await config.sendMail(body.email,`Join ${config.store.getTrip(user,id).name} on Splitfairy`,inviteText(user.name,config.store.getTrip(user,id).name,siteUrl(request)));return {ok:true};});
+ app.post('/api/v1/trips/:tripId/invites',async(request)=>{const user=auth(request),id=(request.params as any).tripId,body=inviteSchema.parse(request.body);config.store.addMember(user,id,body.email,body.role);const mail=inviteEmail({inviter:user.name,tripName:config.store.getTrip(user,id).name,url:siteUrl(request)});await config.sendMail(body.email,mail.subject,mail.text,mail.html);return {ok:true};});
  const siteUrl=(request:{protocol:string;host:string})=>`${request.protocol}://${request.host}`;
- const inviteText=(inviter:string,tripName:string,url:string,name?:string)=>`${name?`Hi ${name},\n\n`:''}${inviter} invited you to "${tripName}" on Splitfairy, where the group plans meals and shares costs fairly.\n\nOpen ${url} and sign in with this email address. You will get a six-digit code by email.`;
  app.post('/api/v1/trips/:tripId/commands',async(request)=>{
   const user=auth(request),id=(request.params as any).tripId,command=commandSchema.parse(request.body);
   const known=new Set(command.entity==='person'?config.store.members(user,id).map(m=>m.email):[]);
@@ -93,7 +94,8 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
   const person=command.entity==='person'&&command.action==='save'?trip.people.find(p=>p.id===(command.value as any)?.id):undefined;
   if(person?.email&&!known.has(person.email)){
    config.store.addMember(user,id,person.email,'member');
-   try{await config.sendMail(person.email,`Join ${trip.name} on Splitfairy`,inviteText(user.name,trip.name,siteUrl(request),person.name));}
+   const mail=inviteEmail({inviter:user.name,tripName:trip.name,url:siteUrl(request),name:person.name});
+   try{await config.sendMail(person.email,mail.subject,mail.text,mail.html);}
    catch(error){request.log.error({err:error},'invitation email failed');}
   }
   return {trip,role:config.store.role(user,id),members:config.store.members(user,id)};

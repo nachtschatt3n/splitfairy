@@ -198,3 +198,13 @@ input[type=date]{min-width:0;max-width:100%}
  .facts div{background:#2a4036}.facts dt,.detail-block h3,.detail-row span small,.member-row small{color:#bfcec7}
  .archived-heading{color:#eef3ef}
 }
+/* ---- Packing list ---- */
+.progress{height:8px;border-radius:8px;background:#ebf2e9;overflow:hidden;margin:4px 0 6px}
+.progress>div{height:100%;background:#2f6b55;border-radius:8px;transition:width .3s}
+.filter-chips{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 4px}
+.filter-chips .chip{font-weight:700}
+.shop-group h3 small{font-weight:600;letter-spacing:0;text-transform:none;margin-left:6px}
+.gear-note{display:block;font-size:12px;color:#56675f;font-weight:400}
+.claim{font-size:13px;white-space:nowrap}
+@media(max-width:740px){.mobile-nav button{min-width:0;flex:1;font-size:10px}}
+@media(prefers-color-scheme:dark){.progress{background:#2a4036}.progress>div{background:#8ddab8}.gear-note{color:#bfcec7}}

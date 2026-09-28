@@ -1,6 +1,6 @@
 {
   "name": "splitfairy",
-  "version": "0.1.10",
+  "version": "0.2.0",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -19,7 +19,8 @@
     "dev:ui": "vite --host 127.0.0.1",
     "backup:dev": "tsx scripts/backup.ts",
     "smoke:ai": "tsx scripts/ai-smoke.ts",
-    "test:e2e:real": "npm run build && playwright test --project=iphone-webkit --project=iphone-chromium --project=desktop-chromium"
+    "test:e2e:real": "npm run build && playwright test --project=iphone-webkit --project=iphone-chromium --project=desktop-chromium",
+    "screenshots": "node scripts/screenshots.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.0",

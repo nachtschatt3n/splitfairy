@@ -126,3 +126,19 @@ describe('planning',()=>{
   expect(after.events).toHaveLength(0);expect(after.shopping[0]).toMatchObject({text:'Lemons',eventId:null});
  });
 });
+describe('packing list',()=>{
+ it('stores who brings what, rejects unknown families, and frees items when a family is deleted',()=>{
+  store.addUser(actor);const trip=store.createTrip(actor,'Italy','2026-10-01','2026-10-09');
+  store.mutate(actor,trip.id,cmd('family',{id:'f1',name:'A',version:0},0,'g1'));
+  const saved=store.mutate(actor,trip.id,cmd('gear',{id:'x',text:'Beach tent',familyId:'f1',quantity:2,version:0},0,'g2'));
+  expect(saved.gear![0]).toMatchObject({text:'Beach tent',familyId:'f1',quantity:2,packed:false,note:''});
+  expect(()=>store.mutate(actor,trip.id,cmd('gear',{id:'y',text:'Grill',familyId:'nope',version:0},0,'g3'))).toThrow(/Unknown family/);
+  const after=store.mutate(actor,trip.id,{mutationId:'g4',entity:'family',action:'delete',expectedVersion:1,value:{id:'f1'}});
+  expect(after.gear![0]).toMatchObject({familyId:null,version:2});
+ });
+ it('works on trips saved before the packing list existed',()=>{
+  store.addUser(actor);const trip=store.createTrip(actor,'Old','2026-10-01','2026-10-09');
+  const t=store.getTrip(actor,trip.id);delete (t as any).gear;store.db.prepare('UPDATE trips SET data=? WHERE id=?').run(JSON.stringify(t),t.id);
+  expect(store.mutate(actor,trip.id,cmd('gear',{id:'x',text:'Cooler',familyId:null,version:0},0,'g5')).gear).toHaveLength(1);
+ });
+});

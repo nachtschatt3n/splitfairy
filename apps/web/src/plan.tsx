@@ -62,7 +62,7 @@ function ShoppingItem({item,save,onEdit}:{item:Shopping;save:Save;onEdit:(item:S
 
 function QuickAdd({placeholder,label,onAdd,busy}:{placeholder:string;label:string;onAdd:(text:string)=>Promise<void>;busy:boolean}){
  const [text,setText]=useState('');
- return <form className="quick-add" onSubmit={async e=>{e.preventDefault();if(!text.trim())return;await onAdd(text.trim());setText('');}}>
+ return <form className="quick-add" onSubmit={async e=>{e.preventDefault();const value=text.trim();if(!value)return;setText('');await onAdd(value);}}>
   <input aria-label={label} value={text} onChange={e=>setText(e.target.value)} placeholder={placeholder}/>
   <Button type="submit" kind="secondary" disabled={!text.trim()} label="Add"><Plus size={17}/></Button>
  </form>;
@@ -96,7 +96,7 @@ export function Plan({trip,save,remove,busy}:{trip:Trip;save:Save;remove:Remove;
    </section>
    <section className="card" aria-label="Shopping list">
     <div className="card-head"><div><span className="eyebrow">The shared list</span><h2>Shopping</h2></div><ShoppingBasket size={23} aria-hidden="true"/></div>
-    <form className="shop-add" onSubmit={async e=>{e.preventDefault();const input=(e.currentTarget.elements.namedItem('item') as HTMLInputElement);if(!input.value.trim())return;await addItem(input.value.trim(),target||null);input.value='';}}>
+    <form className="shop-add" onSubmit={async e=>{e.preventDefault();const input=(e.currentTarget.elements.namedItem('item') as HTMLInputElement);const value=input.value.trim();if(!value)return;input.value='';await addItem(value,target||null);}}>
      <label>Add to the list<input name="item" placeholder="Eggs, bread, sunscreen…"/></label>
      <label>For<select value={target} onChange={e=>setTarget(e.target.value)}><option value="">General shopping</option>{allEvents.map(e=><option key={e.id} value={e.id}>{e.title} · {fmt(e.date)}</option>)}</select></label>
      <Button type="submit" kind="secondary" disabled={busy}><Plus size={16}/> Add item</Button>
