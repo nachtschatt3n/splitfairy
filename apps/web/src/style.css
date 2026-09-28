@@ -164,3 +164,11 @@ button.person-row{cursor:pointer}
  .quick-add input,.shop-add input,.shop-add select{background:#24392f;color:#edf4e8;border-color:#456151}
  .shop-add{background:#2a4036}.shop-add label{color:#cfdcd5}.shop-group h3{color:#bfcec7}
 }
+/* WebKit on some platforms gives checkboxes and date fields intrinsic widths that can push a phone row past the edge. */
+.chip input{margin:0}
+input[type=date]{min-width:0;max-width:100%}
+.form-row>label{min-width:0}
+@media(max-width:740px){.form-row>label{flex:1 1 130px}}
+.event-card,.event-head,.event-shopping,.shop-row,.quick-add{min-width:0;max-width:100%}
+.event-head h3,.event-head p{overflow-wrap:anywhere}
+.chip-list{max-width:100%}

@@ -32,7 +32,12 @@ async function checkScreen(page:Page,testInfo:TestInfo,screen:string,scope?:stri
  const phone=isPhone(page);
  const layout=await page.evaluate(({phone,scope})=>{
   const issues:string[]=[];const doc=document.documentElement;const root=scope?document.querySelector(scope)!:document.body;
-  if(doc.scrollWidth>doc.clientWidth+1)issues.push(`page scrolls sideways (${doc.scrollWidth}px > ${doc.clientWidth}px)`);
+  if(doc.scrollWidth>doc.clientWidth+1){
+   // Name the widest culprits so a CI-only failure can be fixed without reproducing it.
+   const scrolls=(e:Element|null)=>{for(;e&&e!==document.body;e=e.parentElement){const o=getComputedStyle(e).overflowX;if(o==='auto'||o==='scroll'||o==='hidden'||o==='clip')return true;}return false;};
+   const wide=[...document.querySelectorAll('body *')].filter(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.right>doc.clientWidth+1&&!scrolls(e.parentElement);}).map(e=>`${e.tagName.toLowerCase()}.${[...e.classList].join('.')}[${Math.round(e.getBoundingClientRect().right)}]`).slice(0,6);
+   issues.push(`page scrolls sideways (${doc.scrollWidth}px > ${doc.clientWidth}px): ${wide.join(', ')}`);
+  }
   const shown=(e:Element)=>{const r=e.getBoundingClientRect(),st=getComputedStyle(e);return r.width>0&&r.height>0&&st.visibility!=='hidden';};
   const name=(e:Element)=>((e.getAttribute('aria-label')||(e as HTMLElement).innerText||(e as HTMLInputElement).placeholder||e.tagName)+'').trim().replace(/\s+/g,' ').slice(0,40);
   if(phone){
