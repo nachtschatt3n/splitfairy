@@ -1,4 +1,4 @@
-import {useState,type FormEvent} from 'react';
+import {useEffect,useState,type FormEvent} from 'react';
 import {ArrowRight,CalendarDays,Pencil,Plus,ShoppingBasket} from 'lucide-react';
 import type {Event,Shopping,Trip} from '../../../packages/domain/src/model.js';
 import {Button,Empty,Sheet,euro,fmt,today,uid,type Remove,type Save} from './common.js';
@@ -72,6 +72,8 @@ export function Plan({trip,save,remove,busy}:{trip:Trip;save:Save;remove:Remove;
  // Open on today while the trip is running, otherwise on its first day.
  const [day,setDay]=useState(()=>trip.start&&today()>=trip.start&&today()<=trip.end?today():trip.start||today());
  const [sheet,setSheet]=useState<{event?:Event}|null>(null);
+ // Keep the chosen day visible in the strip, also on narrow screens.
+ useEffect(()=>{document.querySelector('.day-strip .selected')?.scrollIntoView({block:'nearest',inline:'nearest'});},[day]);
  const [target,setTarget]=useState(''),[itemSheet,setItemSheet]=useState<Shopping|null>(null);
  const days=Array.from({length:Math.min(62,Math.max(1,Math.round((new Date(`${trip.end}T12:00:00`).getTime()-new Date(`${trip.start}T12:00:00`).getTime())/86400000)+1))},(_,i)=>{const d=new Date(`${trip.start}T12:00:00`);d.setDate(d.getDate()+i);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;});
  const events=trip.events.filter(e=>e.date===day).sort((a,b)=>ORDER.indexOf(a.kind)-ORDER.indexOf(b.kind));

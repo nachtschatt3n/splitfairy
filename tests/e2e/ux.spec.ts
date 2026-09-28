@@ -42,6 +42,22 @@ async function checkScreen(page:Page,testInfo:TestInfo,screen:string,scope?:stri
   }
   const shown=(e:Element)=>{const r=e.getBoundingClientRect(),st=getComputedStyle(e);return r.width>0&&r.height>0&&st.visibility!=='hidden';};
   const name=(e:Element)=>((e.getAttribute('aria-label')||(e as HTMLElement).innerText||(e as HTMLInputElement).placeholder||e.tagName)+'').trim().replace(/\s+/g,' ').slice(0,40);
+  // Text squeezed into a sliver (one letter per line) or values cut off in their fields, at any width.
+  for(const e of root.querySelectorAll('strong,small,span,p,h1,h2,h3,label,button,a')){
+   if(!shown(e)||e.closest('[aria-hidden="true"]'))continue;
+   const text=((e as HTMLElement).innerText||'').trim();if(text.length<8)continue;
+   const r=e.getBoundingClientRect(),st=getComputedStyle(e),fs=parseFloat(st.fontSize);
+   if(r.width<fs*5&&r.height>fs*4)issues.push(`text "${text.slice(0,30)}" squeezed to ${Math.round(r.width)}px wide`);
+  }
+  const canvas=document.createElement('canvas').getContext('2d')!;
+  for(const e of root.querySelectorAll<HTMLInputElement|HTMLSelectElement>('select,input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=hidden])')){
+   if(!shown(e))continue;
+   const st=getComputedStyle(e),inner=e.clientWidth-parseFloat(st.paddingLeft)-parseFloat(st.paddingRight);
+   if((e as HTMLInputElement).type==='date'){if(e.clientWidth<150)issues.push(`date field "${name(e)}" is ${e.clientWidth}px wide; the date is cut off`);continue;}
+   const value=e instanceof HTMLSelectElement?e.selectedOptions[0]?.text??'':(e.value||e.placeholder||'');
+   canvas.font=`${st.fontWeight} ${st.fontSize} ${st.fontFamily}`;
+   if(value&&e instanceof HTMLSelectElement&&canvas.measureText(value).width>inner+1)issues.push(`dropdown "${name(e)}" cuts off "${value}"`);
+  }
   if(phone){
    for(const e of root.querySelectorAll('input:not([type=checkbox]):not([type=radio]):not([type=file]),select,textarea'))if(shown(e)&&parseFloat(getComputedStyle(e).fontSize)<16)issues.push(`field "${name(e)}" is ${getComputedStyle(e).fontSize}; iOS zooms under 16px`);
    for(const e of root.querySelectorAll('button,a[href],select,input[type=checkbox],input[type=radio]')){

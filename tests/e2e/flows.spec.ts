@@ -6,7 +6,7 @@ const iso=(days:number)=>{const d=new Date(Date.now()+days*86400_000);return `${
 async function receiptPhoto(){return sharp({create:{width:500,height:800,channels:3,background:'#fbfaf5'}}).composite([{input:Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="500" height="800"><text x="30" y="60" font-size="30">MERCADO</text><text x="30" y="700" font-size="30">TOTAL 23,10</text></svg>')}]).jpeg().toBuffer();}
 async function toTripList(page:Page){
  const chip=page.getByRole('button',{name:/Switch trip/});
- if(await chip.isVisible())await chip.click();else await page.getByLabel('Current trip').selectOption({label:'All trips'});
+ if(await chip.isVisible())await chip.click();
  await expect(tripList(page)).toBeVisible();
 }
 test.describe.configure({mode:'serial'});

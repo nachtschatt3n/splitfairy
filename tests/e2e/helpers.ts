@@ -63,7 +63,7 @@ export async function switchTrip(page:Page,name:string){
  const chip=page.getByRole('button',{name:/Switch trip/}),card=page.locator('.trip-card',{hasText:name});
  if(await tripList(page).isVisible())await card.click();
  else if(await chip.isVisible()){await chip.click();await card.click();}
- else await page.getByLabel('Current trip').selectOption({label:name});
+ else{await page.getByRole('button',{name:/Switch trip|All trips/}).first().click();await card.click();}
  await expect(page.getByText(`Here's what's happening in ${name}.`)).toBeVisible({timeout:15_000});
 }
 /** Attaches a screenshot to the report; with SHOT_DIR set also saves <project>-<name>.png for manual review. */

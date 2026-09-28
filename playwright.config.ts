@@ -11,6 +11,10 @@ export default defineConfig({
   {name:'iphone-webkit',...real,use:{...devices['iPhone 15'],...real.use}},
   {name:'iphone-chromium',...real,use:{...devices['iPhone 15'],...real.use,browserName:'chromium'}},
   {name:'desktop-chromium',...real,use:{...devices['Desktop Chrome'],...real.use,viewport:{width:1366,height:900}}},
+  // Layout-only checks at other desktop sizes and engines (the full flows run on the three projects above).
+  {name:'laptop-chromium',...real,testMatch:/ux\.spec\.ts/,use:{...devices['Desktop Chrome'],...real.use,viewport:{width:1024,height:768}}},
+  {name:'desktop-webkit',...real,testMatch:/ux\.spec\.ts/,use:{...devices['Desktop Safari'],...real.use,viewport:{width:1280,height:800}}},
+  {name:'desktop-firefox',...real,testMatch:/ux\.spec\.ts/,use:{...devices['Desktop Firefox'],...real.use,viewport:{width:1440,height:900}}},
  ],
  webServer:[
   {command:'npm run dev:ui',url:'http://127.0.0.1:5173',reuseExistingServer:!process.env.CI,timeout:60_000},
