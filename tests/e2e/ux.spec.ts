@@ -22,6 +22,8 @@ async function seedTrip(page:Page,name:string){
  await save('expense',{id:`x${n++}`,title:'Groceries for the week at Pingo Doce',date:iso(0),category:'food',total:12870,payers:[{familyId:'A',amount:12870}],lines:[{id:'l1',label:'Groceries',amount:12870,splits:[{amount:12870,eventId:null,weights:all,fixed:[]}]}],notes:'',receiptIds:[],status:'posted'});
  await save('payment',{id:'p1',from:'B',to:'A',amount:2000,date:iso(0)});
  await save('transport',{id:'car',name:'Silva car',kind:'car',familyId:'A',note:'Roof box'});await save('transport',{id:'fly',name:'Weber plane',kind:'plane',familyId:'B',note:''});
+ await save('leg',{id:'fly-in',transportId:'fly',from:'Frankfurt (FRA)',to:'Faro (FAO)',departDate:iso(0),departTime:'07:10',arriveDate:iso(0),arriveTime:'09:35',people:['b1','b2'],note:''});
+ await save('stay',{id:'house',name:'Casa das Dunas',address:'Rua das Dunas 12, Comporta',from:iso(-1),to:iso(6),checkIn:'16:00',checkOut:'10:00',note:''});
  for(const [i,text,familyId,packed,transportId] of [[1,'Beach tent','A',true,'car'],[2,'Travel cot','B',false,'fly'],[3,'Grill',null,false,null]] as const)await save('gear',{id:`g${i}`,text,familyId,transportId,quantity:1,note:'',packed});
  const photo=await sharp({create:{width:500,height:800,channels:3,background:'#fbfaf5'}}).jpeg().toBuffer();
  await api(`/trips/${trip.id}/receipts`,{image:photo.toString('base64')});
@@ -108,6 +110,8 @@ for(const scheme of ['light','dark'] as const){
    {name:'invite',scope:'[role=dialog]',open:async p=>{await openSection(p,'People');await p.getByRole('button',{name:'Invite someone without adding them'}).click();}},
    {name:'person-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'People');await p.getByRole('button',{name:'Edit Ben'}).click();}},
    {name:'family-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'People');await p.getByRole('button',{name:'Add family',exact:true}).click();}},
+   {name:'leg-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Plan');await p.getByRole('button',{name:'Add travel'}).click();}},
+   {name:'stay-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Plan');await p.getByRole('button',{name:'Add stay'}).click();}},
    {name:'plan-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Plan');await p.getByRole('button',{name:'Plan a meal or activity'}).click();}},
    {name:'shopping-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Plan');await p.locator('.shop-group').first().getByRole('button',{name:/^Edit /}).first().click();}},
    {name:'expense-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Spend');await p.getByRole('button',{name:/^Open /}).first().click();}},

@@ -4,7 +4,7 @@ import type {Command} from '../../../packages/domain/src/model.js';
 /** The traveller's local calendar day (UTC would be yesterday just after midnight in Europe). */
 export const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
 export const euro=(n:number)=>new Intl.NumberFormat('en-IE',{style:'currency',currency:'EUR'}).format(n/100);
-export const fmt=(iso:string)=>new Intl.DateTimeFormat('en-GB',{weekday:'short',day:'numeric',month:'short'}).format(new Date(`${iso}T12:00:00`));
+export const fmt=(iso:string)=>{const d=new Date(`${iso}T12:00:00`);return Number.isNaN(d.getTime())?'':new Intl.DateTimeFormat('en-GB',{weekday:'short',day:'numeric',month:'short'}).format(d);};
 export const uid=()=>crypto.randomUUID();
 export const cents=(s:string)=>Math.round(Number(s.replace(',','.'))*100);
 export const money=(n:number)=>String((n/100).toFixed(2));

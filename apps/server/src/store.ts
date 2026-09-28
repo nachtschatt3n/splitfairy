@@ -1,13 +1,13 @@
 import {DatabaseSync} from 'node:sqlite';
 import {randomUUID} from 'node:crypto';
 import {allocateExpense} from '../../../packages/domain/src/accounting.js';
-import {TRIP_THEMES,commandSchema,eventSchema,gearSchema,transportSchema,paymentSchema,expenseSchema,familySchema,personSchema,shoppingSchema,type Command,type Expense,type Trip,type User} from '../../../packages/domain/src/model.js';
+import {TRIP_THEMES,commandSchema,eventSchema,gearSchema,legSchema,staySchema,transportSchema,paymentSchema,expenseSchema,familySchema,personSchema,shoppingSchema,type Command,type Expense,type Trip,type User} from '../../../packages/domain/src/model.js';
 
 export class ConflictError extends Error{statusCode=409;constructor(message='This item changed on another device'){super(message);}}
 export class AccessError extends Error{statusCode=403;constructor(){super('Access denied');}}
 export class InputError extends Error{statusCode=400;constructor(message:string){super(message);}}
 export type Role='organizer'|'member';
-export const freshTrip=(id:string,name:string,start:string,end:string):Trip=>({id,name,start,end,version:0,archived:false,families:[],people:[],events:[],shopping:[],gear:[],transport:[],expenses:[],payments:[],receipts:[],activity:[]});
+export const freshTrip=(id:string,name:string,start:string,end:string):Trip=>({id,name,start,end,version:0,archived:false,families:[],people:[],events:[],shopping:[],gear:[],transport:[],stays:[],legs:[],expenses:[],payments:[],receipts:[],activity:[]});
 
 export class Store{
  constructor(public db:DatabaseSync){
@@ -113,7 +113,7 @@ export class Store{
     if(!/^\d{4}-\d{2}-\d{2}$/.test(start)||!/^\d{4}-\d{2}-\d{2}$/.test(end)||end<start)throw new InputError('The last day must be on or after the first day');
     trip.start=start;trip.end=end;
    }else{
-    const key=({family:'families',person:'people',event:'events',shopping:'shopping',gear:'gear',transport:'transport',expense:'expenses',payment:'payments'} as Record<string,string>)[command.entity];
+    const key=({family:'families',person:'people',event:'events',shopping:'shopping',gear:'gear',transport:'transport',stay:'stays',leg:'legs',expense:'expenses',payment:'payments'} as Record<string,string>)[command.entity];
     const list=((trip as any)[key]??=[]) as any[];
     const value=command.value as any;
     if(!value?.id || typeof value.id!=='string')throw new InputError('Item ID required');
@@ -126,20 +126,28 @@ export class Store{
      if(command.entity==='family'&&(trip.people.some(p=>p.familyId===value.id)||trip.expenses.some(e=>e.allocations.some(a=>a.familyId===value.id)||e.payers.some(p=>p.familyId===value.id)||e.lines.some(l=>l.splits.some(s=>s.fixed.some(f=>f.familyId===value.id))))||trip.payments.some(p=>p.from===value.id||p.to===value.id)))throw new InputError('Family is in use');
      if(command.entity==='person'&&trip.expenses.some(e=>e.allocations.some(a=>a.personId===value.id)))throw new InputError('Person is in use');
      if(command.entity==='person'&&trip.events.some(e=>e.participants.some(p=>p.id===value.id)))throw new InputError('Remove this person from planned events first');
+     if(command.entity==='person'&&(trip.legs??[]).some(l=>l.people.includes(value.id)))throw new InputError('Remove this person from travel first');
+     if(command.entity==='transport'&&(trip.legs??[]).some(l=>l.transportId===value.id))throw new InputError('Travel legs still use this car or flight');
      if(command.entity==='event'&&trip.expenses.some(e=>e.lines.some(l=>l.splits.some(s=>s.eventId===value.id))))throw new InputError('Event is linked to an expense');
      list.splice(index,1);
      if(command.entity==='event')for(const item of trip.shopping)if(item.eventId===value.id){item.eventId=null;item.version++;}
      // Things a removed family was bringing go back to "not decided yet".
      if(command.entity==='family'){for(const item of trip.gear??[])if(item.familyId===value.id){item.familyId=null;item.version++;}for(const t of trip.transport??[])if(t.familyId===value.id){t.familyId=null;t.version++;}}
      // Items that were going in a removed car or flight stay on the list without a transport.
-     if(command.entity==='transport')for(const item of trip.gear??[])if(item.transportId===value.id){item.transportId=null;item.version++;}
+     if(command.entity==='transport')for(const item of trip.gear??[])if(item.transportId===value.id||(item.route??[]).includes(value.id)){item.route=(item.route??[]).filter(t=>t!==value.id);item.transportId=item.route[0]??null;item.version++;}
     }else{
      let parsed:any;
      switch(command.entity){
       case 'family':parsed=familySchema.parse(value);break;
       case 'person':parsed=personSchema.parse(value);if(!trip.families.some(f=>f.id===parsed.familyId))throw new InputError('Unknown family');if(parsed.email&&trip.people.some(p=>p.id!==parsed.id&&p.email===parsed.email))throw new InputError('Someone on this trip already uses that email');break;
       case 'event':parsed=eventSchema.parse(value);for(const p of parsed.participants)if(!trip.people.some(x=>x.id===p.id))throw new InputError('Unknown participant');break;
-      case 'gear':parsed=gearSchema.parse(value);if(parsed.familyId&&!trip.families.some(f=>f.id===parsed.familyId))throw new InputError('Unknown family');if(parsed.transportId&&!(trip.transport??[]).some(t=>t.id===parsed.transportId))throw new InputError('Unknown transport');break;
+      case 'gear':{parsed=gearSchema.parse(value);if(parsed.familyId&&!trip.families.some(f=>f.id===parsed.familyId))throw new InputError('Unknown family');
+       // The route is the source of truth; a single transportId from older clients becomes a one-leg route.
+       if(!parsed.route.length&&parsed.transportId)parsed.route=[parsed.transportId];
+       for(const t of parsed.route)if(!(trip.transport??[]).some(x=>x.id===t))throw new InputError('Unknown transport');
+       parsed.transportId=parsed.route[0]??null;break;}
+      case 'stay':parsed=staySchema.parse(value);if(parsed.expenseId&&!trip.expenses.some(e=>e.id===parsed.expenseId))throw new InputError('Unknown booking cost');break;
+      case 'leg':parsed=legSchema.parse(value);if(!(trip.transport??[]).some(t=>t.id===parsed.transportId))throw new InputError('Unknown car or flight');for(const p of parsed.people)if(!trip.people.some(x=>x.id===p))throw new InputError('Unknown traveller');break;
       case 'transport':parsed=transportSchema.parse(value);if(parsed.familyId&&!trip.families.some(f=>f.id===parsed.familyId))throw new InputError('Unknown family');break;
       case 'shopping':parsed=shoppingSchema.parse(value);if(parsed.eventId&&!trip.events.some(e=>e.id===parsed.eventId))throw new InputError('Unknown event');break;
       case 'expense':{

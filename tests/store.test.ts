@@ -154,3 +154,43 @@ describe('transport for packing',()=>{
   expect(after.transport).toHaveLength(0);expect(after.gear![0]).toMatchObject({text:'Roof box',transportId:null});
  });
 });
+describe('journey: stays, travel legs and routes',()=>{
+ function base(){
+  store.addUser(actor);const trip=store.createTrip(actor,'Portugal','2026-10-01','2026-10-11');
+  store.mutate(actor,trip.id,cmd('family',{id:'U',name:'Uhl',version:0},0,'j1'));
+  store.mutate(actor,trip.id,cmd('person',{id:'m',name:'Mathias',familyId:'U',weight:1,version:0},0,'j2'));
+  store.mutate(actor,trip.id,cmd('transport',{id:'plane',name:'Uhl plane',kind:'plane',familyId:'U',version:0},0,'j3'));
+  store.mutate(actor,trip.id,cmd('transport',{id:'car',name:'Moncrief car',kind:'car',familyId:null,version:0},0,'j4'));
+  return trip.id;
+ }
+ it('stores stays and rejects a check-out before the first night or an unknown booking cost',()=>{
+  const id=base();
+  const t=store.mutate(actor,id,cmd('stay',{id:'s',name:'Casa Alfama',from:'2026-10-01',to:'2026-10-02',checkIn:'15:00',version:0},0,'j5'));
+  expect(t.stays![0]).toMatchObject({name:'Casa Alfama',address:'',checkIn:'15:00',checkOut:'',expenseId:null});
+  expect(()=>store.mutate(actor,id,cmd('stay',{id:'x',name:'Bad',from:'2026-10-05',to:'2026-10-04',version:0},0,'j6'))).toThrow(/Check-out/);
+  expect(()=>store.mutate(actor,id,cmd('stay',{id:'y',name:'Bad',from:'2026-10-05',to:'2026-10-06',expenseId:'nope',version:0},0,'j7'))).toThrow(/booking cost/);
+ });
+ it('stores travel legs with their vehicle and travellers, and protects both from deletion',()=>{
+  const id=base();
+  const t=store.mutate(actor,id,cmd('leg',{id:'l',transportId:'plane',from:'FRA',to:'LIS',departDate:'2026-10-01',departTime:'07:10',arriveDate:'2026-10-01',arriveTime:'09:05',people:['m'],version:0},0,'j8'));
+  expect(t.legs![0]).toMatchObject({from:'FRA',to:'LIS',people:['m']});
+  expect(()=>store.mutate(actor,id,cmd('leg',{id:'b',transportId:'plane',from:'A',to:'B',departDate:'2026-10-02',departTime:'10:00',arriveDate:'2026-10-02',arriveTime:'09:00',version:0},0,'j9'))).toThrow(/Arrival/);
+  expect(()=>store.mutate(actor,id,{mutationId:'j10',entity:'transport',action:'delete',expectedVersion:1,value:{id:'plane'}})).toThrow(/Travel legs/);
+  expect(()=>store.mutate(actor,id,{mutationId:'j11',entity:'person',action:'delete',expectedVersion:1,value:{id:'m'}})).toThrow(/travel/);
+ });
+ it('keeps an ordered route for packed items and upgrades a single transport to a route',()=>{
+  const id=base();
+  const a=store.mutate(actor,id,cmd('gear',{id:'cot',text:'Travel cot',route:['plane','car'],version:0},0,'j12'));
+  expect(a.gear![0]).toMatchObject({route:['plane','car'],transportId:'plane'});
+  const b=store.mutate(actor,id,cmd('gear',{id:'old',text:'Tent',transportId:'car',version:0},0,'j13'));
+  expect(b.gear!.find(g=>g.id==='old')).toMatchObject({route:['car'],transportId:'car'});
+  const c=store.mutate(actor,id,{mutationId:'j14',entity:'transport',action:'delete',expectedVersion:1,value:{id:'car'}});
+  expect(c.gear!.find(g=>g.id==='cot')).toMatchObject({route:['plane'],transportId:'plane'});
+ });
+ it('gives meals and activities an optional time',()=>{
+  const id=base();
+  const t=store.mutate(actor,id,cmd('event',{id:'e',title:'Dinner',date:'2026-10-01',kind:'dinner',time:'20:00',participants:[],version:0},0,'j15'));
+  expect(t.events[0].time).toBe('20:00');
+  expect(()=>store.mutate(actor,id,cmd('event',{id:'f',title:'Bad',date:'2026-10-01',kind:'dinner',time:'25:00',participants:[],version:0},0,'j16'))).toThrow();
+ });
+});

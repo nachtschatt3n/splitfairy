@@ -14,8 +14,8 @@ import {overlay} from './overlay.js';
 import {allocateExpense,balances,settle} from '../../../packages/domain/src/accounting.js';
 import type {Command,Event,Expense,Payment,Person,Receipt,Trip,TripView,User} from '../../../packages/domain/src/model.js';
 type Tab='today'|'plan'|'packing'|'expenses'|'balances'|'people';
-const blankTrip:Trip={id:'',name:'',start:'',end:'',version:0,archived:false,families:[],people:[],events:[],shopping:[],gear:[],transport:[],expenses:[],payments:[],receipts:[],activity:[]};
-const ACTIVITY_NOUNS:Record<string,string>={family:'a family',person:'a person',event:'a plan',shopping:'a shopping item',gear:'a packing item',transport:'a car or flight',expense:'an expense',payment:'a repayment',trip:'the trip',receipt:'a receipt'};
+const blankTrip:Trip={id:'',name:'',start:'',end:'',version:0,archived:false,families:[],people:[],events:[],shopping:[],gear:[],transport:[],stays:[],legs:[],expenses:[],payments:[],receipts:[],activity:[]};
+const ACTIVITY_NOUNS:Record<string,string>={family:'a family',person:'a person',event:'a plan',shopping:'a shopping item',gear:'a packing item',transport:'a car or flight',stay:'a stay',leg:'a travel leg',expense:'an expense',payment:'a repayment',trip:'the trip',receipt:'a receipt'};
 const ACTIVITY_VERBS:Record<string,string>={save:'updated',delete:'removed',retry:'retried',dismiss:'discarded'};
 /** Stored activity is "<action> <entity>"; show it as a sentence. */
 function describeActivity(description:string){const [action,entity]=description.split(' ');return `${ACTIVITY_VERBS[action]??action} ${ACTIVITY_NOUNS[entity]??entity}`;}

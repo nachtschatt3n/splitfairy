@@ -4,7 +4,7 @@ export function overlay(trip:Trip,commands:Command[]):Trip{
  const next:Trip=structuredClone(trip);
  for(const command of commands){
   if(command.entity==='trip'){if(command.action==='save')Object.assign(next,command.value);continue;}
-  const key=({family:'families',person:'people',event:'events',shopping:'shopping',gear:'gear',transport:'transport',expense:'expenses',payment:'payments'} as Record<string,string>)[command.entity];
+  const key=({family:'families',person:'people',event:'events',shopping:'shopping',gear:'gear',transport:'transport',stay:'stays',leg:'legs',expense:'expenses',payment:'payments'} as Record<string,string>)[command.entity];
   const list=((next as any)[key]??=[]) as any[],value=command.value as any,index=list.findIndex(row=>row.id===value.id);
   if(command.action==='delete'){if(index>=0)list.splice(index,1);continue;}
   const updated={...value,version:(index>=0?list[index].version:0)+1};
