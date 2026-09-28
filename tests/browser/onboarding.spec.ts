@@ -1,0 +1,24 @@
+import {test,expect} from '@playwright/test';
+test('invited traveler enters a code and reaches a trip dashboard',async({page})=>{
+ const user={id:'u',name:'Andrea',email:'andrea@example.com',admin:false};
+ const trip={id:'t',name:'Summer in Italy',start:'2026-10-01',end:'2026-10-08',version:0,archived:false,families:[],people:[],events:[],shopping:[],expenses:[],payments:[],receipts:[],activity:[]};
+ await page.route('**/api/v1/**',async route=>{
+  const url=new URL(route.request().url());const path=url.pathname;
+  let data:any={ok:true};
+  if(path.endsWith('/me'))data=null;
+  if(path.endsWith('/auth/verify'))data=user;
+  if(path.endsWith('/trips')&&route.request().method()==='GET')data=[{id:trip.id,name:trip.name,start:trip.start,end:trip.end,archived:false}];
+  if(path.endsWith('/trips/t'))data={trip,role:'member',members:[{email:user.email,role:'member'}]};
+  await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
+ });
+ await page.goto('/');
+ await expect(page.getByRole('heading',{name:/Good trips are/i})).toBeVisible();
+ await page.getByLabel('Email address').fill('andrea@example.com');
+ await page.getByRole('button',{name:'Email me a code'}).click();
+ await page.getByLabel('Your six-digit code').fill('123456');
+ await page.getByLabel('Your name').fill('Andrea');
+ await page.getByRole('button',{name:'Start planning'}).click();
+ await page.locator('.trip-switch select').selectOption('t');
+ await expect(page.getByText("Here's what's happening in Summer in Italy.")).toBeVisible();
+ if(process.env.SCREENSHOT_PATH) await page.screenshot({path:process.env.SCREENSHOT_PATH,fullPage:true});
+});

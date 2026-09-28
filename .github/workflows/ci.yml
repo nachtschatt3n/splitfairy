@@ -1,0 +1,105 @@
+name: CI and image
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: splitfairy-${{ github.ref }}
+  # Never cancel main: every main commit needs its sha- image so it can be released later.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+env:
+  IMAGE: ghcr.io/nachtschatt3n/splitfairy
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+        env:
+          SHARP_IGNORE_GLOBAL_LIBVIPS: '1'
+      - run: npm run check
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-results
+          path: test-results/
+          retention-days: 7
+  image:
+    # Pull requests build to prove the Dockerfile; main pushes publish sha-<commit> candidates. Tags never rebuild.
+    if: github.ref_type != 'tag'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: github.event_name == 'push'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build tested commit
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          load: ${{ github.event_name != 'push' }}
+          tags: ${{ env.IMAGE }}:sha-${{ github.sha }}
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: ${{ github.event_name == 'push' }}
+          sbom: ${{ github.event_name == 'push' }}
+      - name: Smoke-test the container
+        if: github.event_name != 'push'
+        run: |
+          docker run -d --name splitfairy -p 3000:3000 \
+            -e ADMIN_EMAIL=ci@example.invalid -e AUTH_SECRET="$(openssl rand -hex 32)" \
+            ${{ env.IMAGE }}:sha-${{ github.sha }}
+          for i in $(seq 1 30); do curl -sf localhost:3000/readyz && break; sleep 1; done
+          curl -sf localhost:3000/readyz
+          curl -sf localhost:3000/ | grep -q '<title>Splitfairy'
+          docker exec splitfairy node dist/server/scripts/backup.js
+          docker stop -t 10 splitfairy
+          test "$(docker inspect -f '{{.State.ExitCode}}' splitfairy)" = 0
+  release:
+    # A v* tag promotes the image that main already built and tested for that exact commit.
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Wait for the tested main image
+        run: |
+          for i in $(seq 1 60); do
+            docker buildx imagetools inspect "${IMAGE}:sha-${GITHUB_SHA}" >/dev/null 2>&1 && exit 0
+            echo "Waiting for ${IMAGE}:sha-${GITHUB_SHA} (tag a commit that is on main)"; sleep 30
+          done
+          exit 1
+      - name: Promote tested image without rebuilding
+        run: |
+          docker buildx imagetools create --tag "${IMAGE}:${GITHUB_REF_NAME}" "${IMAGE}:sha-${GITHUB_SHA}"
+          docker buildx imagetools inspect "${IMAGE}:${GITHUB_REF_NAME}"
+          echo "Released ${IMAGE}:${GITHUB_REF_NAME} from sha-${GITHUB_SHA}" >> "$GITHUB_STEP_SUMMARY"
