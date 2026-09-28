@@ -21,7 +21,8 @@ async function seedTrip(page:Page,name:string){
  for(const [i,text,eventId,done] of [[1,'Lemons','e1',false],[2,'Sunscreen SPF 50',null,true]] as const)await save('shopping',{id:`s${i}`,text,eventId,done});
  await save('expense',{id:`x${n++}`,title:'Groceries for the week at Pingo Doce',date:iso(0),category:'food',total:12870,payers:[{familyId:'A',amount:12870}],lines:[{id:'l1',label:'Groceries',amount:12870,splits:[{amount:12870,eventId:null,weights:all,fixed:[]}]}],notes:'',receiptIds:[],status:'posted'});
  await save('payment',{id:'p1',from:'B',to:'A',amount:2000,date:iso(0)});
- for(const [i,text,familyId,packed] of [[1,'Beach tent','A',true],[2,'Travel cot','B',false],[3,'Grill',null,false]] as const)await save('gear',{id:`g${i}`,text,familyId,quantity:1,note:'',packed});
+ await save('transport',{id:'car',name:'Silva car',kind:'car',familyId:'A',note:'Roof box'});await save('transport',{id:'fly',name:'Weber plane',kind:'plane',familyId:'B',note:''});
+ for(const [i,text,familyId,packed,transportId] of [[1,'Beach tent','A',true,'car'],[2,'Travel cot','B',false,'fly'],[3,'Grill',null,false,null]] as const)await save('gear',{id:`g${i}`,text,familyId,transportId,quantity:1,note:'',packed});
  const photo=await sharp({create:{width:500,height:800,channels:3,background:'#fbfaf5'}}).jpeg().toBuffer();
  await api(`/trips/${trip.id}/receipts`,{image:photo.toString('base64')});
  await expect.poll(async()=>(await (await page.request.get(`/api/v1/trips/${trip.id}`)).json()).trip.receipts[0]?.status,{timeout:30_000}).toBe('review');
@@ -78,6 +79,8 @@ for(const scheme of ['light','dark'] as const){
    {name:'today',open:p=>openSection(p,'Today')},
    {name:'plan',open:p=>openSection(p,'Plan')},
    {name:'packing',open:p=>openSection(p,'Pack')},
+   {name:'packing-by-transport',open:async p=>{await openSection(p,'Pack');await p.getByRole('button',{name:'By transport'}).click();}},
+   {name:'transport-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Pack');await p.getByRole('button',{name:'Edit Silva car'}).click();}},
    {name:'packing-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Pack');await p.getByRole('button',{name:'Edit Grill'}).click();}},
    {name:'spend',open:p=>openSection(p,'Spend')},
    {name:'spend-options',open:async p=>{await openSection(p,'Spend');await p.getByText('Custom shares, several payers, or refund').click();}},

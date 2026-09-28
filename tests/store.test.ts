@@ -142,3 +142,15 @@ describe('packing list',()=>{
   expect(store.mutate(actor,trip.id,cmd('gear',{id:'x',text:'Cooler',familyId:null,version:0},0,'g5')).gear).toHaveLength(1);
  });
 });
+describe('transport for packing',()=>{
+ it('links items to a car or flight, rejects unknown ones, and keeps items when a car is removed',()=>{
+  store.addUser(actor);const trip=store.createTrip(actor,'Italy','2026-10-01','2026-10-09');
+  store.mutate(actor,trip.id,cmd('family',{id:'f1',name:'Uhl',version:0},0,'t1'));
+  const car=store.mutate(actor,trip.id,cmd('transport',{id:'c',name:'Uhl car',kind:'car',familyId:'f1',version:0},0,'t2'));
+  expect(car.transport![0]).toMatchObject({name:'Uhl car',kind:'car',familyId:'f1',note:''});
+  store.mutate(actor,trip.id,cmd('gear',{id:'g',text:'Roof box',familyId:'f1',transportId:'c',version:0},0,'t3'));
+  expect(()=>store.mutate(actor,trip.id,cmd('gear',{id:'h',text:'Tent',transportId:'nope',version:0},0,'t4'))).toThrow(/Unknown transport/);
+  const after=store.mutate(actor,trip.id,{mutationId:'t5',entity:'transport',action:'delete',expectedVersion:1,value:{id:'c'}});
+  expect(after.transport).toHaveLength(0);expect(after.gear![0]).toMatchObject({text:'Roof box',transportId:null});
+ });
+});

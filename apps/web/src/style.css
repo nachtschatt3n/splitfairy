@@ -208,3 +208,12 @@ input[type=date]{min-width:0;max-width:100%}
 .claim{font-size:13px;white-space:nowrap}
 @media(max-width:740px){.mobile-nav button{min-width:0;flex:1;font-size:10px}}
 @media(prefers-color-scheme:dark){.progress{background:#2a4036}.progress>div{background:#8ddab8}.gear-note{color:#bfcec7}}
+/* ---- Transport on the packing list ---- */
+.transport-strip{margin:14px 0 10px}
+.transport-list{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.transport-chip{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 14px;border-radius:22px;border:1px solid #dce3dc;background:#fffefa;color:#1f5f53;font-weight:700;cursor:pointer}
+.transport-chip small{background:#e9f2ed;color:#1f5f53;border-radius:10px;padding:1px 7px;font-size:12px}
+.transport-chip.add{border-style:dashed;color:#56675f}
+.group-toggle{display:flex;gap:8px;margin:14px 0 0}
+.shop-group h3 svg{vertical-align:-2px}
+@media(prefers-color-scheme:dark){.transport-chip{background:#24392f;border-color:#456151;color:#93dcc4}.transport-chip small{background:#315647;color:#d4ede0}.transport-chip.add{color:#bfcec7}}

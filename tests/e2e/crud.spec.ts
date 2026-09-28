@@ -85,6 +85,25 @@ test('every entity can be created, changed and removed from the interface',async
  await pack.locator('.filter-chips').getByRole('button',{name:'Everything'}).click();
  await pack.locator('.shop-row',{hasText:'Grill'}).getByRole('checkbox').click();
  await expect(page.getByText('1 of 2 packed')).toBeVisible();
+ // Transport: a car with a suggested name, a flight, items travelling in them, grouping, removal.
+ await pack.getByRole('button',{name:'Add car or flight'}).click();
+ await sheet(page).getByLabel('Whose (optional)').selectOption({label:'Costa'});
+ await expect(sheet(page).getByLabel('Name')).toHaveValue('Costa car');
+ await sheet(page).getByRole('button',{name:'Add',exact:true}).click();await closed(page);
+ await pack.getByRole('button',{name:'Add car or flight'}).click();
+ await sheet(page).getByLabel('Type').selectOption('plane');await sheet(page).getByLabel('Whose (optional)').selectOption({label:'Weber'});
+ await expect(sheet(page).getByLabel('Name')).toHaveValue('Weber plane');
+ await sheet(page).getByRole('button',{name:'Add',exact:true}).click();await closed(page);
+ await pack.getByRole('button',{name:'Edit Beach tent'}).click();await sheet(page).getByLabel('Travels in (optional)').selectOption({label:'Costa car'});await sheet(page).getByRole('button',{name:'Save changes'}).click();await closed(page);
+ await page.getByLabel('Add something to bring').fill('Snorkels');await page.getByLabel('Travels in (optional)').first().selectOption({label:'Weber plane'});await page.getByRole('button',{name:'Add item'}).click();
+ await pack.getByRole('button',{name:'By transport'}).click();
+ await expect(pack.locator('.shop-group',{hasText:'Costa car'})).toContainText('Beach tent');
+ await expect(pack.locator('.shop-group',{hasText:'Weber plane'})).toContainText('Snorkels');
+ await expect(pack.getByRole('button',{name:'Edit Costa car'})).toContainText('1');
+ await pack.getByRole('button',{name:'Edit Costa car'}).click();await sheet(page).getByRole('button',{name:'Remove'}).click();await closed(page);
+ await expect(pack.getByRole('button',{name:'Edit Costa car'})).toHaveCount(0);
+ await expect(pack.locator('.shop-group',{hasText:'No transport yet'})).toContainText('Beach tent');
+ await pack.getByRole('button',{name:'By family'}).click();
  await page.getByRole('button',{name:'Edit Grill'}).click();await sheet(page).getByRole('button',{name:'Delete item'}).click();await closed(page);
  await expect(pack.locator('.shop-row',{hasText:'Grill'})).toHaveCount(0);
 
