@@ -41,7 +41,7 @@ test('organizer plans a trip, splits a receipt, settles up and switches trips',a
  await expect(page.locator('.family-block',{hasText:'On their own'})).toContainText('Lena');
  await expect(page.getByRole('button',{name:'Edit Tiago'})).toContainText('No account');
  await expect(page.getByRole('button',{name:'Edit Ben'})).toContainText('Invited');
- expect(mailsTo(`ben-${testInfo.project.name}@splitfairy.test`).some(m=>m.subject.includes(tripName))).toBe(true);
+ await expect.poll(()=>mailsTo(`ben-${testInfo.project.name}@splitfairy.test`).some(m=>m.subject.includes(tripName)),{message:'invitation email'}).toBe(true);
  await shot(page,testInfo,'people');
 
  await openSection(page,'Plan');
@@ -138,7 +138,7 @@ test('an invited member signs in by email, sees only member tools, and adds an e
  await addFamily(page,'Silva');await addPerson(page,'Ana','Silva');
  await addPerson(page,'Bea','Silva',{email:member});
  await expect(page.getByRole('button',{name:'Edit Bea'})).toContainText('Invited');
- expect(mailsTo(member).some(m=>m.subject.includes(tripName))).toBe(true);
+ await expect.poll(()=>mailsTo(member).some(m=>m.subject.includes(tripName)),{message:'invitation email'}).toBe(true);
 
  const memberContext=await browser.newContext(testInfo.project.use);const mp=await memberContext.newPage();
  const before=Date.now();
