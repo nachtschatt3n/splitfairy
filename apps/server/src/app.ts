@@ -21,7 +21,8 @@ function codeHash(secret:string,email:string,code:string){return createHmac('sha
 export async function createApp(config:Config):Promise<FastifyInstance>{
  const app=Fastify({logger:config.logLevel?{level:config.logLevel}:false,logController:new LogController({disableRequestLogging:true}),bodyLimit:16_000_000,trustProxy:true});
  await app.register(cookie);
- await app.register(rateLimit,{global:false});
+ // Cloudflare sets CF-Connecting-IP itself; X-Forwarded-For's first hop can be supplied by the client.
+ await app.register(rateLimit,{global:false,keyGenerator:request=>String(request.headers['cf-connecting-ip']??request.ip)});
  app.setErrorHandler((error,request,reply)=>{
   const status=error instanceof ZodError||error instanceof InputError?400:error instanceof ConflictError?409:error instanceof AccessError?403:(error as any).statusCode??500;
   if(status>=500)request.log.error(error);
@@ -51,7 +52,8 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
  app.get('/api/v1/me',async(request)=>{try{return auth(request);}catch{return null;}});
  app.post('/api/v1/auth/request',{config:{rateLimit:{max:5,timeWindow:'15 minutes'}}},async(request)=>{
   const {email}=z.object({email:emailSchema}).parse(request.body);
-  if(config.store.canLogin(email,config.adminEmail)){
+  // Same response whether or not the address may sign in, and whether or not the budget is spent.
+  if(config.store.canLogin(email,config.adminEmail)&&config.store.authBudget(email,'request')){
    const code=String(randomInt(0,1_000_000)).padStart(6,'0');
    config.store.db.prepare('INSERT INTO codes(email,hash,expires,attempts) VALUES(?,?,?,0) ON CONFLICT(email) DO UPDATE SET hash=excluded.hash,expires=excluded.expires,attempts=0').run(email,codeHash(config.secret,email,code),Date.now()+10*60_000);
    try{await config.sendMail(email,'Your Splitfairy sign-in code',`Your Splitfairy code is ${code}. It expires in 10 minutes.`);}
@@ -62,10 +64,10 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
  app.post('/api/v1/auth/verify',{config:{rateLimit:{max:10,timeWindow:'15 minutes'}}},async(request,reply)=>{
   const input=codeSchema.parse(request.body);
   const row=config.store.db.prepare('SELECT hash,expires,attempts FROM codes WHERE email=?').get(input.email) as {hash:string;expires:number;attempts:number}|undefined;
-  if(!row||row.expires<Date.now()||row.attempts>=5){reply.status(401);return {error:'Invalid or expired code'};}
+  if(!row||row.expires<Date.now()||row.attempts>=5||config.store.authLocked(input.email)){reply.status(401);return {error:'Invalid or expired code'};}
   config.store.db.prepare('UPDATE codes SET attempts=attempts+1 WHERE email=?').run(input.email);
   const supplied=Buffer.from(codeHash(config.secret,input.email,input.code),'hex'),expected=Buffer.from(row.hash,'hex');
-  if(expected.length!==supplied.length||!timingSafeEqual(expected,supplied)){reply.status(401);return {error:'Invalid or expired code'};}
+  if(expected.length!==supplied.length||!timingSafeEqual(expected,supplied)){config.store.authBudget(input.email,'failure');reply.status(401);return {error:'Invalid or expired code'};}
   config.store.db.prepare('DELETE FROM codes WHERE email=?').run(input.email);
   let user=config.store.userByEmail(input.email);
   if(!user){user={id:randomUUID(),email:input.email,name:input.name,admin:input.email===config.adminEmail.toLowerCase()};config.store.addUser(user);}

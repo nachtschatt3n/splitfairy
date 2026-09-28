@@ -19,9 +19,10 @@ export class Store{
   CREATE TABLE IF NOT EXISTS codes(email TEXT PRIMARY KEY,hash TEXT NOT NULL,expires INTEGER NOT NULL,attempts INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL,expires INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS mutations(id TEXT PRIMARY KEY,trip_id TEXT NOT NULL,user_id TEXT NOT NULL,created INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS auth_throttle(email TEXT PRIMARY KEY,window_start INTEGER NOT NULL,requests INTEGER NOT NULL,failures INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS expense_revisions(trip_id TEXT NOT NULL,expense_id TEXT NOT NULL,version INTEGER NOT NULL,data TEXT NOT NULL,changed_at TEXT NOT NULL,changed_by TEXT NOT NULL,PRIMARY KEY(trip_id,expense_id,version));`);
  }
- resetForTests(){this.db.exec('DELETE FROM expense_revisions;DELETE FROM mutations;DELETE FROM sessions;DELETE FROM codes;DELETE FROM invites;DELETE FROM memberships;DELETE FROM trips;DELETE FROM users;');}
+ resetForTests(){this.db.exec('DELETE FROM auth_throttle;DELETE FROM expense_revisions;DELETE FROM mutations;DELETE FROM sessions;DELETE FROM codes;DELETE FROM invites;DELETE FROM memberships;DELETE FROM trips;DELETE FROM users;');}
  addUser(user:User){this.db.prepare('INSERT INTO users(id,email,name,admin) VALUES(?,?,?,?) ON CONFLICT(email) DO UPDATE SET name=excluded.name').run(user.id,user.email.toLowerCase(),user.name,user.admin?1:0);}
  userByEmail(email:string):User|null{const row=this.db.prepare('SELECT * FROM users WHERE email=?').get(email.toLowerCase()) as any;return row?{id:row.id,email:row.email,name:row.name,admin:!!row.admin}:null;}
  userById(id:string):User|null{const row=this.db.prepare('SELECT * FROM users WHERE id=?').get(id) as any;return row?{id:row.id,email:row.email,name:row.name,admin:!!row.admin}:null;}
@@ -48,10 +49,23 @@ export class Store{
    this.db.prepare('UPDATE trips SET data=? WHERE id=?').run(JSON.stringify(trip),tripId);this.db.exec('COMMIT');return trip;
   }catch(error){this.db.exec('ROLLBACK');throw error;}
  }
+ /** Per-email sign-in budget that survives new codes and spoofed client IPs: 5 codes and 10 wrong guesses per hour. */
+ authBudget(email:string,kind:'request'|'failure',now=Date.now()):boolean{
+  const hour=3600_000,limits={request:5,failure:10};
+  let row=this.db.prepare('SELECT window_start,requests,failures FROM auth_throttle WHERE email=?').get(email) as {window_start:number;requests:number;failures:number}|undefined;
+  if(!row||now-row.window_start>=hour){row={window_start:now,requests:0,failures:0};}
+  const used=kind==='request'?row.requests:row.failures;
+  if(used>=limits[kind])return false;
+  if(kind==='request')row.requests++;else row.failures++;
+  this.db.prepare('INSERT INTO auth_throttle(email,window_start,requests,failures) VALUES(?,?,?,?) ON CONFLICT(email) DO UPDATE SET window_start=excluded.window_start,requests=excluded.requests,failures=excluded.failures').run(email,row.window_start,row.requests,row.failures);
+  return true;
+ }
+ authLocked(email:string,now=Date.now()){const row=this.db.prepare('SELECT window_start,failures FROM auth_throttle WHERE email=?').get(email) as {window_start:number;failures:number}|undefined;return !!row&&now-row.window_start<3600_000&&row.failures>=10;}
  /** Remove expired sign-in state and old idempotency keys. */
  prune(now=Date.now()){
   this.db.prepare('DELETE FROM sessions WHERE expires<?').run(now);
   this.db.prepare('DELETE FROM codes WHERE expires<?').run(now);
+  this.db.prepare('DELETE FROM auth_throttle WHERE window_start<?').run(now-3600_000);
   this.db.prepare('DELETE FROM mutations WHERE created<?').run(now-180*86400_000);
  }
  mutate(actor:User,tripId:string,raw:Command):Trip{

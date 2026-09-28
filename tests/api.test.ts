@@ -49,3 +49,23 @@ describe('API hardening',()=>{
   expect((await failing.inject({method:'POST',url:'/api/v1/auth/request',payload:{email:'admin@example.com'}})).statusCode).toBe(502);
  });
 });
+describe('sign-in throttling per email',()=>{
+ it('stops guessing after 10 wrong codes in an hour even when new codes are requested',async()=>{
+  const store=new Store(new DatabaseSync(':memory:'));let last='';
+  const target=await createApp({store,adminEmail:'admin@example.com',secret:'a very long integration test secret',sendMail:async(_t,_s,body)=>{last=body.match(/\b\d{6}\b/)?.[0]??'';},dataDir:'/tmp/splitfairy-api-tests',startWorker:false});
+  let ip=0;const from=()=>({'x-forwarded-for':`203.0.113.${++ip}`});
+  for(let round=0;round<3;round++){
+   await target.inject({method:'POST',url:'/api/v1/auth/request',headers:from(),payload:{email:'admin@example.com'}});
+   for(let i=0;i<4;i++)await target.inject({method:'POST',url:'/api/v1/auth/verify',headers:from(),payload:{email:'admin@example.com',code:last==='000000'?'111111':'000000',name:'X'}});
+  }
+  await target.inject({method:'POST',url:'/api/v1/auth/request',headers:from(),payload:{email:'admin@example.com'}});
+  const correct=await target.inject({method:'POST',url:'/api/v1/auth/verify',headers:from(),payload:{email:'admin@example.com',code:last,name:'X'}});
+  expect(correct.statusCode).toBe(401);
+ });
+ it('sends at most five codes per address per hour',async()=>{
+  const store=new Store(new DatabaseSync(':memory:'));let sent=0;
+  const target=await createApp({store,adminEmail:'admin@example.com',secret:'a very long integration test secret',sendMail:async()=>{sent++;},dataDir:'/tmp/splitfairy-api-tests',startWorker:false});
+  for(let i=0;i<8;i++)expect((await target.inject({method:'POST',url:'/api/v1/auth/request',headers:{'x-forwarded-for':`198.51.100.${i}`},payload:{email:'admin@example.com'}})).statusCode).toBe(200);
+  expect(sent).toBe(5);
+ });
+});
