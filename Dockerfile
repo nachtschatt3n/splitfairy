@@ -1,4 +1,4 @@
-FROM node:24.13.0-bookworm-slim AS build
+FROM node:24.21.0-bookworm-slim AS build
 WORKDIR /app
 ENV SHARP_IGNORE_GLOBAL_LIBVIPS=1
 COPY package.json package-lock.json ./
@@ -10,7 +10,7 @@ COPY scripts ./scripts
 COPY public ./public
 RUN npm run build
 
-FROM node:24.13.0-bookworm-slim AS runtime
+FROM node:24.21.0-bookworm-slim AS runtime
 LABEL org.opencontainers.image.source=https://github.com/nachtschatt3n/splitfairy \
       org.opencontainers.image.description="Splitfairy - so we split fairly" \
       org.opencontainers.image.licenses=MIT
