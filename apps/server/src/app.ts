@@ -12,9 +12,9 @@ import {commandSchema,type User,type Receipt} from '../../../packages/domain/src
 import {processReceipt,claimReceipt,resetInterruptedReceipts} from './receipt.js';
 
 const sha=(input:string)=>createHash('sha256').update(input).digest('hex');
-const emailSchema=z.email().transform(v=>v.toLowerCase());
+const emailSchema=z.string().trim().pipe(z.email()).transform(v=>v.toLowerCase());
 const inviteSchema=z.object({email:emailSchema,role:z.enum(['organizer','member']).default('member')});
-const codeSchema=z.object({email:emailSchema,code:z.string().regex(/^\d{6}$/),name:z.string().trim().min(1).max(80)});
+const codeSchema=z.object({email:emailSchema,code:z.string().max(40).transform(v=>v.replace(/\D/g,'')).pipe(z.string().regex(/^\d{6}$/)),name:z.string().trim().min(1).max(80)});
 export type Mail=(to:string,subject:string,body:string)=>Promise<void>;
 export type Config={store:Store;adminEmail:string;secret:string;sendMail:Mail;dataDir:string;startWorker?:boolean;secureCookies?:boolean;ollamaUrl?:string;ollamaModel?:string;logLevel?:string;/** Multiplies the per-IP sign-in limits; only the browser test server raises it. */authRateLimitFactor?:number};
 export function codeHash(secret:string,email:string,code:string){return createHmac('sha256',secret).update(`${email}:${code}`).digest('hex');}
@@ -55,8 +55,9 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
   // Same response whether or not the address may sign in, and whether or not the budget is spent.
   if(config.store.canLogin(email,config.adminEmail)&&config.store.authBudget(email,'request')){
    const code=String(randomInt(0,1_000_000)).padStart(6,'0');
-   config.store.issueCode(email,codeHash(config.secret,email,code),Date.now()+10*60_000);
-   try{await config.sendMail(email,'Your Splitfairy sign-in code',`Your Splitfairy code is ${code}. It expires in 10 minutes.`);}
+   // 30 minutes: some mail providers deliver slowly; attempts per code and per hour stay limited.
+   config.store.issueCode(email,codeHash(config.secret,email,code),Date.now()+30*60_000);
+   try{await config.sendMail(email,`${code} is your Splitfairy sign-in code`,`Your Splitfairy sign-in code:\n\n${code}\n\nIt works for 30 minutes. If you ask for another code, only the newest one works.\n\nOn the sign-in page choose "I already have a code" if you closed it.`);}
    catch(error){request.log.error({err:error},'sign-in email failed');throw Object.assign(new Error('The sign-in email could not be sent. Please try again later.'),{statusCode:502});}
   }
   return {ok:true};

@@ -157,3 +157,14 @@ describe('full lifecycle of trips, access and expenses',()=>{
   expect((await a.inject({method:'GET',url:'/api/v1/trips',headers:{cookie:admin}})).statusCode).toBe(401);
  });
 });
+describe('forgiving code entry',()=>{
+ it('accepts a code copied with spaces or a full stop, trims the address, and puts the code in the subject',async()=>{
+  const store=new Store(new DatabaseSync(':memory:'));const mails:{subject:string;body:string}[]=[];
+  const a=await createApp({store,adminEmail:'admin@example.com',secret:'a very long integration test secret',sendMail:async(_t,subject,body)=>{mails.push({subject,body});},dataDir:'/tmp/splitfairy-api-tests',startWorker:false});
+  await a.inject({method:'POST',url:'/api/v1/auth/request',payload:{email:' Admin@Example.com '}});
+  const code=mails[0].subject.match(/^\d{6}/)![0];
+  expect(mails[0].body).toContain(`\n\n${code}\n\n`);expect(mails[0].body).toContain('30 minutes');
+  const res=await a.inject({method:'POST',url:'/api/v1/auth/verify',payload:{email:'admin@example.com ',code:` ${code.slice(0,3)} ${code.slice(3)}.`,name:'Mathias'}});
+  expect(res.statusCode).toBe(200);
+ });
+});

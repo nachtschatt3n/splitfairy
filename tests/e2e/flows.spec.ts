@@ -17,10 +17,18 @@ test('organizer plans a trip, splits a receipt, settles up and switches trips',a
  await withAdminLock(async()=>{
  const before=Date.now();
   await page.goto('/');
+  // Guidance instead of a silently disabled button.
+  await page.getByRole('button',{name:'I already have a code'}).click();
+  await expect(page.getByRole('status')).toContainText('Enter the email address the code was sent to');
   await page.getByLabel('Email address').fill(ADMIN);
   await page.getByRole('button',{name:'Email me a code'}).click();
   await expect(page.getByText(/six-digit code is on its way/)).toBeVisible();
-  await page.getByLabel('Your six-digit code').fill(await mailedCode(ADMIN,before));
+  const code=await mailedCode(ADMIN,before);
+  // A wrong code explains what to do; a code copied with spaces and the full stop still works.
+  await page.getByLabel('Your six-digit code').fill(code==='000000'?'111111':'000000');await page.getByLabel('Your name').fill('Ana');
+  await page.getByRole('button',{name:'Start planning'}).click();
+  await expect(page.getByRole('status')).toContainText('only the newest one works');
+  await page.getByLabel('Your six-digit code').fill(` ${code.slice(0,3)} ${code.slice(3)}.`);
   await page.getByLabel('Your name').fill('Ana');
   await page.getByRole('button',{name:'Start planning'}).click();
  });
