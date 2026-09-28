@@ -30,7 +30,7 @@ jobs:
       - run: npm run check
       - name: Cache Playwright browsers
         id: browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-chromium-webkit-firefox-${{ hashFiles('package-lock.json') }}
