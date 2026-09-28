@@ -2,7 +2,7 @@ import {test,expect,type Page,type TestInfo} from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import sharp from 'sharp';
 import {ADMIN} from './env.js';
-import {isPhone,openSection,shot,signInAsAdmin,tripList,unique} from './helpers.js';
+import {isPhone,openSection,shot,signInAsAdmin,switchTrip,tripList,unique} from './helpers.js';
 const iso=(days:number)=>{const d=new Date(Date.now()+days*86400_000);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
 
 /** Builds a realistic trip through the public API, as the signed-in organizer. */
@@ -142,5 +142,28 @@ test('the phone menu fits the home-screen app safe area and never covers content
    expect(last,`${section}: last content ends above the menu`).toBeLessThanOrEqual(box.y+1);
   }
   await shot(page,testInfo,`menu-inset-${inset}`);
+ }
+});
+
+for(const theme of ['coast','alpine','city','countryside'])test(`the ${theme} theme is readable in light and dark mode`,async({page},testInfo)=>{
+ test.skip(!['iphone-webkit','desktop-chromium'].includes(testInfo.project.name),'two profiles are enough for colours');
+ test.setTimeout(120_000);
+ await signInAsAdmin(page);
+ {
+  const created=await page.request.post('/api/v1/trips',{data:{name:unique(testInfo,`Theme ${theme}`),start:iso(-1),end:iso(4),theme}});
+  const trip=await created.json();expect(trip.theme).toBe(theme);
+  let n=0;const save=(entity:string,value:any)=>page.request.post(`/api/v1/trips/${trip.id}/commands`,{data:{mutationId:crypto.randomUUID(),entity,action:'save',expectedVersion:0,value:{version:0,...value}}});
+  await save('family',{id:'A',name:'Silva',solo:false});await save('person',{id:'p',name:'Ana',familyId:'A',weight:1});
+  await save('event',{id:'e',title:'Dinner by the sea',date:iso(0),kind:'dinner',owner:'',notes:'',participants:[{id:'p',weight:1}]});
+  await save('shopping',{id:'s',text:'Lemons',eventId:'e',done:true});
+  for(const scheme of ['light','dark'] as const){
+   await page.emulateMedia({colorScheme:scheme});
+   await page.goto('/');await switchTrip(page,trip.name);
+   await expect(page.locator('html')).toHaveAttribute('data-trip-theme',theme);
+   for(const [name,section] of [['today','Today'],['plan','Plan'],['settle','Settle']] as const){
+    await openSection(page,section);await page.waitForTimeout(200);
+    await checkScreen(page,testInfo,`${theme}-${scheme}-${name}`);
+   }
+  }
  }
 });

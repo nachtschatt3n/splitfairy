@@ -1,5 +1,5 @@
-import {useState,type FormEvent} from 'react';
-import {ArrowRight,CalendarDays,Plus,ReceiptText,ShoppingBasket,Wallet,X} from 'lucide-react';
+import {useEffect,useState,type FormEvent} from 'react';
+import {ArrowRight,Plus,X} from 'lucide-react';
 import type {Trip,User} from '../../../packages/domain/src/model.js';
 import {api,ApiError} from './api.js';
 import {Button,Logo,LogoMark,Sheet,fmt,today} from './common.js';
@@ -10,6 +10,28 @@ const digits=(v:string)=>v.replace(/\D/g,'');
 const failure=(error:unknown):Notice=>({kind:'error',text:error instanceof ApiError&&error.status===401
  ?'That code did not work. It may have expired (codes last 30 minutes), or a newer code was sent: only the newest one works. Use “Send a new code” to get a fresh one.'
  :error instanceof Error?error.message:'Could not sign in. Please try again.'});
+
+const SLIDES=[
+ {img:'/tour/today.png',title:'The trip at a glance',text:'What is coming up, what is still on the list, and which receipts need a look.'},
+ {img:'/tour/plan.png',title:'Plan every day',text:'Breakfasts, dinners and activities, with the shopping for each meal right on it.'},
+ {img:'/tour/packing.png',title:'Who brings what',text:'Share the packing list between families, and decide which car or flight each thing travels in.'},
+ {img:'/tour/receipt.png',title:'Receipts, checked by you',text:'Snap a receipt, check what was read, and assign each item to the meal it was for.'},
+ {img:'/tour/settle.png',title:'Fair to the cent',text:'Children count less than adults, families share a wallet, and a few payments settle everything.'},
+];
+/** Rotating product tour for the sign-in page; still for people who prefer reduced motion. */
+function Tour({compact=false}:{compact?:boolean}){
+ const [i,setI]=useState(0),[paused,setPaused]=useState(false);
+ useEffect(()=>{if(paused||window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)return;const t=setInterval(()=>setI(x=>(x+1)%SLIDES.length),5000);return()=>clearInterval(t);},[paused]);
+ const slide=SLIDES[i];
+ return <section className={compact?'tour compact':'tour'} aria-label="What Splitfairy does" onMouseEnter={()=>setPaused(true)} onMouseLeave={()=>setPaused(false)} onFocus={()=>setPaused(true)} onBlur={()=>setPaused(false)}>
+  {!compact&&<><span className="auth-mark"><LogoMark size={40}/></span><h2>Plan the trip.<br/>Split it fairly.</h2><p className="tour-lead">Splitfairy is for families and friends who travel together: plan the days, share the lists, and split every cost fairly.</p></>}
+  <div className="tour-stage">
+   <div className="tour-phone">{SLIDES.map((x,n)=><img key={x.img} src={x.img} alt={n===i?`Screenshot: ${x.title}`:''} aria-hidden={n!==i} className={n===i?'on':''} loading={n===0?'eager':'lazy'}/>)}</div>
+   <div className="tour-caption" aria-live="polite"><strong>{slide.title}</strong><span>{slide.text}</span></div>
+  </div>
+  <div className="tour-dots" role="group" aria-label="Choose a screen">{SLIDES.map((x,n)=><button key={x.img} type="button" aria-label={x.title} aria-pressed={n===i} className={n===i?'on':''} onClick={()=>{setI(n);setPaused(true);}}/>)}</div>
+ </section>;
+}
 
 /** Two steps: the email address, then the six-digit code. Nothing else is asked at sign-in. */
 export function SignIn({onSignedIn,initialNotice}:{onSignedIn:(user:User&{isNew?:boolean})=>Promise<void>;initialNotice?:string}){
@@ -24,16 +46,7 @@ export function SignIn({onSignedIn,initialNotice}:{onSignedIn:(user:User&{isNew?
   if(digits(code).length!==6){setNotice({kind:'error',text:'The code has six digits. Paste or type it from the email.'});return;}
   void run(async()=>{const user=await api.verify(email.trim(),digits(code));await onSignedIn(user);});};
  return <main className="auth-page">
-  <div className="auth-art" aria-hidden="true"><div className="auth-art-inner">
-   <span className="auth-mark"><LogoMark size={64}/></span>
-   <h2>Plan the trip.<br/>Split it fairly.</h2>
-   <ul>
-    <li><CalendarDays size={20}/>Meals and activities for every day</li>
-    <li><ShoppingBasket size={20}/>Shared shopping and packing lists</li>
-    <li><ReceiptText size={20}/>Receipts read for you, checked by you</li>
-    <li><Wallet size={20}/>Fair shares per family, settled in a few payments</li>
-   </ul>
-  </div></div>
+  <div className="auth-art"><Tour/></div>
   <div className="auth-content">
    <Logo/>
    <h1>Good trips are<br/><em>shared fairly.</em></h1>
@@ -50,6 +63,7 @@ export function SignIn({onSignedIn,initialNotice}:{onSignedIn:(user:User&{isNew?
    </form>}
    {notice&&<p className={`form-message ${notice.kind}`} role={notice.kind==='error'?'alert':'status'}>{notice.text}</p>}
    <p className="auth-foot">Codes arrive by email and work for 30 minutes.</p>
+   <details className="tour-mobile"><summary>What is Splitfairy?</summary><Tour compact/></details>
   </div>
  </main>;
 }
@@ -67,7 +81,7 @@ export function NameSheet({user,onSaved,onClose}:{user:User;onSaved:(user:User)=
  </Sheet>;
 }
 
-type TripSummary=Pick<Trip,'id'|'name'|'start'|'end'|'archived'>;
+type TripSummary=Pick<Trip,'id'|'name'|'start'|'end'|'archived'|'theme'>;
 const dayMs=86400_000,dayNumber=(iso:string)=>Math.round(new Date(`${iso}T12:00:00`).getTime()/dayMs);
 function status(t:TripSummary,now:string){
  const d=dayNumber(now),s=dayNumber(t.start),e=dayNumber(t.end);
@@ -80,7 +94,7 @@ const GROUPS:[string,string][]=[['now','Happening now'],['upcoming','Coming up']
 
 function TripCard({trip,label,onOpen}:{trip:TripSummary;label:string;onOpen:()=>void}){
  const start=new Date(`${trip.start}T12:00:00`);
- return <button className="trip-card" onClick={onOpen}>
+ return <button className="trip-card" onClick={onOpen} data-trip-theme={trip.theme??'classic'}>
   <span className="date-block" aria-hidden="true"><small>{start.toLocaleDateString('en-GB',{month:'short'})}</small><strong>{start.getDate()}</strong></span>
   <span className="trip-card-text"><strong>{trip.name}</strong><small>{fmt(trip.start)} – {fmt(trip.end)}</small><span className="trip-status">{label}</span></span>
   <ArrowRight size={18} aria-hidden="true"/>

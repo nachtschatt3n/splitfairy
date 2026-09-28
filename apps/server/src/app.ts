@@ -8,7 +8,7 @@ import sharp from 'sharp';
 import {z,ZodError} from 'zod';
 import {Store,AccessError,ConflictError,InputError} from './store.js';
 import {balances,settle} from '../../../packages/domain/src/accounting.js';
-import {commandSchema,type User,type Receipt} from '../../../packages/domain/src/model.js';
+import {TRIP_THEMES,commandSchema,type User,type Receipt} from '../../../packages/domain/src/model.js';
 import {processReceipt,claimReceipt,resetInterruptedReceipts} from './receipt.js';
 import {inviteEmail,signInEmail} from './mail.js';
 
@@ -83,8 +83,8 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
  });
  app.put('/api/v1/me',async(request)=>{const user=auth(request),{name}=z.object({name:z.string().trim().min(1).max(80)}).parse(request.body);config.store.renameUser(user.id,name);return config.store.userById(user.id);});
  app.post('/api/v1/auth/logout',async(request,reply)=>{const token=request.cookies.splitfairy_session;if(token)config.store.db.prepare('DELETE FROM sessions WHERE token_hash=?').run(sha(token));reply.clearCookie('splitfairy_session',{path:'/'});return {ok:true};});
- app.get('/api/v1/trips',async(request)=>config.store.listTrips(auth(request)).map(t=>({id:t.id,name:t.name,start:t.start,end:t.end,archived:t.archived})));
- app.post('/api/v1/trips',async(request,reply)=>{const body=z.object({name:z.string().trim().min(1).max(160),start:z.iso.date(),end:z.iso.date()}).parse(request.body);const trip=config.store.createTrip(auth(request),body.name,body.start,body.end);reply.status(201);return trip;});
+ app.get('/api/v1/trips',async(request)=>config.store.listTrips(auth(request)).map(t=>({id:t.id,name:t.name,start:t.start,end:t.end,archived:t.archived,theme:t.theme??'classic'})));
+ app.post('/api/v1/trips',async(request,reply)=>{const body=z.object({name:z.string().trim().min(1).max(160),start:z.iso.date(),end:z.iso.date(),theme:z.enum(TRIP_THEMES).default('classic')}).parse(request.body);const trip=config.store.createTrip(auth(request),body.name,body.start,body.end,body.theme);reply.status(201);return trip;});
  app.get('/api/v1/trips/:tripId',async(request)=>{const user=auth(request),id=(request.params as any).tripId;return {trip:config.store.getTrip(user,id),role:config.store.role(user,id),members:config.store.members(user,id)};});
  app.post('/api/v1/trips/:tripId/invites',async(request)=>{const user=auth(request),id=(request.params as any).tripId,body=inviteSchema.parse(request.body);config.store.addMember(user,id,body.email,body.role);const mail=inviteEmail({inviter:user.name,tripName:config.store.getTrip(user,id).name,url:siteUrl(request)});await config.sendMail(body.email,mail.subject,mail.text,mail.html);return {ok:true};});
  const siteUrl=(request:{protocol:string;host:string})=>`${request.protocol}://${request.host}`;

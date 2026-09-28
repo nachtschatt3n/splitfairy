@@ -61,6 +61,8 @@ export async function openSection(page:Page,section:'Today'|'Plan'|'Pack'|'Spend
 }
 export async function switchTrip(page:Page,name:string){
  const chip=page.getByRole('button',{name:/Switch trip/}),card=page.locator('.trip-card',{hasText:name});
+ // Wait until the app shows either the trip list or an open trip before choosing how to switch.
+ await expect(tripList(page).or(page.getByRole('button',{name:/Switch trip/})).first()).toBeVisible({timeout:15_000});
  if(await tripList(page).isVisible())await card.click();
  else if(await chip.isVisible()){await chip.click();await card.click();}
  else{await page.getByRole('button',{name:/Switch trip|All trips/}).first().click();await card.click();}

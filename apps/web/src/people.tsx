@@ -2,7 +2,7 @@ import {useState,type FormEvent} from 'react';
 import {ArrowRight,Mail,Pencil,Plus,Settings2,UserRound,Users} from 'lucide-react';
 import {api} from './api.js';
 import type {Command,Family,Member,Person,Trip,TripView,User} from '../../../packages/domain/src/model.js';
-import {Button,Empty,Sheet,WEIGHTS,fmt,uid,weightLabel,type Remove,type Save} from './common.js';
+import {Button,Empty,Sheet,ThemePicker,WEIGHTS,fmt,uid,weightLabel,type Remove,type Save} from './common.js';
 import {localDb,pendingFor} from './offline.js';
 import {useEffect} from 'react';
 
@@ -83,13 +83,14 @@ function FamilySheet({family,save,remove,busy,onClose,trip}:{family?:Family;save
 }
 
 function TripSheet({trip,save,busy,onClose,onDeleted,onMessage}:{trip:Trip;save:Save;busy:boolean;onClose:()=>void;onDeleted:()=>void;onMessage:(m:string)=>void}){
- const [name,setName]=useState(trip.name),[start,setStart]=useState(trip.start),[end,setEnd]=useState(trip.end),[error,setError]=useState('');
+ const [name,setName]=useState(trip.name),[start,setStart]=useState(trip.start),[end,setEnd]=useState(trip.end),[theme,setTheme]=useState<string>(trip.theme??'classic'),[error,setError]=useState('');
  const outside=trip.events.filter(e=>e.date<start||e.date>end).length;
  const hasMoney=trip.expenses.length>0||trip.payments.length>0;
  return <Sheet title="Trip settings" eyebrow={trip.name} onClose={onClose}>
-  <form className="form-stack" onSubmit={async e=>{e.preventDefault();if(end<start){setError('The last day must be on or after the first day.');return;}await save('trip',{name:name.trim()||trip.name,start,end},trip);onClose();}}>
+  <form className="form-stack" onSubmit={async e=>{e.preventDefault();if(end<start){setError('The last day must be on or after the first day.');return;}await save('trip',{name:name.trim()||trip.name,start,end,theme},trip);onClose();}}>
    <label>Trip name<input value={name} onChange={e=>setName(e.target.value)} required/></label>
    <div className="form-row"><label>First day<input type="date" value={start} onChange={e=>setStart(e.target.value)} required/></label><label>Last day<input type="date" value={end} onChange={e=>setEnd(e.target.value)} required/></label></div>
+   <ThemePicker value={theme} onChange={setTheme} name="trip-theme"/>
    {outside>0&&<p className="helper">{outside} plan{outside===1?' falls':'s fall'} outside these dates. {outside===1?'It stays':'They stay'} on the trip; move {outside===1?'it':'them'} in the plan if needed.</p>}
    {error&&<p className="form-error" role="alert">{error}</p>}
    <Button type="submit" disabled={busy}>Save trip <ArrowRight size={17}/></Button>

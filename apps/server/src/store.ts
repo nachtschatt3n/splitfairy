@@ -1,7 +1,7 @@
 import {DatabaseSync} from 'node:sqlite';
 import {randomUUID} from 'node:crypto';
 import {allocateExpense} from '../../../packages/domain/src/accounting.js';
-import {commandSchema,eventSchema,gearSchema,transportSchema,paymentSchema,expenseSchema,familySchema,personSchema,shoppingSchema,type Command,type Expense,type Trip,type User} from '../../../packages/domain/src/model.js';
+import {TRIP_THEMES,commandSchema,eventSchema,gearSchema,transportSchema,paymentSchema,expenseSchema,familySchema,personSchema,shoppingSchema,type Command,type Expense,type Trip,type User} from '../../../packages/domain/src/model.js';
 
 export class ConflictError extends Error{statusCode=409;constructor(message='This item changed on another device'){super(message);}}
 export class AccessError extends Error{statusCode=403;constructor(){super('Access denied');}}
@@ -29,7 +29,7 @@ export class Store{
  userById(id:string):User|null{const row=this.db.prepare('SELECT * FROM users WHERE id=?').get(id) as any;return row?{id:row.id,email:row.email,name:row.name,admin:!!row.admin}:null;}
  canLogin(email:string,adminEmail:string){return email.toLowerCase()===adminEmail.toLowerCase() || !!this.db.prepare('SELECT 1 FROM users WHERE email=?').get(email.toLowerCase()) || !!this.db.prepare('SELECT 1 FROM invites WHERE email=?').get(email.toLowerCase());}
  promoteInvites(email:string){this.db.prepare('INSERT OR IGNORE INTO memberships(trip_id,email,role) SELECT trip_id,email,role FROM invites WHERE email=?').run(email);this.db.prepare('DELETE FROM invites WHERE email=?').run(email);}
- createTrip(user:User,name:string,start:string,end:string):Trip{if(!user.admin)throw new AccessError();if(!name.trim()||!/^\d{4}-\d{2}-\d{2}$/.test(start)||!/^\d{4}-\d{2}-\d{2}$/.test(end)||end<start) throw new InputError('Name and valid dates required');const trip=freshTrip(randomUUID(),name.trim(),start,end);this.db.prepare('INSERT INTO trips(id,data) VALUES(?,?)').run(trip.id,JSON.stringify(trip));this.db.prepare('INSERT INTO memberships(trip_id,email,role) VALUES(?,?,?)').run(trip.id,user.email.toLowerCase(),'organizer');return trip;}
+ createTrip(user:User,name:string,start:string,end:string,theme:Trip['theme']='classic'):Trip{if(!user.admin)throw new AccessError();if(!name.trim()||!/^\d{4}-\d{2}-\d{2}$/.test(start)||!/^\d{4}-\d{2}-\d{2}$/.test(end)||end<start) throw new InputError('Name and valid dates required');const trip={...freshTrip(randomUUID(),name.trim(),start,end),theme};this.db.prepare('INSERT INTO trips(id,data) VALUES(?,?)').run(trip.id,JSON.stringify(trip));this.db.prepare('INSERT INTO memberships(trip_id,email,role) VALUES(?,?,?)').run(trip.id,user.email.toLowerCase(),'organizer');return trip;}
  role(user:User,tripId:string):Role{const row=this.db.prepare('SELECT role FROM memberships WHERE trip_id=? AND email=?').get(tripId,user.email.toLowerCase()) as {role:Role}|undefined;if(!row)throw new AccessError();return row.role;}
  getTrip(user:User,tripId:string):Trip{this.role(user,tripId);const row=this.db.prepare('SELECT data FROM trips WHERE id=?').get(tripId) as {data:string}|undefined;if(!row)throw new AccessError();return JSON.parse(row.data);}
  listTrips(user:User):Trip[]{return (this.db.prepare('SELECT data FROM trips WHERE id IN (SELECT trip_id FROM memberships WHERE email=?)').all(user.email.toLowerCase()) as {data:string}[]).map(r=>JSON.parse(r.data));}
@@ -108,6 +108,7 @@ export class Store{
     const v=command.value as Partial<Trip>;
     if(typeof v.name==='string'&&v.name.trim())trip.name=v.name.trim().slice(0,160);
     if(typeof v.archived==='boolean')trip.archived=v.archived;
+    if(typeof v.theme==='string'){if(!(TRIP_THEMES as readonly string[]).includes(v.theme))throw new InputError('Unknown theme');trip.theme=v.theme;}
     const start=typeof v.start==='string'?v.start:trip.start,end=typeof v.end==='string'?v.end:trip.end;
     if(!/^\d{4}-\d{2}-\d{2}$/.test(start)||!/^\d{4}-\d{2}-\d{2}$/.test(end)||end<start)throw new InputError('The last day must be on or after the first day');
     trip.start=start;trip.end=end;

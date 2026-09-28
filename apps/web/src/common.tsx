@@ -27,3 +27,14 @@ export function Sheet({title,eyebrow='Splitfairy',onClose,children}:{title:strin
 /** Share weights as people think about them; any other stored value shows as custom. */
 export const WEIGHTS:[string,string][]=[['1','Adult · 1'],['0.75','Teen · 0.75'],['0.5','Child · 0.5'],['0.25','Small child · 0.25'],['0','Baby · free']];
 export const weightLabel=(w:number)=>WEIGHTS.find(([v])=>Number(v)===w)?.[1].split(' · ')[0]??`Share ${w}`;
+export const THEME_OPTIONS:[string,string,string][]=[['classic','Classic','Teal and coral, the default'],['coast','Coast','Sea, sand and sunset'],['alpine','Alpine','Snow, glacier and ski red'],['city','City','Stone, slate and brick'],['countryside','Countryside','Olive, wheat and lavender']];
+/** Radio group of trip themes; each tile previews its own colours through data-trip-theme. */
+export function ThemePicker({value,onChange,name='theme'}:{value:string;onChange:(v:string)=>void;name?:string}){
+ return <fieldset className="theme-picker"><legend>Look of this trip</legend><div className="theme-options">
+  {THEME_OPTIONS.map(([id,label,hint])=><label key={id} className={value===id?'theme-option checked':'theme-option'} data-trip-theme={id}>
+   <input type="radio" name={name} value={id} checked={value===id} onChange={()=>onChange(id)}/>
+   <span className="theme-swatch" aria-hidden="true"><i style={{background:'var(--primary)'}}/><i style={{background:'var(--soft)'}}/><i style={{background:'var(--accent)'}}/></span>
+   <span className="theme-text"><strong>{label}</strong><small>{hint}</small></span>
+  </label>)}
+ </div></fieldset>;
+}

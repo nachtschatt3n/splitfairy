@@ -26,7 +26,7 @@ async function signedInContext(browser,options){
 
 async function seed(request){
  const api=async(path,body)=>{const r=await request.post(`${base}/api/v1${path}`,{data:body});if(!r.ok())throw new Error(`${path}: ${await r.text()}`);return r.json();};
- const trip=await api('/trips',{name:'Summer in Portugal',start:day(-2),end:day(7)});
+ const trip=await api('/trips',{name:'Summer in Portugal',start:day(-2),end:day(7),theme:'coast'});
  const save=(entity,value)=>api(`/trips/${trip.id}/commands`,{mutationId:crypto.randomUUID(),entity,action:'save',expectedVersion:0,value:{version:0,...value}});
  for(const [id,name,solo] of [['S','Silva',false],['W','Weber',false],['R','Rossi',false],['L','Lena',true]])await save('family',{id,name,solo});
  const people=[['ana','Ana','S',1,'ana@example.com'],['tiago','Tiago','S',1,''],['ines','Inês','S',.5,''],['ben','Ben','W',1,'ben@example.com'],['mia','Mia','W',1,''],['noah','Noah','W',.25,''],['giulia','Giulia','R',1,''],['marco','Marco','R',1,''],['lena','Lena','L',1,'']];
@@ -90,4 +90,8 @@ try{
  await capture(context,globalThis.tripId,'desktop-today',{});
  await capture(context,globalThis.tripId,'desktop-settle',{tab:'Settle'});
  await browser.close();
+ // The sign-in tour shows the same phone screenshots, smaller.
+ const tour=resolve('public/tour');mkdirSync(tour,{recursive:true});
+ for(const [from,to] of [['phone-today','today'],['phone-plan','plan'],['phone-packing','packing'],['phone-receipt-review','receipt'],['phone-settle','settle']])
+  await sharp(join(out,`${from}.png`)).resize({width:360}).png({compressionLevel:9,palette:true,quality:85}).toFile(join(tour,`${to}.png`));
 }finally{server.kill('SIGTERM');ollama.kill('SIGTERM');rmSync(data,{recursive:true,force:true});}
