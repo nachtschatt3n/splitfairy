@@ -87,6 +87,10 @@ for(const scheme of ['light','dark'] as const){
    {name:'person-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'People');await p.getByRole('button',{name:'Edit Ben'}).click();}},
    {name:'family-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'People');await p.getByRole('button',{name:'Add family',exact:true}).click();}},
    {name:'plan-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Plan');await p.getByRole('button',{name:'Plan a meal or activity'}).click();}},
+   {name:'shopping-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Plan');await p.locator('.shop-group').first().getByRole('button',{name:/^Edit /}).first().click();}},
+   {name:'expense-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Spend');await p.getByRole('button',{name:/^Open /}).first().click();}},
+   {name:'repayment-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Settle');await p.getByRole('button',{name:/^Edit repayment/}).first().click();}},
+   {name:'trip-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'People');await p.getByRole('button',{name:'Edit trip'}).click();}},
   ];
   for(const s of screens){
    await s.open(page);await page.waitForTimeout(250);

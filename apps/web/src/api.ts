@@ -1,8 +1,8 @@
-import type {Command,Trip,TripView,User} from '../../../packages/domain/src/model.js';
+import type {Command,Member,Trip,TripView,User} from '../../../packages/domain/src/model.js';
 export class ApiError extends Error{constructor(message:string,public status:number){super(message);}}
 async function request<T>(path:string,init:RequestInit={},timeoutMs=15_000):Promise<T>{
  // A request must never hang the app (seen on iOS Safari): time out and let callers treat it as offline.
- const response=await fetch(`/api/v1${path}`,{credentials:'same-origin',headers:{'Content-Type':'application/json',...init.headers},signal:AbortSignal.timeout(timeoutMs),...init});
+ const response=await fetch(`/api/v1${path}`,{credentials:'same-origin',headers:init.body?{'Content-Type':'application/json',...init.headers}:{...init.headers},signal:AbortSignal.timeout(timeoutMs),...init});
  const result=await response.json().catch(()=>({error:'Invalid response'}));
  if(!response.ok)throw new ApiError(result.error??'Request failed',response.status);
  return result as T;
@@ -17,6 +17,9 @@ export const api={
  trip:(id:string)=>request<TripView>(`/trips/${id}`),
  command:(id:string,command:Command)=>request<TripView>(`/trips/${id}/commands`,{method:'POST',body:JSON.stringify(command)}),
  invite:(id:string,email:string,role:'member'|'organizer')=>request<{ok:boolean}>(`/trips/${id}/invites`,{method:'POST',body:JSON.stringify({email,role})}),
+ deleteTrip:(id:string)=>request<{ok:boolean}>(`/trips/${id}`,{method:'DELETE'}),
+ removeMember:(id:string,email:string)=>request<{members:Member[]}>(`/trips/${id}/members/${encodeURIComponent(email)}`,{method:'DELETE'}),
+ setRole:(id:string,email:string,role:'organizer'|'member')=>request<{members:Member[]}>(`/trips/${id}/members/${encodeURIComponent(email)}`,{method:'PUT',body:JSON.stringify({role})}),
  receiptAction:(id:string,receiptId:string,action:'retry'|'dismiss')=>request<TripView>(`/trips/${id}/receipts/${receiptId}/${action}`,{method:'POST',body:'{}'}),
  receipt:async(id:string,file:File,uploadId?:string)=>{const image=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(reader.error);reader.readAsDataURL(file);});return request<{id:string}>(`/trips/${id}/receipts`,{method:'POST',body:JSON.stringify({image,uploadId})},120_000);},
 };

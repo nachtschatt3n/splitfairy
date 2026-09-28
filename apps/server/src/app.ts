@@ -3,7 +3,7 @@ import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import {createHash,createHmac,randomBytes,randomInt,randomUUID,timingSafeEqual} from 'node:crypto';
 import {join} from 'node:path';
-import {mkdir,readFile,writeFile} from 'node:fs/promises';
+import {mkdir,readFile,rm,writeFile} from 'node:fs/promises';
 import sharp from 'sharp';
 import {z,ZodError} from 'zod';
 import {Store,AccessError,ConflictError,InputError} from './store.js';
@@ -113,6 +113,13 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
   const receipt:Receipt={id,status:'queued',items:[],total:null,merchant:'',date:'',error:null,version:1,authorId:user.id};trip.receipts.push(receipt);trip.version++;
   config.store.db.prepare('UPDATE trips SET data=? WHERE id=?').run(JSON.stringify(trip),tripId);reply.status(201);return receipt;
  });
+ app.delete('/api/v1/trips/:tripId',async(request)=>{
+  const user=auth(request),id=(request.params as any).tripId;config.store.deleteTrip(user,id);
+  await rm(join(config.dataDir,'receipts',id),{recursive:true,force:true});return {ok:true};
+ });
+ const memberParams=(request:any)=>({user:auth(request),id:request.params.tripId as string,email:emailSchema.parse(decodeURIComponent(request.params.email))});
+ app.delete('/api/v1/trips/:tripId/members/:email',async(request)=>{const {user,id,email}=memberParams(request);config.store.removeMember(user,id,email);return {members:config.store.members(user,id)};});
+ app.put('/api/v1/trips/:tripId/members/:email',async(request)=>{const {user,id,email}=memberParams(request);config.store.setRole(user,id,email,z.object({role:z.enum(['organizer','member'])}).parse(request.body).role);return {members:config.store.members(user,id)};});
  app.post('/api/v1/trips/:tripId/receipts/:receiptId/:action',async(request)=>{
   const user=auth(request),{tripId,receiptId,action}=request.params as {tripId:string;receiptId:string;action:string};
   if(action!=='retry'&&action!=='dismiss')throw Object.assign(new Error('Not found'),{statusCode:404});
