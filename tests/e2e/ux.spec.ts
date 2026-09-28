@@ -10,9 +10,11 @@ async function seedTrip(page:Page,name:string){
  const api=async(path:string,data:unknown)=>{const r=await page.request.post(`/api/v1${path}`,{data});expect(r.ok(),`${path}: ${await r.text()}`).toBe(true);return r.json();};
  const trip=await api('/trips',{name,start:iso(-1),end:iso(8)});let n=0;
  const save=(entity:string,value:any)=>api(`/trips/${trip.id}/commands`,{mutationId:crypto.randomUUID(),entity,action:'save',expectedVersion:0,value:{version:0,...value}});
- for(const [id,fam] of [['A','Silva-Fernandes'],['B','Weber'],['C','Rossi']])await save('family',{id,name:fam});
+ for(const [id,fam] of [['A','Silva-Fernandes'],['B','Weber'],['C','Rossi']])await save('family',{id,name:fam,solo:false});
+ await save('family',{id:'S',name:'Nora',solo:true});
  const people=[['a1','Ana','A',1],['a2','Tiago','A',.5],['a3','Inês','A',.25],['b1','Ben','B',1],['b2','Lena','B',1],['c1','Giulia','C',1],['c2','Marco','C',.75]] as const;
- for(const [id,pname,familyId,weight] of people)await save('person',{id,name:pname,familyId,weight});
+ for(const [id,pname,familyId,weight] of people)await save('person',{id,name:pname,familyId,weight,email:id==='b1'?`ben-${name.replace(/\W/g,'')}@splitfairy.test`:''});
+ await save('person',{id:'s1',name:'Nora',familyId:'S',weight:1,email:''});
  const all=people.map(p=>({id:p[0],weight:p[3]}));
  await save('event',{id:'e1',title:'Sardine dinner at the harbour',date:iso(0),kind:'dinner',owner:'Ben',notes:'',participants:all});
  await save('event',{id:'e2',title:'Surf lesson',date:iso(0),kind:'activity',owner:'',notes:'',participants:all.slice(0,5)});
@@ -30,7 +32,12 @@ async function checkScreen(page:Page,testInfo:TestInfo,screen:string,scope?:stri
  const phone=isPhone(page);
  const layout=await page.evaluate(({phone,scope})=>{
   const issues:string[]=[];const doc=document.documentElement;const root=scope?document.querySelector(scope)!:document.body;
-  if(doc.scrollWidth>doc.clientWidth+1)issues.push(`page scrolls sideways (${doc.scrollWidth}px > ${doc.clientWidth}px)`);
+  if(doc.scrollWidth>doc.clientWidth+1){
+   // Name the widest culprits so a CI-only failure can be fixed without reproducing it.
+   const scrolls=(e:Element|null)=>{for(;e&&e!==document.body;e=e.parentElement){const o=getComputedStyle(e).overflowX;if(o==='auto'||o==='scroll'||o==='hidden'||o==='clip')return true;}return false;};
+   const wide=[...document.querySelectorAll('body *')].filter(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.right>doc.clientWidth+1&&!scrolls(e.parentElement);}).map(e=>`${e.tagName.toLowerCase()}.${[...e.classList].join('.')}[${Math.round(e.getBoundingClientRect().right)}]`).slice(0,6);
+   issues.push(`page scrolls sideways (${doc.scrollWidth}px > ${doc.clientWidth}px): ${wide.join(', ')}`);
+  }
   const shown=(e:Element)=>{const r=e.getBoundingClientRect(),st=getComputedStyle(e);return r.width>0&&r.height>0&&st.visibility!=='hidden';};
   const name=(e:Element)=>((e.getAttribute('aria-label')||(e as HTMLElement).innerText||(e as HTMLInputElement).placeholder||e.tagName)+'').trim().replace(/\s+/g,' ').slice(0,40);
   if(phone){
@@ -76,7 +83,10 @@ for(const scheme of ['light','dark'] as const){
    {name:'people',open:p=>openSection(p,'People')},
    {name:'add-new',scope:'[role=dialog]',open:p=>p.getByRole('button',{name:'Add new'}).click()},
    {name:'scan',scope:'[role=dialog]',open:async p=>{await p.getByRole('button',{name:'Add new'}).click();await p.getByRole('dialog').getByRole('button',{name:/Scan a receipt/}).click();}},
-   {name:'invite',scope:'[role=dialog]',open:async p=>{await openSection(p,'People');await p.getByRole('button',{name:'Invite by email'}).click();}},
+   {name:'invite',scope:'[role=dialog]',open:async p=>{await openSection(p,'People');await p.getByRole('button',{name:'Invite someone without adding them'}).click();}},
+   {name:'person-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'People');await p.getByRole('button',{name:'Edit Ben'}).click();}},
+   {name:'family-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'People');await p.getByRole('button',{name:'Add family',exact:true}).click();}},
+   {name:'plan-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Plan');await p.getByRole('button',{name:'Plan a meal or activity'}).click();}},
   ];
   for(const s of screens){
    await s.open(page);await page.waitForTimeout(250);

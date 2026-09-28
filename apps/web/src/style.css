@@ -123,3 +123,57 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
 .account-block .account-row{margin-top:6px}
 .account-row strong{color:#243533;word-break:break-all}
 @media(prefers-color-scheme:dark){.account-row{color:#bfcec7}.account-row strong{color:#eef3ef}}
+/* ---- People & Plan redesign ---- */
+.card-actions{display:flex;gap:8px;flex-wrap:wrap}
+.family-block{padding:14px 0}
+.family-title>div{flex:1;min-width:0}.family-title strong,.family-title small{display:block}.family-title small{margin:2px 0 0!important}
+.person-row{display:flex;align-items:center;gap:10px;width:100%;min-height:52px;padding:8px 0 8px 51px;background:none;border:0;border-bottom:1px solid #f0eee6;text-align:left;color:inherit;font:inherit}
+button.person-row{cursor:pointer}
+.person-name{flex:1;min-width:0}.person-name strong,.person-name small{display:block}.person-name small{font-size:12px;color:#56675f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{font-size:11px;font-weight:800;border-radius:20px;padding:4px 9px;background:#f5eee1;color:#6f4526;white-space:nowrap}
+.badge.ok{background:#e1eee4;color:#1f5f53}.badge.muted{background:#f0f1ec;color:#56675f}
+.add-to-family{margin-left:51px}
+.icon-button.subtle{background:transparent;color:#56675f}
+.people-lower{margin-top:21px}
+.settings-block.first{border-top:0;margin-top:0;padding-top:0}
+.chip-actions{display:flex;gap:16px;margin:-4px 0 6px}
+.event-head{display:flex;gap:10px;align-items:flex-start}.event-head>div{flex:1;min-width:0}
+.event-card{border-radius:0 14px 14px 0}
+.event-shopping{margin-top:10px;border-top:1px dashed #e3d6c3;padding-top:4px}
+.shop-row{display:flex;align-items:center;gap:6px;border-bottom:1px solid #f1efe8;padding:2px 0}
+.shop-check{display:flex!important;flex-direction:row!important;align-items:center;gap:10px;flex:1;min-height:44px;font-size:15px!important;font-weight:500!important;color:inherit!important;cursor:pointer}
+.shop-check input{height:22px!important;width:22px!important;min-height:0!important;accent-color:#296859;flex:none}
+.quick-add{display:flex;gap:8px;margin-top:8px}
+.quick-add input{flex:1;min-width:0;border:1px solid #dce3dc;background:#fffefa;border-radius:10px;padding:10px 12px;min-height:44px}
+.quick-add .btn{min-width:48px;padding:0 12px}
+.shop-add{display:flex;flex-direction:column;gap:12px;background:#faf9f4;border-radius:14px;padding:16px;margin-bottom:10px}
+.shop-add label{display:flex;flex-direction:column;gap:7px;font-size:12px;font-weight:800;color:#506660}
+.shop-add input,.shop-add select{border:1px solid #dce3dc;background:#fffefa;border-radius:10px;padding:11px 12px;min-height:44px;width:100%}
+.shop-group{margin-top:14px}.shop-group h3{font-size:13px!important;color:#56675f;text-transform:uppercase;letter-spacing:.08em;margin:0 0 2px!important}
+.day-strip button{position:relative}
+.day-dot{position:absolute;bottom:6px;left:50%;width:6px;height:6px;margin-left:-3px;border-radius:50%;background:#bd7059}
+.day-strip button.selected .day-dot{background:#f6e5bd}
+.btn-danger{background:#9a4a36;color:#fff}
+.plan-grid .card>.btn{width:100%;margin-top:12px}
+@media(max-width:740px){.person-row{padding-left:0}.add-to-family{margin-left:0}.card-head{flex-wrap:wrap}.card-actions{width:100%}.card-actions .btn{flex:1}}
+@media(prefers-color-scheme:dark){
+ .person-row{border-color:#355046}.person-name small{color:#bfcec7}
+ .badge{background:#4b3d2f;color:#f2c9a4}.badge.ok{background:#294e44;color:#bff0d8}.badge.muted{background:#2a4036;color:#bfcec7}
+ .icon-button.subtle{background:transparent;color:#bfcec7}
+ .event-shopping{border-color:#456151}.shop-row{border-color:#355046}
+ .quick-add input,.shop-add input,.shop-add select{background:#24392f;color:#edf4e8;border-color:#456151}
+ .shop-add{background:#2a4036}.shop-add label{color:#cfdcd5}.shop-group h3{color:#bfcec7}
+}
+/* WebKit on some platforms gives checkboxes and date fields intrinsic widths that can push a phone row past the edge. */
+.chip input{margin:0}
+input[type=date]{min-width:0;max-width:100%}
+.form-row>label{min-width:0}
+@media(max-width:740px){.form-row>label{flex:1 1 130px}}
+.event-card,.event-head,.event-shopping,.shop-row,.quick-add{min-width:0;max-width:100%}
+.event-head h3,.event-head p{overflow-wrap:anywhere}
+.chip-list{max-width:100%}
+/* Grid columns default to minmax(auto,1fr) and grow to their widest unbreakable child; let them shrink instead. */
+.two-column,.expenses-grid,.plan-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.expenses-grid{grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr)}
+.card,.stat{min-width:0}
+@media(max-width:740px){.two-column,.expenses-grid,.plan-grid{grid-template-columns:minmax(0,1fr)}}

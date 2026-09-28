@@ -3,8 +3,10 @@ export const id=z.string().min(1).max(100);
 export const money=z.number().int().min(-100000000).max(100000000);
 const version=z.number().int().nonnegative().default(0);
 export const weight=z.number().finite().min(0).max(100).multipleOf(.001);
-export const familySchema=z.object({id,name:z.string().trim().min(1).max(80),version});
-export const personSchema=z.object({id,name:z.string().trim().min(1).max(80),familyId:id,weight,version});
+/** solo: a wallet for one person who travels on their own (shown as a person, not a family). */
+export const familySchema=z.object({id,name:z.string().trim().min(1).max(80),solo:z.boolean().default(false),version});
+/** email is optional: adults get an invitation to sign in, children usually have none. */
+export const personSchema=z.object({id,name:z.string().trim().min(1).max(80),familyId:id,weight,email:z.union([z.email().max(254),z.literal('')]).default('').transform(v=>v.toLowerCase()),version});
 export const weightedSchema=z.object({id,weight});
 export const eventSchema=z.object({id,title:z.string().trim().min(1).max(160),date:z.iso.date(),kind:z.enum(['breakfast','lunch','dinner','activity']),owner:z.string().max(80).default(''),notes:z.string().max(2000).default(''),participants:z.array(weightedSchema).max(100),version});
 export const paymentSchema=z.object({id,from:id,to:id,amount:money.positive(),date:z.iso.date(),version});
@@ -12,8 +14,9 @@ export const shoppingSchema=z.object({id,text:z.string().trim().min(1).max(200),
 export const splitSchema=z.object({amount:money,eventId:id.nullable().default(null),eventVersion:z.number().int().optional(),weights:z.array(weightedSchema).max(100),fixed:z.array(z.object({familyId:id,amount:money})).default([])});
 export const lineSchema=z.object({id,label:z.string().min(1).max(300),amount:money,splits:z.array(splitSchema).max(100)});
 export const expenseSchema=z.object({id,title:z.string().trim().min(1).max(160),date:z.iso.date(),category:z.enum(['food','activity','transport','stay','other']),total:money,payers:z.array(z.object({familyId:id,amount:money})).min(1).max(100),lines:z.array(lineSchema).min(1).max(500),notes:z.string().max(2000).default(''),receiptIds:z.array(id).max(10).default([]),status:z.enum(['draft','posted','void']),version});
-export type Family=z.infer<typeof familySchema>;
-export type Person=z.infer<typeof personSchema>;
+// Trips saved before these fields existed simply lack them.
+export type Family=Omit<z.infer<typeof familySchema>,'solo'>&{solo?:boolean};
+export type Person=Omit<z.infer<typeof personSchema>,'email'>&{email?:string};
 export type Event=z.infer<typeof eventSchema>;
 export type Shopping=z.infer<typeof shoppingSchema>;
 export type ExpenseInput=z.infer<typeof expenseSchema>;
@@ -26,4 +29,5 @@ export type Trip={id:string;name:string;start:string;end:string;version:number;a
 export const commandSchema=z.object({mutationId:id,entity:z.enum(['family','person','event','shopping','expense','payment','trip']),action:z.enum(['save','delete']),expectedVersion:z.number().int().nonnegative(),value:z.unknown()});
 export type Command=z.infer<typeof commandSchema>;
 export type User={id:string;email:string;name:string;admin:boolean};
-export type TripView={trip:Trip;role:'organizer'|'member';cursor:number;members?:{email:string;role:string}[]};
+export type Member={email:string;role:string;joined:boolean};
+export type TripView={trip:Trip;role:'organizer'|'member';cursor:number;members?:Member[]};

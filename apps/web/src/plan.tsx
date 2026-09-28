@@ -1,0 +1,95 @@
+import {useState,type FormEvent} from 'react';
+import {ArrowRight,CalendarDays,Pencil,Plus,ShoppingBasket,Trash2} from 'lucide-react';
+import type {Event,Shopping,Trip} from '../../../packages/domain/src/model.js';
+import {Button,Empty,Sheet,euro,fmt,today,uid,type Remove,type Save} from './common.js';
+
+const KINDS:[Event['kind'],string][]=[['breakfast','Breakfast'],['lunch','Lunch'],['dinner','Dinner'],['activity','Activity']];
+const ORDER=KINDS.map(([k])=>k);
+export const joiningLabel=(e:Event,trip:Trip)=>!e.participants.length?'Nobody yet':e.participants.length===trip.people.length&&trip.people.length>0?`Everyone (${e.participants.length})`:`${e.participants.length} joining`;
+
+function EventSheet({trip,event,day,save,remove,busy,onClose}:{trip:Trip;event?:Event;day:string;save:Save;remove:Remove;busy:boolean;onClose:()=>void}){
+ const [title,setTitle]=useState(event?.title??''),[kind,setKind]=useState<Event['kind']>(event?.kind??'dinner'),[date,setDate]=useState(event?.date??day),[owner,setOwner]=useState(event?.owner??'');
+ // New plans start with everyone; it is easy to remove people or decide later.
+ const [joining,setJoining]=useState<string[]>(event?event.participants.map(p=>p.id):trip.people.map(p=>p.id));
+ const submit=async(e:FormEvent)=>{
+  e.preventDefault();if(!title.trim())return;
+  // Weights come from the people's current share; existing expenses keep the split they were posted with.
+  const participants=trip.people.filter(p=>joining.includes(p.id)).map(p=>({id:p.id,weight:p.weight}));
+  await save('event',{id:event?.id??uid(),title:title.trim(),kind,date,owner:owner.trim(),notes:event?.notes??'',participants,version:event?.version??0},event);
+  onClose();
+ };
+ const toggle=(id:string)=>setJoining(j=>j.includes(id)?j.filter(x=>x!==id):[...j,id]);
+ return <Sheet title={event?`Edit ${event.title}`:'Plan a meal or activity'} eyebrow="The plan" onClose={onClose}>
+  <form className="form-stack" onSubmit={submit}>
+   <label>What is it?<input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Grilled sardines" autoFocus required/></label>
+   <div className="form-row"><label>Type<select value={kind} onChange={e=>setKind(e.target.value as Event['kind'])}>{KINDS.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select></label>
+    <label>Day<input type="date" value={date} min={trip.start} max={trip.end} onChange={e=>setDate(e.target.value)} required/></label></div>
+   <label>Who's organizing? (optional)<input value={owner} onChange={e=>setOwner(e.target.value)} placeholder="Ben cooks"/></label>
+   <fieldset><legend>Who is joining?</legend>
+    {trip.people.length?<>
+     <div className="chip-actions"><button type="button" className="text-button" onClick={()=>setJoining(trip.people.map(p=>p.id))}>Everyone</button><button type="button" className="text-button" onClick={()=>setJoining([])}>Nobody yet</button></div>
+     <div className="chip-list">{trip.people.map(p=><label key={p.id} className={joining.includes(p.id)?'chip checked':'chip'}><input type="checkbox" checked={joining.includes(p.id)} onChange={()=>toggle(p.id)}/>{p.name}</label>)}</div>
+    </>:<p className="helper">No people on the trip yet. You can plan now and choose who joins later.</p>}
+   </fieldset>
+   {!joining.length&&trip.people.length>0&&<p className="helper">Nobody joining yet: costs for this can be split once someone joins.</p>}
+   <Button type="submit" disabled={busy}>{event?'Save changes':'Add to plan'} <ArrowRight size={17}/></Button>
+   {event&&<Button kind="ghost" disabled={busy} onClick={async()=>{if(!window.confirm(`Delete ${event.title}? Its shopping items stay on the general list.`))return;await remove('event',event);onClose();}}>Delete</Button>}
+  </form>
+ </Sheet>;
+}
+
+function ShoppingItem({item,save,remove}:{item:Shopping;save:Save;remove:Remove}){
+ return <div className="shop-row">
+  <label className="shop-check"><input type="checkbox" checked={item.done} onChange={()=>void save('shopping',{...item,done:!item.done},item)}/><span className={item.done?'done':''}>{item.text}</span></label>
+  <button type="button" className="icon-button subtle" aria-label={`Remove ${item.text}`} onClick={()=>void remove('shopping',item)}><Trash2 size={16}/></button>
+ </div>;
+}
+
+function QuickAdd({placeholder,label,onAdd,busy}:{placeholder:string;label:string;onAdd:(text:string)=>Promise<void>;busy:boolean}){
+ const [text,setText]=useState('');
+ return <form className="quick-add" onSubmit={async e=>{e.preventDefault();if(!text.trim())return;await onAdd(text.trim());setText('');}}>
+  <input aria-label={label} value={text} onChange={e=>setText(e.target.value)} placeholder={placeholder}/>
+  <Button type="submit" kind="secondary" disabled={busy||!text.trim()} label="Add"><Plus size={17}/></Button>
+ </form>;
+}
+
+export function Plan({trip,save,remove,busy}:{trip:Trip;save:Save;remove:Remove;busy:boolean}){
+ // Open on today while the trip is running, otherwise on its first day.
+ const [day,setDay]=useState(()=>trip.start&&today()>=trip.start&&today()<=trip.end?today():trip.start||today());
+ const [sheet,setSheet]=useState<{event?:Event}|null>(null);
+ const [target,setTarget]=useState('');
+ const days=Array.from({length:Math.min(62,Math.max(1,Math.round((new Date(`${trip.end}T12:00:00`).getTime()-new Date(`${trip.start}T12:00:00`).getTime())/86400000)+1))},(_,i)=>{const d=new Date(`${trip.start}T12:00:00`);d.setDate(d.getDate()+i);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;});
+ const events=trip.events.filter(e=>e.date===day).sort((a,b)=>ORDER.indexOf(a.kind)-ORDER.indexOf(b.kind));
+ const allEvents=[...trip.events].sort((a,b)=>a.date.localeCompare(b.date)||ORDER.indexOf(a.kind)-ORDER.indexOf(b.kind));
+ const spent=(id:string)=>trip.expenses.filter(x=>x.status==='posted').flatMap(x=>x.lines.flatMap(l=>l.splits.filter(s=>s.eventId===id).map(s=>s.amount))).reduce((a,b)=>a+b,0);
+ const addItem=(text:string,eventId:string|null)=>save('shopping',{id:uid(),text,eventId,done:false,version:0});
+ const byDone=(a:Shopping,b:Shopping)=>Number(a.done)-Number(b.done);
+ const groups=[{id:null as string|null,title:'General',items:trip.shopping.filter(s=>!s.eventId)},...allEvents.map(e=>({id:e.id as string|null,title:`${e.title} · ${fmt(e.date)}`,items:trip.shopping.filter(s=>s.eventId===e.id)}))].filter(g=>g.items.length);
+ return <>
+  <div className="day-strip" role="tablist" aria-label="Trip days">{days.map(d=><button key={d} role="tab" aria-selected={day===d} onClick={()=>setDay(d)} className={day===d?'selected':''}><span>{new Date(`${d}T12:00:00`).toLocaleDateString('en-GB',{weekday:'short'})}</span><strong>{d.slice(-2)}</strong>{trip.events.some(e=>e.date===d)&&<i className="day-dot" aria-hidden="true"/>}</button>)}</div>
+  <div className="two-column plan-grid">
+   <section className="card" aria-label={`Plans for ${fmt(day)}`}>
+    <div className="card-head"><div><span className="eyebrow">{fmt(day)}</span><h2>Meals & moments</h2></div></div>
+    {events.map(e=>{const items=trip.shopping.filter(s=>s.eventId===e.id).sort(byDone);const cost=spent(e.id);return <article className="event-card" key={e.id} aria-label={e.title}>
+     <div className="event-head"><div><span className="event-type">{e.kind}</span><h3>{e.title}</h3><p>{joiningLabel(e,trip)}{e.owner?` · ${e.owner} organizes`:''}{cost?` · ${euro(cost)} spent`:''}</p></div>
+      <button type="button" className="icon-button subtle" aria-label={`Edit ${e.title}`} onClick={()=>setSheet({event:e})}><Pencil size={16}/></button></div>
+     <div className="event-shopping">{items.map(item=><ShoppingItem key={item.id} item={item} save={save} remove={remove}/>)}
+      <QuickAdd label={`Add to shopping for ${e.title}`} placeholder="Add an ingredient…" busy={busy} onAdd={text=>addItem(text,e.id)}/></div>
+    </article>;})}
+    {!events.length&&<Empty icon={<CalendarDays/>} heading="Nothing planned" body="Add a breakfast, dinner or a little adventure for this day."/>}
+    <Button onClick={()=>setSheet({})}><Plus size={17}/> Plan a meal or activity</Button>
+   </section>
+   <section className="card" aria-label="Shopping list">
+    <div className="card-head"><div><span className="eyebrow">The shared list</span><h2>Shopping</h2></div><ShoppingBasket size={23} aria-hidden="true"/></div>
+    <form className="shop-add" onSubmit={async e=>{e.preventDefault();const input=(e.currentTarget.elements.namedItem('item') as HTMLInputElement);if(!input.value.trim())return;await addItem(input.value.trim(),target||null);input.value='';}}>
+     <label>Add to the list<input name="item" placeholder="Eggs, bread, sunscreen…"/></label>
+     <label>For<select value={target} onChange={e=>setTarget(e.target.value)}><option value="">General shopping</option>{allEvents.map(e=><option key={e.id} value={e.id}>{e.title} · {fmt(e.date)}</option>)}</select></label>
+     <Button type="submit" kind="secondary" disabled={busy}><Plus size={16}/> Add item</Button>
+    </form>
+    {groups.map(g=><div className="shop-group" key={g.id??'general'}><h3>{g.title}</h3>{[...g.items].sort(byDone).map(item=><ShoppingItem key={item.id} item={item} save={save} remove={remove}/>)}</div>)}
+    {!trip.shopping.length&&<Empty icon={<ShoppingBasket/>} heading="Your list is clear" body="Add supplies here, or ingredients straight on a meal."/>}
+   </section>
+  </div>
+  {sheet&&<EventSheet trip={trip} event={sheet.event} day={day} save={save} remove={remove} busy={busy} onClose={()=>setSheet(null)}/>}
+ </>;
+}

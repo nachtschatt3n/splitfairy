@@ -117,3 +117,12 @@ describe('review fixes',()=>{
   expect(store.mutate(actor,id,cmd('expense',{...expense,status:'void'},1,'c5')).expenses[0].status).toBe('void');
  });
 });
+describe('planning',()=>{
+ it('allows plans nobody has joined yet and keeps shopping items when a plan is deleted',()=>{
+  store.addUser(actor);const trip=store.createTrip(actor,'Italy','2026-10-01','2026-10-09');
+  store.mutate(actor,trip.id,cmd('event',{id:'e1',title:'Dinner',date:'2026-10-02',kind:'dinner',owner:'',notes:'',participants:[],version:0},0,'q1'));
+  store.mutate(actor,trip.id,cmd('shopping',{id:'s1',text:'Lemons',eventId:'e1',done:false,version:0},0,'q2'));
+  const after=store.mutate(actor,trip.id,{mutationId:'q3',entity:'event',action:'delete',expectedVersion:1,value:{id:'e1'}});
+  expect(after.events).toHaveLength(0);expect(after.shopping[0]).toMatchObject({text:'Lemons',eventId:null});
+ });
+});

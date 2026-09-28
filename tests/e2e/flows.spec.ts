@@ -1,7 +1,7 @@
 import {test,expect,type Page} from '@playwright/test';
 import sharp from 'sharp';
 import {ADMIN} from './env.js';
-import {createTrip,isPhone,mailedCode,mailsTo,openSection,shot,signInAsAdmin,switchTrip,unique,withAdminLock} from './helpers.js';
+import {addFamily,addPerson,createTrip,isPhone,mailedCode,mailsTo,openSection,planEvent,shot,signInAsAdmin,switchTrip,unique,withAdminLock} from './helpers.js';
 const iso=(days:number)=>{const d=new Date(Date.now()+days*86400_000);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
 async function receiptPhoto(){return sharp({create:{width:500,height:800,channels:3,background:'#fbfaf5'}}).composite([{input:Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="500" height="800"><text x="30" y="60" font-size="30">MERCADO</text><text x="30" y="700" font-size="30">TOTAL 23,10</text></svg>')}]).jpeg().toBuffer();}
 async function toTripList(page:Page){
@@ -33,30 +33,33 @@ test('organizer plans a trip, splits a receipt, settles up and switches trips',a
  if(isPhone(page))await expect(page.getByRole('navigation',{name:'Trip sections'})).toBeVisible();
 
  await openSection(page,'People');
- for(const family of ['Silva','Weber']){await page.getByPlaceholder('The Millers').fill(family);await page.locator('form',{hasText:'Add a family'}).getByRole('button',{name:'Add'}).click();await expect(page.locator('.family-title',{hasText:family})).toBeVisible();}
- const personForm=page.locator('form',{hasText:'Add a person'});
- for(const [name,family,weight] of [['Ana','Silva','Adult · 1'],['Tiago','Silva','Child · 0.5'],['Ben','Weber','Adult · 1']]){
-  await personForm.getByPlaceholder('First name').fill(name);
-  await personForm.locator('select').nth(0).selectOption({label:family});
-  await personForm.locator('select').nth(1).selectOption({label:weight});
-  await personForm.getByRole('button',{name:'Add'}).click();
-  await expect(page.locator('.person-row',{hasText:name})).toBeVisible();
- }
+ await addFamily(page,'Silva');await addFamily(page,'Weber');
+ await addPerson(page,'Ana','Silva');
+ await addPerson(page,'Tiago','Silva',{share:'Child · 0.5'});
+ await addPerson(page,'Ben','Weber',{email:`ben-${testInfo.project.name}@splitfairy.test`});
+ await addPerson(page,'Lena','On their own');
+ await expect(page.locator('.family-block',{hasText:'On their own'})).toContainText('Lena');
+ await expect(page.getByRole('button',{name:'Edit Tiago'})).toContainText('No account');
+ await expect(page.getByRole('button',{name:'Edit Ben'})).toContainText('Invited');
+ expect(mailsTo(`ben-${testInfo.project.name}@splitfairy.test`).some(m=>m.subject.includes(tripName))).toBe(true);
+ await shot(page,testInfo,'people');
 
  await openSection(page,'Plan');
  await page.locator('.day-strip button').nth(3).click();
- const planForm=page.locator('#new-event');
- await planForm.getByLabel('What is it?').fill('Sardine dinner');
- await planForm.getByLabel('Type').selectOption('dinner');
- await planForm.getByRole('button',{name:'Add to plan'}).click();
- await expect(page.locator('.event-card',{hasText:'Sardine dinner'})).toBeVisible();
- await page.getByLabel('Add to the list').fill('Lemons');
- const shopForm=page.locator('form',{hasText:'Add to the list'});
- const dinnerOption=await shopForm.getByLabel('For').locator('option',{hasText:'Sardine dinner'}).getAttribute('value');
- await shopForm.getByLabel('For').selectOption(dinnerOption!);
- await page.getByRole('button',{name:'Add item'}).click();
- const lemons=page.locator('.shop-row',{hasText:'Lemons'});
- await expect(lemons).toBeVisible();await lemons.click();await expect(lemons.locator('input')).toBeChecked();
+ // A plan can exist before anyone joins; people are added later.
+ await planEvent(page,'Beach picnic','lunch','nobody');
+ await expect(page.getByRole('article',{name:'Beach picnic'})).toContainText('Nobody yet');
+ await page.getByRole('button',{name:'Edit Beach picnic'}).click();
+ await page.getByRole('dialog').getByRole('button',{name:'Everyone'}).click();
+ await page.getByRole('dialog').getByRole('button',{name:'Save changes'}).click();
+ await expect(page.getByRole('article',{name:'Beach picnic'})).toContainText('Everyone (4)');
+ await planEvent(page,'Sardine dinner','dinner');
+ const dinner=page.getByRole('article',{name:'Sardine dinner'});
+ // Ingredients go straight onto the meal.
+ await dinner.getByLabel('Add to shopping for Sardine dinner').fill('Lemons');await dinner.getByLabel('Add to shopping for Sardine dinner').press('Enter');
+ const lemons=dinner.locator('.shop-row',{hasText:'Lemons'});
+ await expect(lemons).toBeVisible();await lemons.getByRole('checkbox').click();await expect(lemons.getByRole('checkbox')).toBeChecked();
+ await expect(page.locator('.shop-group',{hasText:'Sardine dinner'})).toContainText('Lemons');
  await shot(page,testInfo,'plan');
 
  await openSection(page,'Spend');
@@ -79,7 +82,11 @@ test('organizer plans a trip, splits a receipt, settles up and switches trips',a
  await review.click();
  const sheet=page.getByRole('dialog');
  await expect(sheet.getByRole('status')).toContainText('Totals match');
- await expect(sheet.getByLabel('Assign item 1')).toHaveValue(/.+/);
+ // Two meals that day, so nothing is pre-assigned: send everything to dinner, then sunscreen to everyone.
+ await expect(sheet.getByLabel('Assign item 1')).toHaveValue('');
+ const dinnerId=await sheet.getByLabel('Assign every item to').locator('option',{hasText:'Sardine dinner'}).getAttribute('value');
+ await sheet.getByLabel('Assign every item to').selectOption(dinnerId!);await sheet.getByRole('button',{name:'Apply to all'}).click();
+ await expect(sheet.getByLabel('Assign item 1')).toHaveValue(dinnerId!);
  await sheet.getByLabel('Assign item 4').selectOption('');
  await sheet.getByLabel('Paid by').selectOption({label:'Silva'});
  await expect(sheet.getByLabel('Totals by meal or activity')).toContainText('Sardine dinner');
@@ -90,13 +97,17 @@ test('organizer plans a trip, splits a receipt, settles up and switches trips',a
  await expect(page.getByText('Receipt inbox')).toHaveCount(0);
 
  await openSection(page,'Settle');
- const transfer=page.locator('.transfer-row').first();
- await expect(transfer).toContainText('Silva');await expect(transfer).toContainText('pays Weber');
- const amount=(await transfer.locator('b').innerText()).replace(/[^\d.,]/g,'');
+ await expect(page.locator('.transfer-row',{hasText:'pays Weber'})).toBeVisible();
  await shot(page,testInfo,'settle');
- const pay=page.locator('form',{hasText:'Record payment'});
- await pay.getByLabel('From').selectOption({label:'Silva'});await pay.getByLabel('To').selectOption({label:'Weber'});await pay.getByLabel('Amount').fill(amount);
- await pay.getByRole('button',{name:'Record payment'}).click();
+ // Record every suggested repayment; afterwards everyone is even.
+ for(let i=0;i<5&&await page.locator('.transfer-row').count();i++){
+  const row=page.locator('.transfer-row').first();
+  const from=await row.locator('strong').innerText(),to=(await row.locator('small').innerText()).replace(/^pays /,''),amount=(await row.locator('b').innerText()).replace(/[^\d.,]/g,'');
+  const pay=page.locator('form',{hasText:'Record payment'});
+  await pay.getByLabel('From').selectOption({label:from});await pay.getByLabel('To').selectOption({label:to});await pay.getByLabel('Amount').fill(amount);
+  await pay.getByRole('button',{name:'Record payment'}).click();
+  await expect(page.locator('.transfer-row',{hasText:from}).filter({hasText:amount})).toHaveCount(0);
+ }
  await expect(page.locator('.balance-banner')).toContainText('Everyone is settled.');
 
  // A second trip, then back: switching must work on every device.
@@ -124,13 +135,9 @@ test('an invited member signs in by email, sees only member tools, and adds an e
  await signInAsAdmin(page);
  await createTrip(page,tripName,iso(2),iso(6));
  await openSection(page,'People');
- await page.getByPlaceholder('The Millers').fill('Silva');await page.locator('form',{hasText:'Add a family'}).getByRole('button',{name:'Add'}).click();
- await page.getByPlaceholder('First name').fill('Ana');await page.locator('form',{hasText:'Add a person'}).getByRole('button',{name:'Add'}).click();
- await expect(page.locator('.person-row',{hasText:'Ana'})).toBeVisible();
- await page.getByRole('button',{name:'Invite by email'}).click();
- await page.getByRole('dialog').getByLabel('Email address').fill(member);
- await page.getByRole('dialog').getByRole('button',{name:'Send invitation'}).click();
- await expect(page.locator('.list-row',{hasText:member})).toBeVisible();
+ await addFamily(page,'Silva');await addPerson(page,'Ana','Silva');
+ await addPerson(page,'Bea','Silva',{email:member});
+ await expect(page.getByRole('button',{name:'Edit Bea'})).toContainText('Invited');
  expect(mailsTo(member).some(m=>m.subject.includes(tripName))).toBe(true);
 
  const memberContext=await browser.newContext(testInfo.project.use);const mp=await memberContext.newPage();
@@ -141,7 +148,8 @@ test('an invited member signs in by email, sees only member tools, and adds an e
  await expect(mp.getByRole('button',{name:'Create a vacation'})).toHaveCount(0);
  await mp.getByRole('button',{name:new RegExp(tripName)}).click();
  await openSection(mp,'People');
- await expect(mp.getByPlaceholder('The Millers')).toHaveCount(0);
+ await expect(mp.getByRole('button',{name:'Add family',exact:true})).toHaveCount(0);
+ await expect(mp.getByRole('button',{name:'Edit Ana'})).toHaveCount(0);
  await openSection(mp,'Spend');
  const quick=mp.locator('#quick-expense');
  await quick.getByLabel('What was it?').fill('Pastéis de nata');await quick.getByLabel('Amount in EUR').fill('7.20');
@@ -150,4 +158,6 @@ test('an invited member signs in by email, sees only member tools, and adds an e
  await memberContext.close();
  await page.reload();await openSection(page,'Spend');
  await expect(page.locator('.list-row',{hasText:'Pastéis de nata'})).toContainText('€7.20');
+ await openSection(page,'People');
+ await expect(page.getByRole('button',{name:'Edit Bea'})).toContainText('Signed in');
 });
