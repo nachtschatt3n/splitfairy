@@ -69,6 +69,25 @@ test('every entity can be created, changed and removed from the interface',async
  await dinner.getByRole('button',{name:'Edit Lemon'}).click();await sheet(page).getByRole('button',{name:'Delete item'}).click();await closed(page);
  await expect(dinner).not.toContainText('Lemon');
 
+ // Packing: add unassigned, give it to a family with details, filter, pack, delete.
+ await openSection(page,'Pack');
+ const pack=page.getByRole('region',{name:'Packing list'});
+ await page.getByLabel('Add something to bring').fill('Beach tent');await page.getByRole('button',{name:'Add item'}).click();
+ await page.getByLabel('Add something to bring').fill('Grill');await page.getByLabel('Who brings it').selectOption({label:'Weber'});await page.getByRole('button',{name:'Add item'}).click();
+ await expect(pack.locator('.shop-group',{hasText:'Not decided yet'})).toContainText('Beach tent');
+ await expect(pack.locator('.shop-group',{hasText:'Weber'})).toContainText('Grill');
+ await page.getByRole('button',{name:'Edit Beach tent'}).click();
+ await sheet(page).getByLabel('How many').fill('2');await sheet(page).getByLabel('Who brings it').selectOption({label:'Costa'});await sheet(page).getByLabel('Note (optional)').fill('The blue one');
+ await sheet(page).getByRole('button',{name:'Save changes'}).click();await closed(page);
+ await expect(pack.locator('.shop-group',{hasText:'Costa'})).toContainText('2 × Beach tent');await expect(pack.locator('.shop-group',{hasText:'Costa'})).toContainText('The blue one');
+ await pack.locator('.filter-chips').getByRole('button',{name:'Weber'}).click();
+ await expect(pack.locator('.shop-group')).toHaveCount(1);await expect(pack.locator('.shop-group')).toContainText('Grill');
+ await pack.locator('.filter-chips').getByRole('button',{name:'Everything'}).click();
+ await pack.locator('.shop-row',{hasText:'Grill'}).getByRole('checkbox').click();
+ await expect(page.getByText('1 of 2 packed')).toBeVisible();
+ await page.getByRole('button',{name:'Edit Grill'}).click();await sheet(page).getByRole('button',{name:'Delete item'}).click();await closed(page);
+ await expect(pack.locator('.shop-row',{hasText:'Grill'})).toHaveCount(0);
+
  // Expenses: add, open, edit, void, find in voided, restore.
  await openSection(page,'Spend');
  const quick=page.locator('#quick-expense');
