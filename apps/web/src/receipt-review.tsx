@@ -20,9 +20,9 @@ export function ReceiptReview({trip,receipt,today,busy,onClose,onConfirm,onDismi
     <div className="form-row"><label>Name<input value={draft.title} onChange={e=>setDraft({...draft,title:e.target.value})}/></label><label>Date<input type="date" value={draft.date} onChange={e=>setDraft({...draft,date:e.target.value})}/></label></div>
     <div className="form-row"><label>Paid by<select value={draft.payer} onChange={e=>setDraft({...draft,payer:e.target.value})}><option value="">Choose family</option>{trip.families.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></label><label>Category<select value={draft.category} onChange={e=>setDraft({...draft,category:e.target.value as Expense['category']})}><option value="food">Food</option><option value="activity">Activity</option><option value="transport">Transport</option><option value="stay">Stay</option><option value="other">Other</option></select></label><label>Receipt total (€)<input inputMode="decimal" aria-label="Receipt total" value={draft.total} onChange={e=>setDraft({...draft,total:e.target.value})}/></label></div>
     <div className="receipt-bulk"><label>Assign every item to<select value={bulk} onChange={e=>setBulk(e.target.value)}>{targetOptions}</select></label><button className="btn btn-secondary" type="button" onClick={()=>setDraft(d=>({...d,items:d.items.map(i=>({...i,target:bulk}))}))}>Apply to all</button></div>
-    <div className="receipt-items" role="table" aria-label="Receipt items">
-     <div className="receipt-item receipt-item-head" role="row"><span role="columnheader">Item</span><span role="columnheader">€</span><span role="columnheader">For</span><span/></div>
-     {draft.items.map((item,i)=><div className={`receipt-item ${summary.invalid.includes(item.key)?'invalid':''}`} role="row" key={item.key}>
+    <div className="receipt-items" aria-label="Receipt items">
+     <div className="receipt-item receipt-item-head" aria-hidden="true"><span>Item</span><span>€</span><span>For</span><span/></div>
+     {draft.items.map((item,i)=><div className={`receipt-item ${summary.invalid.includes(item.key)?'invalid':''}`} key={item.key}>
       <input aria-label={`Item ${i+1}`} value={item.label} onChange={e=>setItem(item.key,{label:e.target.value})}/>
       <input aria-label={`Amount for item ${i+1}`} inputMode="decimal" value={item.amount} onChange={e=>setItem(item.key,{amount:e.target.value})}/>
       <select aria-label={`Assign item ${i+1}`} value={item.target} onChange={e=>setItem(item.key,{target:e.target.value})}>{targetOptions}</select>

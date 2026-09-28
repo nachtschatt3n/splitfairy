@@ -26,14 +26,17 @@ jobs:
         env:
           SHARP_IGNORE_GLOBAL_LIBVIPS: '1'
       - run: npm run check
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium webkit
+      # Mocked UI tests plus real-server flow and UX tests on iPhone (WebKit, Chromium) and desktop.
       - run: npm run test:e2e
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
-          name: playwright-results
-          path: test-results/
-          retention-days: 7
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
   image:
     # Pull requests build to prove the Dockerfile; main pushes publish sha-<commit> candidates. Tags never rebuild.
     if: github.ref_type != 'tag'

@@ -13,7 +13,17 @@ npm ci
 npm run dev
 ```
 
-Open `http://localhost:5173`. The administrator signs in with an emailed one-time code, creates a trip and invites others by email. A local SMTP testing server is fine; no external AI service is needed for manual expenses. Use `npm run check` and `npm run test:e2e` before a release.
+Open `http://localhost:5173`.
+
+## Tests
+
+- `npm run check`: typecheck, unit and API tests (money, settlement, store, auth, receipts, offline queue), production build.
+- `npm run test:e2e`: builds, then runs all browser tests.
+  - `mocked`: fast UI tests against the Vite dev server with a fake API (receipt review, offline replay, start-up recovery).
+  - `iphone-webkit`, `iphone-chromium`, `desktop-chromium`: the real production server with a fresh database per run. Sign-in email is captured to files (`MAIL_CAPTURE_DIR`), and a fake Ollama returns a fixed receipt.
+    - Flow tests (`tests/e2e/flows.spec.ts`): organizer email sign-in, trip setup, planning, shopping, a quick expense, receipt scan → review → confirm, settling up, switching trips, signing out, and an invited member signing in by email.
+    - UI rules (`tests/e2e/ux.spec.ts`): run on every screen and dialog in light and dark mode. No sideways scrolling, fields at least 16px on phones (iOS zooms below that), touch targets at least 44px, no trip menu without a trip, a bottom menu that respects the iPhone safe area and never covers content, and no serious axe accessibility or contrast violations.
+- Set `SHOT_DIR=/some/dir` to save a named screenshot of every checked screen for manual review. CI uploads the HTML report with all screenshots as the `playwright-report` artifact. The administrator signs in with an emailed one-time code, creates a trip and invites others by email. A local SMTP testing server is fine; no external AI service is needed for manual expenses. Use `npm run check` and `npm run test:e2e` before a release.
 
 ## How expenses work
 

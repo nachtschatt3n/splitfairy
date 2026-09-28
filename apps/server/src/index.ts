@@ -1,5 +1,5 @@
 import {DatabaseSync} from 'node:sqlite';
-import {mkdirSync,existsSync} from 'node:fs';
+import {mkdirSync,existsSync,writeFileSync} from 'node:fs';
 import {spawn} from 'node:child_process';
 import {join,resolve} from 'node:path';
 import nodemailer from 'nodemailer';
@@ -12,8 +12,12 @@ const db=new DatabaseSync(join(dataDir,'splitfairy.sqlite'));
 const store=new Store(db);
 store.prune();
 const smtpHost=process.env.SMTP_HOST;
+const mailCaptureDir=!smtpHost&&process.env.MAIL_CAPTURE_DIR?resolve(process.env.MAIL_CAPTURE_DIR):null;
 const transport=smtpHost?nodemailer.createTransport({host:smtpHost,port:Number(process.env.SMTP_PORT??587),secure:process.env.SMTP_SECURE==='true',auth:process.env.SMTP_USER?{user:process.env.SMTP_USER,pass:process.env.SMTP_PASSWORD}:undefined}):null;
-const app=await createApp({store,dataDir,adminEmail:process.env.ADMIN_EMAIL,secret:process.env.AUTH_SECRET,secureCookies:process.env.NODE_ENV==='production',ollamaUrl:process.env.OLLAMA_URL,ollamaModel:process.env.OLLAMA_MODEL,logLevel:process.env.LOG_LEVEL??'info',sendMail:async(to,subject,body)=>{if(!transport)throw new Error('SMTP is not configured');const info=await transport.sendMail({from:process.env.SMTP_FROM,to,subject,text:body});app.log.info({to:to.replace(/^(.{2}).*(@.*)$/,'$1***$2'),subject,messageId:info.messageId,response:info.response},'email handed to SMTP server');}});
+const app=await createApp({store,dataDir,adminEmail:process.env.ADMIN_EMAIL,secret:process.env.AUTH_SECRET,secureCookies:process.env.NODE_ENV==='production',ollamaUrl:process.env.OLLAMA_URL,ollamaModel:process.env.OLLAMA_MODEL,logLevel:process.env.LOG_LEVEL??'info',authRateLimitFactor:Math.max(1,Number(process.env.AUTH_RATE_LIMIT_FACTOR??1)||1),sendMail:async(to,subject,body)=>{
+ // Tests and local development without SMTP can capture mail as files; production always has SMTP_HOST.
+ if(!transport&&mailCaptureDir){mkdirSync(mailCaptureDir,{recursive:true});writeFileSync(join(mailCaptureDir,`${Date.now()}-${Math.random().toString(36).slice(2)}.json`),JSON.stringify({to,subject,text:body,at:new Date().toISOString()}));return;}
+ if(!transport)throw new Error('SMTP is not configured');const info=await transport.sendMail({from:process.env.SMTP_FROM,to,subject,text:body});app.log.info({to:to.replace(/^(.{2}).*(@.*)$/,'$1***$2'),subject,messageId:info.messageId,response:info.response},'email handed to SMTP server');}});
 const publicDir=resolve('dist/web');
 if(existsSync(publicDir)){await app.register(fastifyStatic,{root:publicDir,prefix:'/'});app.setNotFoundHandler((request,reply)=>{if(request.url.startsWith('/api/'))return reply.status(404).send({error:'Not found'});return reply.sendFile('index.html');});}
 await app.listen({host:'0.0.0.0',port:Number(process.env.PORT??3000)});

@@ -72,3 +72,54 @@ input:not([type=checkbox]):not([type=radio]),select,textarea,.receipt-item input
 @media(max-width:740px){.receipt-fields .form-row>label{flex:1 1 calc(50% - 5px)}.receipt-photo img{max-height:200px}}
 .check-label{display:flex!important;flex-direction:row!important;align-items:center;gap:10px;min-height:44px}
 .check-label input{width:22px!important;height:22px;min-height:0!important;flex:none}
+/* ---- Home-screen app safe areas and trip switching ---- */
+:root{--safe-bottom:env(safe-area-inset-bottom,0px)}
+.trip-chip{display:none;align-items:center;gap:6px;min-height:44px;max-width:46vw;border:1px solid #dce3dc;border-radius:22px;background:#f7f3e9;color:#1d4a43;font-weight:800;padding:0 12px 0 14px;margin-left:10px;margin-right:auto}
+.trip-chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:1050px){.trip-chip{display:inline-flex}}
+@media(max-width:740px){
+ .mobile-logo .brand span:not(.brand-mark){display:none}
+ .trip-chip{margin-left:8px;max-width:none;flex:1;min-width:0;justify-content:space-between}
+ .mobile-nav{height:calc(64px + var(--safe-bottom));padding-bottom:var(--safe-bottom);align-items:stretch}
+ .mobile-nav button{min-height:64px}
+ .content{padding-bottom:calc(96px + var(--safe-bottom))}
+}
+@media(prefers-color-scheme:dark){.trip-chip{background:#2a4036;border-color:#456151;color:#e6efe8}}
+/* ---- Accessible palette (WCAG AA, measured against every surface) ---- */
+.eyebrow,.event-type{color:#8f5536}
+.page-heading p,.landing p,.auth-content p,.hero-banner p,.balance-banner p,.list-row small,.balance-row small,.transfer-row small,.receipt-row small,.stat small,.stat span,.row-tail,.empty p,.helper,.inline-form p,.choice-grid span,.trip-card small,.settings-block p,.activity-row,.activity-row small,.family-title small,.person-row>span:last-child,.shop-row small,.event-card p,.event-card small,.upload-zone p,.scan-callout p,.assignment-row small,.receipt-photo small,.loading-help small,.auth-foot,.breadcrumb,.nav-link,.side-note,.sync-indicator,.mobile-nav button{color:#56675f}
+.text-button,.btn-ghost,.advanced summary,.nav-link.active,.nav-link:hover,.mobile-nav button.active{color:#1f5f53}
+.negative{color:#9a4a36}.positive{color:#2f6b55}
+.scan-callout>div{color:#6f4526}
+@media(prefers-color-scheme:dark){
+ .eyebrow,.event-type{color:#f0bea5}
+ .form-stack label,.inline-form label,.receipt-fields label,legend,.chip,.chip.checked,.card-head,.balance-banner,.stat span,.breadcrumb,.nav-link,.small-user,.person-row,.shop-row,.list-row,.receipt-item-head,.upload-zone,.choice-grid button{color:#cfdcd5!important}
+ .page-heading p,.landing p,.auth-content p,.hero-banner p,.balance-banner p,.list-row small,.balance-row small,.transfer-row small,.receipt-row small,.stat small,.row-tail,.empty p,.helper,.inline-form p,.choice-grid span,.trip-card small,.settings-block p,.activity-row,.activity-row small,.family-title small,.person-row>span:last-child,.shop-row small,.event-card p,.event-card small,.upload-zone p,.assignment-row small,.receipt-photo small,.loading-help small,.loading-help p,.auth-foot,.sync-indicator,.mobile-nav button,.shop-row .done{color:#bfcec7}
+ .text-button,.btn-ghost,.advanced summary,.nav-link.active,.nav-link:hover,.mobile-nav button.active,.sync-indicator:not(.offline){color:#93dcc4!important}
+ .side-note,.scan-callout>div,.scan-callout p,.sync-indicator.offline{color:#f2c9a4}
+ .negative{color:#f8b7a2}.positive{color:#8ddab8}
+ .activity-row strong,.empty h3,.family-title strong,.assignment-row strong,.receipt-row strong,.stat strong{color:#eef3ef}
+ .btn-secondary{background:#315647;color:#e6f3ec}
+ .btn-primary{background:#93dcc4;color:#10302b}
+ .empty-icon{background:#315647;color:#d4ede0}
+ .toast{background:#294e44;color:#e6f3ec}
+ .notice,.review-problems{background:#4b3d2f;color:#f2c9a4}
+ .form-message{background:#294e44;color:#e6f3ec!important}
+ .pill{background:#4b3d2f;color:#f2c9a4}.pill.review{background:#294e44;color:#bff0d8}.pill.failed{background:#4b2f2a;color:#f8b7a2}
+ .receipt-total.matched{background:#294e44;color:#bff0d8}.receipt-total.mismatch{background:#4b3d2f;color:#f2c9a4}
+ .weight-input{background:#24392f;color:#edf4e8;border-color:#456151}
+ .loading{color:#cfdcd5}
+ .icon-button{background:#2a4036;color:#e6efe8}
+}
+@media(prefers-color-scheme:dark){.chip.checked{background:#315647;border-color:#5f8f7a}.landing{background:#1e302b}.trip-card{background:#24392f}}
+.shop-row .done{color:#56675f}
+@media(prefers-color-scheme:dark){.shop-row .done{color:#bfcec7}}
+/* Native selects ignore height in WebKit (iOS): draw them ourselves so every picker is a full touch target. */
+select{-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2356675f' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;background-size:16px;padding-right:36px!important;min-height:44px}
+.trip-switch select{background-position:right 2px center;min-height:36px}
+@media(prefers-color-scheme:dark){select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23bfcec7' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")}}
+.receipt-item-head{color:#56675f}@media(prefers-color-scheme:dark){.receipt-item-head{color:#bfcec7}}
+.account-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:24px;font-size:14px;color:#56675f}
+.account-block .account-row{margin-top:6px}
+.account-row strong{color:#243533;word-break:break-all}
+@media(prefers-color-scheme:dark){.account-row{color:#bfcec7}.account-row strong{color:#eef3ef}}
