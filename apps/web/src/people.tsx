@@ -1,5 +1,6 @@
 import {useState,type FormEvent} from 'react';
-import {ArrowRight,Mail,Pencil,Plus,UserRound,Users} from 'lucide-react';
+import {ArrowRight,Mail,Pencil,Plus,Settings2,UserRound,Users} from 'lucide-react';
+import {api} from './api.js';
 import type {Command,Family,Member,Person,Trip,TripView,User} from '../../../packages/domain/src/model.js';
 import {Button,Empty,Sheet,WEIGHTS,fmt,uid,weightLabel,type Remove,type Save} from './common.js';
 import {localDb,pendingFor} from './offline.js';
@@ -40,8 +41,11 @@ function PersonSheet({trip,draft,save,remove,busy,onClose}:{trip:Trip;draft:Pers
   if(oldFamily?.solo&&familyId!==oldFamily.id)await remove('family',oldFamily);
   onClose();
  };
+ const inExpenses=editing?trip.expenses.filter(x=>x.allocations.some(a=>a.personId===editing.id)).length:0;
  const del=async()=>{
-  if(!editing||!window.confirm(`Remove ${editing.name} from the trip?`))return;
+  if(!editing||!window.confirm(`Remove ${editing.name} from the trip? They are also taken off planned meals and activities.`))return;
+  // Take them off every plan first; the queue replays these before the removal.
+  for(const ev of trip.events.filter(x=>x.participants.some(p=>p.id===editing.id)))await save('event',{...ev,participants:ev.participants.filter(p=>p.id!==editing.id)},ev);
   await remove('person',editing);if(oldFamily?.solo)await remove('family',oldFamily);onClose();
  };
  const weightOptions=WEIGHTS.some(([v])=>v===weight)?WEIGHTS:[...WEIGHTS,[weight,`Custom · ${weight}`] as [string,string]];
@@ -60,7 +64,7 @@ function PersonSheet({trip,draft,save,remove,busy,onClose}:{trip:Trip;draft:Pers
    <p className="helper">{editing?.email&&editing.email===email.trim()?'This person can sign in with this address.':'With an email they get an invitation to sign in and add expenses. Leave it empty for children.'}</p>
    {error&&<p className="form-error" role="alert">{error}</p>}
    <Button type="submit" disabled={busy}>{editing?'Save changes':'Add person'} <ArrowRight size={17}/></Button>
-   {editing&&<Button kind="ghost" onClick={()=>void del()} disabled={busy}>Remove from trip</Button>}
+   {editing&&(inExpenses?<p className="helper">{editing.name} is part of {inExpenses} expense{inExpenses===1?'':'s'}, so they stay on the trip. Void or edit {inExpenses===1?'it':'those'} to remove them.</p>:<Button kind="ghost" onClick={()=>void del()} disabled={busy}>Remove from trip</Button>)}
   </form>
  </Sheet>;
 }
@@ -73,19 +77,44 @@ function FamilySheet({family,save,remove,busy,onClose,trip}:{family?:Family;save
    <label>Family name<input value={name} onChange={e=>setName(e.target.value)} placeholder="The Millers" autoFocus required/></label>
    <p className="helper">Add the people after creating the family. Costs are settled per family.</p>
    <Button type="submit" disabled={busy}>{family?'Save':'Add family'} <ArrowRight size={17}/></Button>
-   {family&&empty&&<Button kind="ghost" onClick={async()=>{await remove('family',family);onClose();}} disabled={busy}>Delete family</Button>}
+   {family&&(empty?<Button kind="ghost" onClick={async()=>{if(!window.confirm(`Delete ${family.name}?`))return;await remove('family',family);onClose();}} disabled={busy}>Delete family</Button>:<p className="helper">To delete this family, move or remove its people first.</p>)}
   </form>
  </Sheet>;
 }
 
-export function People({trip,view,user,onLogout,save,remove,onInvite,pending,selected,onRefresh,busy,describeActivity}:{trip:Trip;view:TripView;user:User|null|undefined;onLogout:()=>void;save:Save;remove:Remove;onInvite:()=>void;pending:number;selected:string;onRefresh:()=>void;busy:boolean;describeActivity:(s:string)=>string}){
+function TripSheet({trip,save,busy,onClose,onDeleted,onMessage}:{trip:Trip;save:Save;busy:boolean;onClose:()=>void;onDeleted:()=>void;onMessage:(m:string)=>void}){
+ const [name,setName]=useState(trip.name),[start,setStart]=useState(trip.start),[end,setEnd]=useState(trip.end),[error,setError]=useState('');
+ const outside=trip.events.filter(e=>e.date<start||e.date>end).length;
+ const hasMoney=trip.expenses.length>0||trip.payments.length>0;
+ return <Sheet title="Trip settings" eyebrow={trip.name} onClose={onClose}>
+  <form className="form-stack" onSubmit={async e=>{e.preventDefault();if(end<start){setError('The last day must be on or after the first day.');return;}await save('trip',{name:name.trim()||trip.name,start,end},trip);onClose();}}>
+   <label>Trip name<input value={name} onChange={e=>setName(e.target.value)} required/></label>
+   <div className="form-row"><label>First day<input type="date" value={start} onChange={e=>setStart(e.target.value)} required/></label><label>Last day<input type="date" value={end} onChange={e=>setEnd(e.target.value)} required/></label></div>
+   {outside>0&&<p className="helper">{outside} plan{outside===1?' falls':'s fall'} outside these dates. {outside===1?'It stays':'They stay'} on the trip; move {outside===1?'it':'them'} in the plan if needed.</p>}
+   {error&&<p className="form-error" role="alert">{error}</p>}
+   <Button type="submit" disabled={busy}>Save trip <ArrowRight size={17}/></Button>
+  </form>
+  <div className="settings-block">
+   <h3>{trip.archived?'Archived':'Archive'}</h3>
+   <p>{trip.archived?'This trip is read-only. Unarchive it to make changes again.':'When the trip is over and settled, archive it. It becomes read-only and stays in everyone’s history.'}</p>
+   <Button kind="secondary" disabled={busy} onClick={async()=>{await save('trip',{archived:!trip.archived},trip);onClose();}}>{trip.archived?'Unarchive trip':'Archive trip'}</Button>
+  </div>
+  <div className="settings-block">
+   <h3>Delete trip</h3>
+   {hasMoney?<p>Trips with expenses or repayments can only be archived, so nobody loses the record of who paid what.</p>
+    :<><p>Removes the trip, its plans and shopping list for everyone. This cannot be undone.</p><Button kind="ghost" disabled={busy} onClick={async()=>{if(!window.confirm(`Delete ${trip.name} for everyone? This cannot be undone.`))return;try{await api.deleteTrip(trip.id);onDeleted();}catch(error){onMessage(error instanceof Error?error.message:'Could not delete the trip');}}}>Delete trip</Button></>}
+  </div>
+ </Sheet>;
+}
+
+export function People({trip,view,user,onLogout,save,remove,onInvite,pending,selected,onRefresh,onTripDeleted,onMessage,busy,describeActivity}:{trip:Trip;view:TripView;user:User|null|undefined;onLogout:()=>void;save:Save;remove:Remove;onInvite:()=>void;pending:number;selected:string;onRefresh:()=>void;onTripDeleted:()=>void;onMessage:(m:string)=>void;busy:boolean;describeActivity:(s:string)=>string}){
+ const [tripSheet,setTripSheet]=useState(false);
+ const memberAction=async(work:()=>Promise<unknown>,done:string)=>{try{await work();onMessage(done);onRefresh();}catch(error){onMessage(error instanceof Error?error.message:'That did not work');}};
  const organizer=view.role==='organizer',members=view.members??[];
  const [personDraft,setPersonDraft]=useState<PersonDraft|null>(null),[familySheet,setFamilySheet]=useState<{family?:Family}|null>(null);
  const [queued,setQueued]=useState<{id:string;command:Command;state:string;error?:string}[]>([]);
  useEffect(()=>{pendingFor(selected).then(setQueued);},[selected,pending]);
  const families=trip.families.filter(f=>!f.solo),solo=trip.families.filter(f=>f.solo);
- const inTrip=new Set(trip.people.map(p=>p.email).filter(Boolean));
- const loose=members.filter(m=>!inTrip.has(m.email)&&m.email!==user?.email);
  return <>
   <section className="card">
    <div className="card-head"><div><span className="eyebrow">Shared wallets</span><h2>Families & people</h2></div>
@@ -104,10 +133,18 @@ export function People({trip,view,user,onLogout,save,remove,onInvite,pending,sel
   </section>
   <div className="two-column people-lower">
    <section className="card">
-    <div className="card-head"><div><span className="eyebrow">Can sign in</span><h2>Accounts</h2></div></div>
-    <p className="helper">Add an email to a person to invite them. Invited people can add expenses and scan receipts; only organizers manage people.</p>
-    {loose.map(m=><div className="list-row" key={m.email}><span className="list-icon"><Mail size={18}/></span><div><strong>{m.email}</strong><small>{m.role} · {m.joined?'signed in':'invited'} · not linked to a person</small></div></div>)}
+    <div className="card-head"><div><span className="eyebrow">Can sign in</span><h2>Who can sign in</h2></div></div>
+    <p className="helper">Add an email to a person to invite them. Invited people can add expenses and scan receipts; organizers also manage people and the trip.</p>
+    {members.map(m=>{const person=trip.people.find(p=>p.email===m.email);const self=m.email===user?.email;return <div className="member-row" key={m.email}>
+     <span className="list-icon"><Mail size={18}/></span>
+     <div><strong>{person?.name??m.email}</strong><small>{person?`${m.email} · `:''}{m.role==='organizer'?'Organizer':'Member'} · {m.joined?'signed in':'invited'}{self?' · you':''}</small></div>
+     {organizer&&!self&&<div className="member-actions">
+      <button type="button" className="text-button" onClick={()=>void memberAction(()=>api.setRole(trip.id,m.email,m.role==='organizer'?'member':'organizer'),`${person?.name??m.email} is now ${m.role==='organizer'?'a member':'an organizer'}.`)}>{m.role==='organizer'?'Make member':'Make organizer'}</button>
+      <button type="button" className="text-button" onClick={()=>{if(window.confirm(`Remove ${m.email}'s access to this trip? Their person entry stays.`))void memberAction(()=>api.removeMember(trip.id,m.email),'Access removed.');}}>Remove access</button>
+     </div>}
+    </div>;})}
     {organizer&&<Button kind="ghost" onClick={onInvite}><Mail size={17}/> Invite someone without adding them</Button>}
+    {organizer&&<div className="settings-block"><span className="eyebrow">Trip settings</span><h3>{trip.name}{trip.archived?' · archived':''}</h3><p>{fmt(trip.start)} – {fmt(trip.end)}</p><Button kind="secondary" onClick={()=>setTripSheet(true)}><Settings2 size={16}/> Edit trip</Button></div>}
     <div className="settings-block account-block"><span className="eyebrow">Your account</span><div className="account-row"><span>Signed in as <strong>{user?.email??'—'}</strong></span><button className="text-button" onClick={onLogout}>Sign out</button></div></div>
    </section>
    <section className="card">
@@ -118,6 +155,7 @@ export function People({trip,view,user,onLogout,save,remove,onInvite,pending,sel
    </section>
   </div>
   {personDraft&&<PersonSheet trip={trip} draft={personDraft} save={save} remove={remove} busy={busy} onClose={()=>setPersonDraft(null)}/>}
+  {tripSheet&&<TripSheet trip={trip} save={save} busy={busy} onClose={()=>setTripSheet(false)} onDeleted={onTripDeleted} onMessage={onMessage}/>}
   {familySheet&&<FamilySheet trip={trip} family={familySheet.family} save={save} remove={remove} busy={busy} onClose={()=>setFamilySheet(null)}/>}
  </>;
 }

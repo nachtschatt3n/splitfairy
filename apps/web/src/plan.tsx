@@ -1,5 +1,5 @@
 import {useState,type FormEvent} from 'react';
-import {ArrowRight,CalendarDays,Pencil,Plus,ShoppingBasket,Trash2} from 'lucide-react';
+import {ArrowRight,CalendarDays,Pencil,Plus,ShoppingBasket} from 'lucide-react';
 import type {Event,Shopping,Trip} from '../../../packages/domain/src/model.js';
 import {Button,Empty,Sheet,euro,fmt,today,uid,type Remove,type Save} from './common.js';
 
@@ -18,6 +18,7 @@ function EventSheet({trip,event,day,save,remove,busy,onClose}:{trip:Trip;event?:
   await save('event',{id:event?.id??uid(),title:title.trim(),kind,date,owner:owner.trim(),notes:event?.notes??'',participants,version:event?.version??0},event);
   onClose();
  };
+ const linked=event?trip.expenses.filter(x=>x.lines.some(l=>l.splits.some(sp=>sp.eventId===event.id))).length:0;
  const toggle=(id:string)=>setJoining(j=>j.includes(id)?j.filter(x=>x!==id):[...j,id]);
  return <Sheet title={event?`Edit ${event.title}`:'Plan a meal or activity'} eyebrow="The plan" onClose={onClose}>
   <form className="form-stack" onSubmit={submit}>
@@ -33,15 +34,29 @@ function EventSheet({trip,event,day,save,remove,busy,onClose}:{trip:Trip;event?:
    </fieldset>
    {!joining.length&&trip.people.length>0&&<p className="helper">Nobody joining yet: costs for this can be split once someone joins.</p>}
    <Button type="submit" disabled={busy}>{event?'Save changes':'Add to plan'} <ArrowRight size={17}/></Button>
-   {event&&<Button kind="ghost" disabled={busy} onClick={async()=>{if(!window.confirm(`Delete ${event.title}? Its shopping items stay on the general list.`))return;await remove('event',event);onClose();}}>Delete</Button>}
+   {event&&(linked?<p className="helper">{linked} expense{linked===1?' is':'s are'} split on this plan, so it cannot be deleted. Void or edit {linked===1?'it':'them'} first.</p>:<Button kind="ghost" disabled={busy} onClick={async()=>{if(!window.confirm(`Delete ${event.title}? Its shopping items stay on the general list.`))return;await remove('event',event);onClose();}}>Delete</Button>)}
   </form>
  </Sheet>;
 }
 
-function ShoppingItem({item,save,remove}:{item:Shopping;save:Save;remove:Remove}){
+function ShoppingSheet({trip,item,save,remove,busy,onClose}:{trip:Trip;item:Shopping;save:Save;remove:Remove;busy:boolean;onClose:()=>void}){
+ const [text,setText]=useState(item.text),[eventId,setEventId]=useState(item.eventId??''),[done,setDone]=useState(item.done);
+ const events=[...trip.events].sort((a,b)=>a.date.localeCompare(b.date));
+ return <Sheet title="Shopping item" eyebrow="The shared list" onClose={onClose}>
+  <form className="form-stack" onSubmit={async e=>{e.preventDefault();if(!text.trim())return;await save('shopping',{...item,text:text.trim(),eventId:eventId||null,done},item);onClose();}}>
+   <label>Item<input value={text} onChange={e=>setText(e.target.value)} autoFocus required/></label>
+   <label>For<select value={eventId} onChange={e=>setEventId(e.target.value)}><option value="">General shopping</option>{events.map(e=><option key={e.id} value={e.id}>{e.title} · {fmt(e.date)}</option>)}</select></label>
+   <label className="check-label"><input type="checkbox" checked={done} onChange={e=>setDone(e.target.checked)}/> Already bought</label>
+   <Button type="submit" disabled={busy}>Save changes <ArrowRight size={17}/></Button>
+   <Button kind="ghost" disabled={busy} onClick={async()=>{await remove('shopping',item);onClose();}}>Delete item</Button>
+  </form>
+ </Sheet>;
+}
+
+function ShoppingItem({item,save,onEdit}:{item:Shopping;save:Save;onEdit:(item:Shopping)=>void}){
  return <div className="shop-row">
   <label className="shop-check"><input type="checkbox" checked={item.done} onChange={()=>void save('shopping',{...item,done:!item.done},item)}/><span className={item.done?'done':''}>{item.text}</span></label>
-  <button type="button" className="icon-button subtle" aria-label={`Remove ${item.text}`} onClick={()=>void remove('shopping',item)}><Trash2 size={16}/></button>
+  <button type="button" className="icon-button subtle" aria-label={`Edit ${item.text}`} onClick={()=>onEdit(item)}><Pencil size={16}/></button>
  </div>;
 }
 
@@ -57,7 +72,7 @@ export function Plan({trip,save,remove,busy}:{trip:Trip;save:Save;remove:Remove;
  // Open on today while the trip is running, otherwise on its first day.
  const [day,setDay]=useState(()=>trip.start&&today()>=trip.start&&today()<=trip.end?today():trip.start||today());
  const [sheet,setSheet]=useState<{event?:Event}|null>(null);
- const [target,setTarget]=useState('');
+ const [target,setTarget]=useState(''),[itemSheet,setItemSheet]=useState<Shopping|null>(null);
  const days=Array.from({length:Math.min(62,Math.max(1,Math.round((new Date(`${trip.end}T12:00:00`).getTime()-new Date(`${trip.start}T12:00:00`).getTime())/86400000)+1))},(_,i)=>{const d=new Date(`${trip.start}T12:00:00`);d.setDate(d.getDate()+i);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;});
  const events=trip.events.filter(e=>e.date===day).sort((a,b)=>ORDER.indexOf(a.kind)-ORDER.indexOf(b.kind));
  const allEvents=[...trip.events].sort((a,b)=>a.date.localeCompare(b.date)||ORDER.indexOf(a.kind)-ORDER.indexOf(b.kind));
@@ -73,7 +88,7 @@ export function Plan({trip,save,remove,busy}:{trip:Trip;save:Save;remove:Remove;
     {events.map(e=>{const items=trip.shopping.filter(s=>s.eventId===e.id).sort(byDone);const cost=spent(e.id);return <article className="event-card" key={e.id} aria-label={e.title}>
      <div className="event-head"><div><span className="event-type">{e.kind}</span><h3>{e.title}</h3><p>{joiningLabel(e,trip)}{e.owner?` · ${e.owner} organizes`:''}{cost?` · ${euro(cost)} spent`:''}</p></div>
       <button type="button" className="icon-button subtle" aria-label={`Edit ${e.title}`} onClick={()=>setSheet({event:e})}><Pencil size={16}/></button></div>
-     <div className="event-shopping">{items.map(item=><ShoppingItem key={item.id} item={item} save={save} remove={remove}/>)}
+     <div className="event-shopping">{items.map(item=><ShoppingItem key={item.id} item={item} save={save} onEdit={setItemSheet}/>)}
       <QuickAdd label={`Add to shopping for ${e.title}`} placeholder="Add an ingredient…" busy={busy} onAdd={text=>addItem(text,e.id)}/></div>
     </article>;})}
     {!events.length&&<Empty icon={<CalendarDays/>} heading="Nothing planned" body="Add a breakfast, dinner or a little adventure for this day."/>}
@@ -86,10 +101,11 @@ export function Plan({trip,save,remove,busy}:{trip:Trip;save:Save;remove:Remove;
      <label>For<select value={target} onChange={e=>setTarget(e.target.value)}><option value="">General shopping</option>{allEvents.map(e=><option key={e.id} value={e.id}>{e.title} · {fmt(e.date)}</option>)}</select></label>
      <Button type="submit" kind="secondary" disabled={busy}><Plus size={16}/> Add item</Button>
     </form>
-    {groups.map(g=><div className="shop-group" key={g.id??'general'}><h3>{g.title}</h3>{[...g.items].sort(byDone).map(item=><ShoppingItem key={item.id} item={item} save={save} remove={remove}/>)}</div>)}
+    {groups.map(g=><div className="shop-group" key={g.id??'general'}><h3>{g.title}</h3>{[...g.items].sort(byDone).map(item=><ShoppingItem key={item.id} item={item} save={save} onEdit={setItemSheet}/>)}</div>)}
     {!trip.shopping.length&&<Empty icon={<ShoppingBasket/>} heading="Your list is clear" body="Add supplies here, or ingredients straight on a meal."/>}
    </section>
   </div>
   {sheet&&<EventSheet trip={trip} event={sheet.event} day={day} save={save} remove={remove} busy={busy} onClose={()=>setSheet(null)}/>}
+  {itemSheet&&<ShoppingSheet key={itemSheet.id} trip={trip} item={trip.shopping.find(s=>s.id===itemSheet.id)??itemSheet} save={save} remove={remove} busy={busy} onClose={()=>setItemSheet(null)}/>}
  </>;
 }

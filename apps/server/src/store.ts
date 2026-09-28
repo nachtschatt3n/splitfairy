@@ -65,6 +65,27 @@ export class Store{
  authLocked(email:string,now=Date.now()){const row=this.db.prepare('SELECT window_start,failures FROM auth_throttle WHERE email=?').get(email) as {window_start:number;failures:number}|undefined;return !!row&&now-row.window_start<3600_000&&row.failures>=10;}
  /** Stores a sign-in code hash for an address, replacing any earlier code. */
  issueCode(email:string,hash:string,expires:number){this.db.prepare('INSERT INTO codes(email,hash,expires,attempts) VALUES(?,?,?,0) ON CONFLICT(email) DO UPDATE SET hash=excluded.hash,expires=excluded.expires,attempts=0').run(email,hash,expires);}
+ /** Organizers can revoke access; nobody removes themselves, so a trip always keeps an organizer. */
+ removeMember(actor:User,tripId:string,email:string){
+  if(this.role(actor,tripId)!=='organizer')throw new AccessError();email=email.toLowerCase();
+  if(email===actor.email.toLowerCase())throw new InputError('You cannot remove your own access');
+  this.db.prepare('DELETE FROM memberships WHERE trip_id=? AND email=?').run(tripId,email);this.db.prepare('DELETE FROM invites WHERE trip_id=? AND email=?').run(tripId,email);
+ }
+ setRole(actor:User,tripId:string,email:string,role:Role){
+  if(this.role(actor,tripId)!=='organizer')throw new AccessError();email=email.toLowerCase();
+  if(email===actor.email.toLowerCase()&&role!=='organizer'&&(this.db.prepare("SELECT count(*) n FROM memberships WHERE trip_id=? AND role='organizer'").get(tripId) as {n:number}).n<2)throw new InputError('A trip needs at least one organizer');
+  const changed=Number(this.db.prepare('UPDATE memberships SET role=? WHERE trip_id=? AND email=?').run(role,tripId,email).changes)+Number(this.db.prepare('UPDATE invites SET role=? WHERE trip_id=? AND email=?').run(role,tripId,email).changes);
+  if(!changed)throw new InputError('Not a member of this trip');
+ }
+ /** Only a trip without money in it can be deleted; anything else is archived so history stays auditable. */
+ deleteTrip(actor:User,tripId:string){
+  if(this.role(actor,tripId)!=='organizer')throw new AccessError();
+  const trip=this.getTrip(actor,tripId);
+  if(trip.expenses.length||trip.payments.length)throw new InputError('Trips with expenses or repayments can be archived, not deleted');
+  this.db.exec('BEGIN IMMEDIATE');
+  try{for(const table of ['memberships','invites','expense_revisions','mutations'])this.db.prepare(`DELETE FROM ${table} WHERE trip_id=?`).run(tripId);this.db.prepare('DELETE FROM trips WHERE id=?').run(tripId);this.db.exec('COMMIT');}
+  catch(error){this.db.exec('ROLLBACK');throw error;}
+ }
  /** Remove expired sign-in state and old idempotency keys. */
  prune(now=Date.now()){
   this.db.prepare('DELETE FROM sessions WHERE expires<?').run(now);
@@ -86,6 +107,9 @@ export class Store{
     const v=command.value as Partial<Trip>;
     if(typeof v.name==='string'&&v.name.trim())trip.name=v.name.trim().slice(0,160);
     if(typeof v.archived==='boolean')trip.archived=v.archived;
+    const start=typeof v.start==='string'?v.start:trip.start,end=typeof v.end==='string'?v.end:trip.end;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(start)||!/^\d{4}-\d{2}-\d{2}$/.test(end)||end<start)throw new InputError('The last day must be on or after the first day');
+    trip.start=start;trip.end=end;
    }else{
     const key=({family:'families',person:'people',event:'events',shopping:'shopping',expense:'expenses',payment:'payments'})[command.entity];
     const list=(trip as any)[key] as any[];

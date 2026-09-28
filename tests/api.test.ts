@@ -103,3 +103,57 @@ describe('people with accounts',()=>{
   expect(view.trip.people.find((p:any)=>p.id==='p2').email).toBe('');
  });
 });
+describe('full lifecycle of trips, access and expenses',()=>{
+ async function setup(){
+  const store=new Store(new DatabaseSync(':memory:'));const mails:{to:string;body:string}[]=[];
+  const a=await createApp({store,adminEmail:'admin@example.com',secret:'a very long integration test secret',sendMail:async(to,_s,body)=>{mails.push({to,body});},dataDir:'/tmp/splitfairy-api-tests',startWorker:false});
+  const signIn=async(email:string)=>{await a.inject({method:'POST',url:'/api/v1/auth/request',payload:{email}});const code=mails.filter(m=>m.to===email).at(-1)!.body.match(/\b\d{6}\b/)![0];return `splitfairy_session=${(await a.inject({method:'POST',url:'/api/v1/auth/verify',payload:{email,code,name:email.split('@')[0]}})).cookies.find(c=>c.name==='splitfairy_session')!.value}`;};
+  const admin=await signIn('admin@example.com');
+  const trip=(await a.inject({method:'POST',url:'/api/v1/trips',headers:{cookie:admin},payload:{name:'Porto',start:'2026-10-01',end:'2026-10-05'}})).json();
+  let n=0;const cmd=(cookie:string,entity:string,action:'save'|'delete',value:any,expectedVersion=0)=>a.inject({method:'POST',url:`/api/v1/trips/${trip.id}/commands`,headers:{cookie},payload:{mutationId:`m${n++}`,entity,action,expectedVersion,value}});
+  return {a,admin,trip,cmd,signIn};
+ }
+ it('edits trip dates, refuses impossible ones, and deletes only trips without money',async()=>{
+  const {a,admin,trip,cmd}=await setup();
+  const moved=await cmd(admin,'trip','save',{name:'Porto & Douro',start:'2026-10-02',end:'2026-10-09'},0);
+  expect(moved.json().trip).toMatchObject({name:'Porto & Douro',start:'2026-10-02',end:'2026-10-09'});
+  expect((await cmd(admin,'trip','save',{start:'2026-10-10',end:'2026-10-01'},moved.json().trip.version)).statusCode).toBe(400);
+  await cmd(admin,'family','save',{id:'f',name:'Silva',version:0});
+  await cmd(admin,'payment','save',{id:'p',from:'f',to:'f',amount:5,date:'2026-10-02',version:0});
+  await cmd(admin,'family','save',{id:'g',name:'Weber',version:0});
+  await cmd(admin,'payment','save',{id:'p',from:'f',to:'g',amount:500,date:'2026-10-02',version:0});
+  expect((await a.inject({method:'DELETE',url:`/api/v1/trips/${trip.id}`,headers:{cookie:admin}})).json().error).toMatch(/archived, not deleted/);
+  await cmd(admin,'payment','delete',{id:'p'},1);
+  expect((await a.inject({method:'DELETE',url:`/api/v1/trips/${trip.id}`,headers:{cookie:admin}})).statusCode).toBe(200);
+  expect((await a.inject({method:'GET',url:`/api/v1/trips/${trip.id}`,headers:{cookie:admin}})).statusCode).toBe(403);
+ });
+ it('lets organizers change roles and revoke access but never lose the last organizer',async()=>{
+  const {a,admin,trip,cmd,signIn}=await setup();
+  await cmd(admin,'family','save',{id:'f',name:'Silva',version:0});
+  await cmd(admin,'person','save',{id:'b',name:'Bea',familyId:'f',weight:1,email:'bea@example.com',version:0});
+  const bea=await signIn('bea@example.com');
+  expect((await a.inject({method:'PUT',url:`/api/v1/trips/${trip.id}/members/bea%40example.com`,headers:{cookie:bea},payload:{role:'organizer'}})).statusCode).toBe(403);
+  expect((await a.inject({method:'PUT',url:`/api/v1/trips/${trip.id}/members/admin%40example.com`,headers:{cookie:admin},payload:{role:'member'}})).json().error).toMatch(/at least one organizer/);
+  const promoted=await a.inject({method:'PUT',url:`/api/v1/trips/${trip.id}/members/bea%40example.com`,headers:{cookie:admin},payload:{role:'organizer'}});
+  expect(promoted.json().members).toContainEqual({email:'bea@example.com',role:'organizer',joined:true});
+  expect((await a.inject({method:'DELETE',url:`/api/v1/trips/${trip.id}/members/admin%40example.com`,headers:{cookie:admin}})).json().error).toMatch(/your own access/);
+  await a.inject({method:'DELETE',url:`/api/v1/trips/${trip.id}/members/bea%40example.com`,headers:{cookie:admin}});
+  expect((await a.inject({method:'GET',url:`/api/v1/trips/${trip.id}`,headers:{cookie:bea}})).statusCode).toBe(403);
+ });
+ it('edits, voids and restores an expense with the balances following',async()=>{
+  const {a,admin,trip,cmd}=await setup();
+  await cmd(admin,'family','save',{id:'f',name:'Silva',version:0});await cmd(admin,'family','save',{id:'g',name:'Weber',version:0});
+  await cmd(admin,'person','save',{id:'p1',name:'Ana',familyId:'f',weight:1,version:0});await cmd(admin,'person','save',{id:'p2',name:'Ben',familyId:'g',weight:1,version:0});
+  const expense=(total:number)=>({id:'x',title:'Taxi',date:'2026-10-02',category:'transport',total,payers:[{familyId:'g',amount:total}],lines:[{id:'l',label:'Taxi',amount:total,splits:[{amount:total,eventId:null,weights:[{id:'p1',weight:1},{id:'p2',weight:1}],fixed:[]}]}],notes:'',receiptIds:[],status:'posted',version:0});
+  const settle=async()=>(await a.inject({method:'GET',url:`/api/v1/trips/${trip.id}/settlement`,headers:{cookie:admin}})).json().balances;
+  await cmd(admin,'expense','save',expense(3000));expect(await settle()).toEqual({f:-1500,g:1500});
+  await cmd(admin,'expense','save',expense(4000),1);expect(await settle()).toEqual({f:-2000,g:2000});
+  await cmd(admin,'expense','save',{...expense(4000),status:'void'},2);expect(await settle()).toEqual({f:0,g:0});
+  await cmd(admin,'expense','save',expense(4000),3);expect(await settle()).toEqual({f:-2000,g:2000});
+ });
+ it('signing out ends the session on the server',async()=>{
+  const {a,admin}=await setup();
+  expect((await a.inject({method:'POST',url:'/api/v1/auth/logout',headers:{cookie:admin}})).statusCode).toBe(200);
+  expect((await a.inject({method:'GET',url:'/api/v1/trips',headers:{cookie:admin}})).statusCode).toBe(401);
+ });
+});

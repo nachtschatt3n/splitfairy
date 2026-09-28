@@ -60,8 +60,9 @@ export async function openSection(page:Page,section:'Today'|'Plan'|'Spend'|'Sett
  await page.locator('.sidebar .nav').getByRole('button',{name:desktop}).click();
 }
 export async function switchTrip(page:Page,name:string){
- const chip=page.getByRole('button',{name:/Switch trip/});
- if(await chip.isVisible()){await chip.click();await page.getByRole('button',{name:new RegExp(name)}).click();}
+ const chip=page.getByRole('button',{name:/Switch trip/}),card=page.locator('.trip-card',{hasText:name});
+ if(await page.getByText('Every shared trip').isVisible())await card.click();
+ else if(await chip.isVisible()){await chip.click();await card.click();}
  else await page.getByLabel('Current trip').selectOption({label:name});
  await expect(page.getByText(`Here's what's happening in ${name}.`)).toBeVisible();
 }
