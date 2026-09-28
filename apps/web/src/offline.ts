@@ -47,7 +47,8 @@ export async function photoCount(tripId:string){return localDb.photos.where('tri
 const running=new Map<string,Promise<TripView>>();
 /** Replays queued photos and edits, then returns the server state with anything still unsynced laid over it. */
 export function syncTrip(tripId:string):Promise<TripView>{
- const active=running.get(tripId);if(active)return active;
+ // Edits queued while a sync runs are sent by a follow-up sync instead of waiting for the next poll.
+ const active=running.get(tripId);if(active)return active.catch(()=>undefined).then(()=>syncTrip(tripId));
  const work=replay(tripId).finally(()=>running.delete(tripId));running.set(tripId,work);return work;
 }
 async function replay(tripId:string):Promise<TripView>{

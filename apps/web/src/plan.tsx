@@ -64,7 +64,7 @@ function QuickAdd({placeholder,label,onAdd,busy}:{placeholder:string;label:strin
  const [text,setText]=useState('');
  return <form className="quick-add" onSubmit={async e=>{e.preventDefault();if(!text.trim())return;await onAdd(text.trim());setText('');}}>
   <input aria-label={label} value={text} onChange={e=>setText(e.target.value)} placeholder={placeholder}/>
-  <Button type="submit" kind="secondary" disabled={busy||!text.trim()} label="Add"><Plus size={17}/></Button>
+  <Button type="submit" kind="secondary" disabled={!text.trim()} label="Add"><Plus size={17}/></Button>
  </form>;
 }
 

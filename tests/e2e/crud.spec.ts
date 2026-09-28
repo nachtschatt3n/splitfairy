@@ -110,7 +110,7 @@ test('every entity can be created, changed and removed from the interface',async
  await openSection(page,'People');
  const guest=`guest-${testInfo.project.name}-${Date.now()}@splitfairy.test`;
  await page.getByRole('button',{name:'Edit Rui'}).click();await sheet(page).getByLabel('Email (optional)').fill(guest);await sheet(page).getByRole('button',{name:'Save changes'}).click();await closed(page);
- expect(mailsTo(guest).length).toBe(1);
+ await expect.poll(()=>mailsTo(guest).length,{message:'invitation email'}).toBe(1);
  const row=page.locator('.member-row',{hasText:guest});
  await row.getByRole('button',{name:'Make organizer'}).click();await expect(row).toContainText('Organizer');
  await row.getByRole('button',{name:'Make member'}).click();await expect(row).toContainText('Member');
