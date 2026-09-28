@@ -62,6 +62,8 @@ export class Store{
   return true;
  }
  authLocked(email:string,now=Date.now()){const row=this.db.prepare('SELECT window_start,failures FROM auth_throttle WHERE email=?').get(email) as {window_start:number;failures:number}|undefined;return !!row&&now-row.window_start<3600_000&&row.failures>=10;}
+ /** Stores a sign-in code hash for an address, replacing any earlier code. */
+ issueCode(email:string,hash:string,expires:number){this.db.prepare('INSERT INTO codes(email,hash,expires,attempts) VALUES(?,?,?,0) ON CONFLICT(email) DO UPDATE SET hash=excluded.hash,expires=excluded.expires,attempts=0').run(email,hash,expires);}
  /** Remove expired sign-in state and old idempotency keys. */
  prune(now=Date.now()){
   this.db.prepare('DELETE FROM sessions WHERE expires<?').run(now);

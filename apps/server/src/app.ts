@@ -17,7 +17,7 @@ const inviteSchema=z.object({email:emailSchema,role:z.enum(['organizer','member'
 const codeSchema=z.object({email:emailSchema,code:z.string().regex(/^\d{6}$/),name:z.string().trim().min(1).max(80)});
 export type Mail=(to:string,subject:string,body:string)=>Promise<void>;
 export type Config={store:Store;adminEmail:string;secret:string;sendMail:Mail;dataDir:string;startWorker?:boolean;secureCookies?:boolean;ollamaUrl?:string;ollamaModel?:string;logLevel?:string};
-function codeHash(secret:string,email:string,code:string){return createHmac('sha256',secret).update(`${email}:${code}`).digest('hex');}
+export function codeHash(secret:string,email:string,code:string){return createHmac('sha256',secret).update(`${email}:${code}`).digest('hex');}
 export async function createApp(config:Config):Promise<FastifyInstance>{
  const app=Fastify({logger:config.logLevel?{level:config.logLevel}:false,logController:new LogController({disableRequestLogging:true}),bodyLimit:16_000_000,trustProxy:true});
  await app.register(cookie);
@@ -55,7 +55,7 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
   // Same response whether or not the address may sign in, and whether or not the budget is spent.
   if(config.store.canLogin(email,config.adminEmail)&&config.store.authBudget(email,'request')){
    const code=String(randomInt(0,1_000_000)).padStart(6,'0');
-   config.store.db.prepare('INSERT INTO codes(email,hash,expires,attempts) VALUES(?,?,?,0) ON CONFLICT(email) DO UPDATE SET hash=excluded.hash,expires=excluded.expires,attempts=0').run(email,codeHash(config.secret,email,code),Date.now()+10*60_000);
+   config.store.issueCode(email,codeHash(config.secret,email,code),Date.now()+10*60_000);
    try{await config.sendMail(email,'Your Splitfairy sign-in code',`Your Splitfairy code is ${code}. It expires in 10 minutes.`);}
    catch(error){request.log.error({err:error},'sign-in email failed');throw Object.assign(new Error('The sign-in email could not be sent. Please try again later.'),{statusCode:502});}
   }
