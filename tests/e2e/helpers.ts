@@ -70,3 +70,31 @@ export async function shot(page:Page,testInfo:TestInfo,name:string){
  const body=await page.screenshot({fullPage:false});await testInfo.attach(name,{body,contentType:'image/png'});
  if(process.env.SHOT_DIR){mkdirSync(process.env.SHOT_DIR,{recursive:true});writeFileSync(join(process.env.SHOT_DIR,`${testInfo.project.name}-${name}.png`),body);}
 }
+
+export async function addFamily(page:Page,name:string){
+ await page.getByRole('button',{name:'Add family',exact:true}).click();
+ const sheet=page.getByRole('dialog');await sheet.getByLabel('Family name').fill(name);await sheet.getByRole('button',{name:'Add family'}).click();
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ await expect(page.locator('.family-title',{hasText:name})).toBeVisible();
+}
+/** family: an existing family name, or 'On their own'. */
+export async function addPerson(page:Page,name:string,family:string,opts:{share?:string;email?:string}={}){
+ if(family==='On their own'){await page.getByRole('button',{name:'Add person',exact:true}).click();}
+ else await page.getByRole('button',{name:`Add person to ${family}`}).click();
+ const sheet=page.getByRole('dialog');
+ await sheet.getByLabel('Name').fill(name);
+ if(opts.share)await sheet.getByLabel('Share of costs').selectOption({label:opts.share});
+ if(family==='On their own')await sheet.getByLabel('Belongs to').selectOption({label:'On their own'});
+ if(opts.email)await sheet.getByLabel('Email (optional)').fill(opts.email);
+ await sheet.getByRole('button',{name:'Add person'}).click();
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ await expect(page.getByRole('button',{name:`Edit ${name}`})).toBeVisible();
+}
+export async function planEvent(page:Page,title:string,kind:string,joining:'everyone'|'nobody'='everyone'){
+ await page.getByRole('button',{name:'Plan a meal or activity'}).click();
+ const sheet=page.getByRole('dialog');
+ await sheet.getByLabel('What is it?').fill(title);await sheet.getByLabel('Type').selectOption(kind);
+ if(joining==='nobody'&&await sheet.getByRole('button',{name:'Nobody yet'}).count())await sheet.getByRole('button',{name:'Nobody yet'}).click();
+ await sheet.getByRole('button',{name:'Add to plan'}).click();
+ await expect(page.getByRole('article',{name:title})).toBeVisible();
+}

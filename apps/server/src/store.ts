@@ -32,7 +32,8 @@ export class Store{
  role(user:User,tripId:string):Role{const row=this.db.prepare('SELECT role FROM memberships WHERE trip_id=? AND email=?').get(tripId,user.email.toLowerCase()) as {role:Role}|undefined;if(!row)throw new AccessError();return row.role;}
  getTrip(user:User,tripId:string):Trip{this.role(user,tripId);const row=this.db.prepare('SELECT data FROM trips WHERE id=?').get(tripId) as {data:string}|undefined;if(!row)throw new AccessError();return JSON.parse(row.data);}
  listTrips(user:User):Trip[]{return (this.db.prepare('SELECT data FROM trips WHERE id IN (SELECT trip_id FROM memberships WHERE email=?)').all(user.email.toLowerCase()) as {data:string}[]).map(r=>JSON.parse(r.data));}
- members(user:User,tripId:string){this.role(user,tripId);return this.db.prepare('SELECT email,role FROM memberships WHERE trip_id=? UNION SELECT email,role FROM invites WHERE trip_id=?').all(tripId,tripId) as {email:string;role:Role}[];}
+ /** Everyone who can open the trip; joined means they have signed in at least once. */
+ members(user:User,tripId:string){this.role(user,tripId);return (this.db.prepare('SELECT m.email,m.role,(u.id IS NOT NULL) joined FROM memberships m LEFT JOIN users u ON u.email=m.email WHERE m.trip_id=? UNION SELECT email,role,0 FROM invites WHERE trip_id=?').all(tripId,tripId) as {email:string;role:Role;joined:number}[]).map(m=>({email:m.email,role:m.role,joined:!!m.joined}));}
  addMember(actor:User,tripId:string,email:string,role:Role){if(this.role(actor,tripId)!=='organizer')throw new AccessError();if(this.getTrip(actor,tripId).archived)throw new InputError('Trip is archived');email=email.trim().toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw new InputError('Invalid email');this.db.prepare('INSERT INTO invites(trip_id,email,role) VALUES(?,?,?) ON CONFLICT(trip_id,email) DO UPDATE SET role=excluded.role').run(tripId,email,role);if(this.userByEmail(email))this.promoteInvites(email);}
  /** Retry a failed extraction or dismiss a receipt from the inbox. */
  updateReceipt(actor:User,tripId:string,receiptId:string,action:'retry'|'dismiss'):Trip{
@@ -101,11 +102,12 @@ export class Store{
      if(command.entity==='person'&&trip.events.some(e=>e.participants.some(p=>p.id===value.id)))throw new InputError('Remove this person from planned events first');
      if(command.entity==='event'&&trip.expenses.some(e=>e.lines.some(l=>l.splits.some(s=>s.eventId===value.id))))throw new InputError('Event is linked to an expense');
      list.splice(index,1);
+     if(command.entity==='event')for(const item of trip.shopping)if(item.eventId===value.id){item.eventId=null;item.version++;}
     }else{
      let parsed:any;
      switch(command.entity){
       case 'family':parsed=familySchema.parse(value);break;
-      case 'person':parsed=personSchema.parse(value);if(!trip.families.some(f=>f.id===parsed.familyId))throw new InputError('Unknown family');break;
+      case 'person':parsed=personSchema.parse(value);if(!trip.families.some(f=>f.id===parsed.familyId))throw new InputError('Unknown family');if(parsed.email&&trip.people.some(p=>p.id!==parsed.id&&p.email===parsed.email))throw new InputError('Someone on this trip already uses that email');break;
       case 'event':parsed=eventSchema.parse(value);for(const p of parsed.participants)if(!trip.people.some(x=>x.id===p.id))throw new InputError('Unknown participant');break;
       case 'shopping':parsed=shoppingSchema.parse(value);if(parsed.eventId&&!trip.events.some(e=>e.id===parsed.eventId))throw new InputError('Unknown event');break;
       case 'expense':{

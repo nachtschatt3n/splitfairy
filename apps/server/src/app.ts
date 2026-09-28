@@ -81,8 +81,22 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
  app.get('/api/v1/trips',async(request)=>config.store.listTrips(auth(request)).map(t=>({id:t.id,name:t.name,start:t.start,end:t.end,archived:t.archived})));
  app.post('/api/v1/trips',async(request,reply)=>{const body=z.object({name:z.string().trim().min(1).max(160),start:z.iso.date(),end:z.iso.date()}).parse(request.body);const trip=config.store.createTrip(auth(request),body.name,body.start,body.end);reply.status(201);return trip;});
  app.get('/api/v1/trips/:tripId',async(request)=>{const user=auth(request),id=(request.params as any).tripId;return {trip:config.store.getTrip(user,id),role:config.store.role(user,id),members:config.store.members(user,id)};});
- app.post('/api/v1/trips/:tripId/invites',async(request)=>{const user=auth(request),id=(request.params as any).tripId,body=inviteSchema.parse(request.body);config.store.addMember(user,id,body.email,body.role);await config.sendMail(body.email,`Join ${config.store.getTrip(user,id).name} on Splitfairy`,`You've been invited to a vacation on Splitfairy. Open the app and sign in using ${body.email}.`);return {ok:true};});
- app.post('/api/v1/trips/:tripId/commands',async(request)=>{const user=auth(request),id=(request.params as any).tripId,command=commandSchema.parse(request.body);return {trip:config.store.mutate(user,id,command),role:config.store.role(user,id)};});
+ app.post('/api/v1/trips/:tripId/invites',async(request)=>{const user=auth(request),id=(request.params as any).tripId,body=inviteSchema.parse(request.body);config.store.addMember(user,id,body.email,body.role);await config.sendMail(body.email,`Join ${config.store.getTrip(user,id).name} on Splitfairy`,inviteText(user.name,config.store.getTrip(user,id).name,siteUrl(request)));return {ok:true};});
+ const siteUrl=(request:{protocol:string;host:string})=>`${request.protocol}://${request.host}`;
+ const inviteText=(inviter:string,tripName:string,url:string,name?:string)=>`${name?`Hi ${name},\n\n`:''}${inviter} invited you to "${tripName}" on Splitfairy, where the group plans meals and shares costs fairly.\n\nOpen ${url} and sign in with this email address. You will get a six-digit code by email.`;
+ app.post('/api/v1/trips/:tripId/commands',async(request)=>{
+  const user=auth(request),id=(request.params as any).tripId,command=commandSchema.parse(request.body);
+  const known=new Set(command.entity==='person'?config.store.members(user,id).map(m=>m.email):[]);
+  const trip=config.store.mutate(user,id,command);
+  // A person saved with a new email is invited to sign in; the mail is best effort because the change is already saved.
+  const person=command.entity==='person'&&command.action==='save'?trip.people.find(p=>p.id===(command.value as any)?.id):undefined;
+  if(person?.email&&!known.has(person.email)){
+   config.store.addMember(user,id,person.email,'member');
+   try{await config.sendMail(person.email,`Join ${trip.name} on Splitfairy`,inviteText(user.name,trip.name,siteUrl(request),person.name));}
+   catch(error){request.log.error({err:error},'invitation email failed');}
+  }
+  return {trip,role:config.store.role(user,id),members:config.store.members(user,id)};
+ });
  app.get('/api/v1/trips/:tripId/settlement',async(request)=>{
   const trip=config.store.getTrip(auth(request),(request.params as any).tripId);
   const out=balances(trip.families.map(f=>f.id),trip.expenses.filter(e=>e.status==='posted'),trip.payments);

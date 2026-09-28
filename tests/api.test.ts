@@ -81,3 +81,25 @@ describe('receipt upload',()=>{
   expect((await app.inject({method:'POST',url:`/api/v1/trips/${trip.id}/receipts`,headers,payload:{image:svg.toString('base64')}})).statusCode).toBe(400);
  });
 });
+describe('people with accounts',()=>{
+ it('invites a person saved with an email once, links them when they sign in, and keeps children without one',async()=>{
+  const store=new Store(new DatabaseSync(':memory:'));const mails:{to:string;subject:string;body:string}[]=[];
+  const a=await createApp({store,adminEmail:'admin@example.com',secret:'a very long integration test secret',sendMail:async(to,subject,body)=>{mails.push({to,subject,body});},dataDir:'/tmp/splitfairy-api-tests',startWorker:false});
+  const signIn=async(email:string)=>{await a.inject({method:'POST',url:'/api/v1/auth/request',payload:{email}});const code=mails.filter(m=>m.to===email).at(-1)!.body.match(/\b\d{6}\b/)![0];return (await a.inject({method:'POST',url:'/api/v1/auth/verify',payload:{email,code,name:'X'}})).cookies.find(c=>c.name==='splitfairy_session')!.value;};
+  const headers={cookie:`splitfairy_session=${await signIn('admin@example.com')}`,host:'splitfairy.example'};
+  const trip=(await a.inject({method:'POST',url:'/api/v1/trips',headers,payload:{name:'Porto',start:'2026-10-01',end:'2026-10-05'}})).json();
+  let n=0;const cmd=(entity:string,value:any,expectedVersion=0)=>a.inject({method:'POST',url:`/api/v1/trips/${trip.id}/commands`,headers,payload:{mutationId:`c${n++}`,entity,action:'save',expectedVersion,value:{version:0,...value}}});
+  await cmd('family',{id:'f',name:'Silva',solo:false});
+  const saved=await cmd('person',{id:'p1',name:'Bea',familyId:'f',weight:1,email:'Bea@Example.com'});
+  expect(saved.statusCode).toBe(200);expect(saved.json().members).toContainEqual({email:'bea@example.com',role:'member',joined:false});
+  const invite=mails.find(m=>m.to==='bea@example.com')!;expect(invite.subject).toBe('Join Porto on Splitfairy');expect(invite.body).toContain('http://splitfairy.example');
+  await cmd('person',{id:'p1',name:'Beatriz',familyId:'f',weight:1,email:'bea@example.com'},1);
+  expect(mails.filter(m=>m.subject.startsWith('Join')).length).toBe(1);
+  expect((await cmd('person',{id:'p2',name:'Tiago',familyId:'f',weight:.5,email:''})).statusCode).toBe(200);
+  expect((await cmd('person',{id:'p3',name:'Copy',familyId:'f',weight:1,email:'bea@example.com'})).json().error).toMatch(/already uses/);
+  await signIn('bea@example.com');
+  const view=(await a.inject({method:'GET',url:`/api/v1/trips/${trip.id}`,headers})).json();
+  expect(view.members).toContainEqual({email:'bea@example.com',role:'member',joined:true});
+  expect(view.trip.people.find((p:any)=>p.id==='p2').email).toBe('');
+ });
+});
