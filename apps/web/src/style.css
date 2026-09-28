@@ -172,3 +172,8 @@ input[type=date]{min-width:0;max-width:100%}
 .event-card,.event-head,.event-shopping,.shop-row,.quick-add{min-width:0;max-width:100%}
 .event-head h3,.event-head p{overflow-wrap:anywhere}
 .chip-list{max-width:100%}
+/* Grid columns default to minmax(auto,1fr) and grow to their widest unbreakable child; let them shrink instead. */
+.two-column,.expenses-grid,.plan-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.expenses-grid{grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr)}
+.card,.stat{min-width:0}
+@media(max-width:740px){.two-column,.expenses-grid,.plan-grid{grid-template-columns:minmax(0,1fr)}}
