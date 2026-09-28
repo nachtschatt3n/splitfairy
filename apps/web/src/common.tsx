@@ -10,7 +10,7 @@ export const cents=(s:string)=>Math.round(Number(s.replace(',','.'))*100);
 export const money=(n:number)=>String((n/100).toFixed(2));
 export type Save=(entity:Command['entity'],value:any,old?:{version:number})=>Promise<void>;
 export type Remove=(entity:Command['entity'],old:{id:string;version:number})=>Promise<void>;
-export function Logo(){return <span className="brand"><span className="brand-mark"><Sparkles size={18}/></span><span>split<span className="brand-light">fairy</span></span></span>}
+export function Logo(){return <span className="brand"><span className="brand-mark"><svg viewBox="0 0 256 256" aria-hidden="true"><path fill="currentColor" d="M117 5Q129 49 157 77L77 157Q49 129 5 117Q93 93 117 5ZM179 99Q207 127 251 139Q163 163 139 251Q127 207 99 179Z"/></svg></span><span>split<span className="brand-light">fairy</span></span></span>}
 export function Button({children,onClick,kind='primary',type='button',disabled=false,label}: {children:ReactNode;onClick?:()=>void;kind?:'primary'|'secondary'|'ghost'|'danger';type?:'button'|'submit';disabled?:boolean;label?:string}){return <button className={`btn btn-${kind}`} onClick={onClick} type={type} disabled={disabled} aria-label={label}>{children}</button>}
 export function Notice({children}: {children:ReactNode}){return <div className="notice"><Sparkles size={16}/>{children}</div>}
 export function Empty({icon,heading,body,action}: {icon:ReactNode;heading:string;body:string;action?:ReactNode}){return <div className="empty"><div className="empty-icon">{icon}</div><h3>{heading}</h3><p>{body}</p>{action}</div>}
