@@ -23,6 +23,7 @@ A self-hosted, installable app for group vacations: plan the journey, stays, mea
 - **Families and people.** Add families, people who travel on their own, and kids. Everyone has a share of costs: an adult pays a full share, a child half, a baby nothing, or any custom weight. Adults can get an email invitation and sign in; children don't need an account.
 - **Plan the days.** Each day is a timeline: breakfasts, dinners and activities with an optional time, who joins and who organizes. Each meal has its own shopping items.
 - **Getting there and where you sleep.** Add flights and car drives with times and who travels, and stays with address, check-in and check-out. They show up on the day's timeline, with a map link and what each vehicle carries. A booking cost becomes a shared expense. On a wide screen, the whole trip is laid out at a glance.
+- **Photos of the places.** Anyone on the trip can add photos of a stay. They show on the day's timeline, open full size, and the first one becomes the trip's cover.
 - **Shopping list.** Shared, grouped by meal, ticked off as people buy things.
 - **Packing and equipment.** Who brings the tent, the grill, the travel cot, and in which car or on which flight does it travel? Every item belongs to a family or waits for someone to take it, can travel in one car or flight or several in a row ("Weber plane → Silva car"), and gets ticked off when it's packed. The list can be grouped by family or by transport.
 - **Expenses.** Add what you paid in seconds, for a meal, an activity or everyone. It also handles refunds, several payers, and equal or exact amounts per family.
@@ -77,7 +78,7 @@ Put it behind HTTPS. The administrator (`ADMIN_EMAIL`) signs in first, creates t
 | `DATA_DIR` | Where SQLite and receipt photos live (`/data` in the image). |
 | `LOG_LEVEL` | `info` by default. Logs are JSON on stdout. |
 
-**Storage.** Keep one replica on block storage. SQLite in WAL mode needs real file locking, so don't use NFS or SMB. The app writes a consistent backup of the database and receipts to `/data/backups/YYYY-MM-DD` every night at 03:00 (Europe/Berlin) and keeps seven. Copy them off the volume as well. To restore, stop the app, copy `splitfairy.sqlite` and `receipts/` back into `/data`, and start it.
+**Storage.** Keep one replica on block storage. SQLite in WAL mode needs real file locking, so don't use NFS or SMB. The app writes a consistent backup of the database, receipts and photos to `/data/backups/YYYY-MM-DD` every night at 03:00 (Europe/Berlin) and keeps seven. Copy them off the volume as well. To restore, stop the app, copy `splitfairy.sqlite`, `receipts/` and `photos/` back into `/data`, and start it.
 
 **Health.** `/healthz` reports that the process is up and `/readyz` that the database answers. The server shuts down cleanly on `SIGTERM`.
 

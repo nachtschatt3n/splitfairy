@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1200" viewBox="0 0 1600 1200">
+ <defs>
+  <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8ec9e8"/><stop offset=".7" stop-color="#d9eef5"/><stop offset="1" stop-color="#f6ead2"/></linearGradient>
+  <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2d7fa6"/><stop offset="1" stop-color="#5fb3c9"/></linearGradient>
+  <linearGradient id="sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#edd3a1"/><stop offset="1" stop-color="#d9b77b"/></linearGradient>
+ </defs>
+ <rect width="1600" height="1200" fill="url(#sky)"/>
+ <circle cx="1270" cy="230" r="90" fill="#fff4c9" opacity=".9"/>
+ <rect y="560" width="1600" height="120" fill="url(#sea)"/>
+ <path d="M0 640 C300 590 520 660 800 620 S1300 580 1600 630 V1200 H0Z" fill="url(#sand)"/>
+ <path d="M0 760 C260 700 520 780 820 730 S1320 690 1600 760 V1200 H0Z" fill="#e6c68d"/>
+ <g transform="translate(470 420)">
+  <rect x="0" y="120" width="560" height="300" fill="#fbfaf6"/>
+  <rect x="0" y="400" width="560" height="20" fill="#e7e2d6"/>
+  <polygon points="-30,130 280,10 590,130" fill="#c96f4a"/>
+  <rect x="330" y="-10" width="46" height="90" fill="#fbfaf6"/><rect x="324" y="-22" width="58" height="16" fill="#e7e2d6"/>
+  <rect x="70" y="190" width="100" height="110" rx="6" fill="#2f6f8f"/><rect x="70" y="190" width="100" height="110" rx="6" fill="none" stroke="#1f4f68" stroke-width="10"/>
+  <rect x="390" y="190" width="100" height="110" rx="6" fill="#2f6f8f"/><rect x="390" y="190" width="100" height="110" rx="6" fill="none" stroke="#1f4f68" stroke-width="10"/>
+  <path d="M230 420 V260 a50 50 0 0 1 100 0 V420Z" fill="#1f4f68"/>
+  <rect x="0" y="120" width="560" height="14" fill="#2f6f8f"/>
+ </g>
+ <g fill="#6f8f4a"><path d="M220 800 q30-140 20-220 q40 70 30 220Z"/><path d="M180 810 q-10-120-60-190 q70 40 90 190Z"/><path d="M1260 820 q20-120 60-180 q-10 90-30 180Z"/><path d="M1300 830 q40-100 110-140 q-60 70-80 140Z"/></g>
+ <g fill="#8a6a3a" opacity=".45"><ellipse cx="760" cy="980" rx="160" ry="14"/><ellipse cx="1100" cy="1060" rx="120" ry="10"/></g>
+ <g stroke="#b0915c" stroke-width="6" opacity=".6"><line x1="600" y1="1200" x2="680" y2="860"/><line x1="760" y1="1200" x2="720" y2="860"/></g>
+</svg>

@@ -3,12 +3,12 @@ import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import {createHash,createHmac,randomBytes,randomInt,randomUUID,timingSafeEqual} from 'node:crypto';
 import {join} from 'node:path';
-import {mkdir,readFile,rm,writeFile} from 'node:fs/promises';
+import {mkdir,readFile,readdir,rm,writeFile} from 'node:fs/promises';
 import sharp from 'sharp';
 import {z,ZodError} from 'zod';
 import {Store,AccessError,ConflictError,InputError} from './store.js';
 import {balances,settle} from '../../../packages/domain/src/accounting.js';
-import {TRIP_THEMES,commandSchema,type User,type Receipt} from '../../../packages/domain/src/model.js';
+import {TRIP_THEMES,commandSchema,type Trip,type User,type Receipt} from '../../../packages/domain/src/model.js';
 import {processReceipt,claimReceipt,resetInterruptedReceipts} from './receipt.js';
 import {inviteEmail,signInEmail} from './mail.js';
 
@@ -83,7 +83,7 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
  });
  app.put('/api/v1/me',async(request)=>{const user=auth(request),{name}=z.object({name:z.string().trim().min(1).max(80)}).parse(request.body);config.store.renameUser(user.id,name);return config.store.userById(user.id);});
  app.post('/api/v1/auth/logout',async(request,reply)=>{const token=request.cookies.splitfairy_session;if(token)config.store.db.prepare('DELETE FROM sessions WHERE token_hash=?').run(sha(token));reply.clearCookie('splitfairy_session',{path:'/'});return {ok:true};});
- app.get('/api/v1/trips',async(request)=>config.store.listTrips(auth(request)).map(t=>({id:t.id,name:t.name,start:t.start,end:t.end,archived:t.archived,theme:t.theme??'classic'})));
+ app.get('/api/v1/trips',async(request)=>config.store.listTrips(auth(request)).map(t=>({id:t.id,name:t.name,start:t.start,end:t.end,archived:t.archived,theme:t.theme??'classic',cover:t.photos?.[0]?.id??null})));
  app.post('/api/v1/trips',async(request,reply)=>{const body=z.object({name:z.string().trim().min(1).max(160),start:z.iso.date(),end:z.iso.date(),theme:z.enum(TRIP_THEMES).default('classic')}).parse(request.body);const trip=config.store.createTrip(auth(request),body.name,body.start,body.end,body.theme);reply.status(201);return trip;});
  app.get('/api/v1/trips/:tripId',async(request)=>{const user=auth(request),id=(request.params as any).tripId;return {trip:config.store.getTrip(user,id),role:config.store.role(user,id),members:config.store.members(user,id)};});
  app.post('/api/v1/trips/:tripId/invites',async(request)=>{const user=auth(request),id=(request.params as any).tripId,body=inviteSchema.parse(request.body);config.store.addMember(user,id,body.email,body.role);const mail=inviteEmail({inviter:user.name,tripName:config.store.getTrip(user,id).name,url:siteUrl(request)});await config.sendMail(body.email,mail.subject,mail.text,mail.html);return {ok:true};});
@@ -92,6 +92,7 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
   const user=auth(request),id=(request.params as any).tripId,command=commandSchema.parse(request.body);
   const known=new Set(command.entity==='person'?config.store.members(user,id).map(m=>m.email):[]);
   const trip=config.store.mutate(user,id,command);
+  if(command.entity==='stay'&&command.action==='delete')await prunePhotoFiles(id,trip);
   // A person saved with a new email is invited to sign in; the mail is best effort because the change is already saved.
   const person=command.entity==='person'&&command.action==='save'?trip.people.find(p=>p.id===(command.value as any)?.id):undefined;
   if(person?.email&&!known.has(person.email)){
@@ -118,9 +119,48 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
   const receipt:Receipt={id,status:'queued',items:[],total:null,merchant:'',date:'',error:null,version:1,authorId:user.id};trip.receipts.push(receipt);trip.version++;
   config.store.db.prepare('UPDATE trips SET data=? WHERE id=?').run(JSON.stringify(trip),tripId);reply.status(201);return receipt;
  });
+ const photoFolder=(tripId:string)=>join(config.dataDir,'photos',tripId);
+ /** Removes image files whose photo is no longer on the trip (after a stay was deleted). */
+ const prunePhotoFiles=async(tripId:string,trip:Trip)=>{
+  const keep=new Set((trip.photos??[]).map(p=>p.id));
+  const files=await readdir(photoFolder(tripId)).catch(()=>[] as string[]);
+  await Promise.all(files.filter(f=>!keep.has(f.replace(/(-thumb)?\.jpg$/,''))).map(f=>rm(join(photoFolder(tripId),f),{force:true})));
+ };
+ app.post('/api/v1/trips/:tripId/photos',async(request,reply)=>{
+  const user=auth(request),tripId=(request.params as any).tripId;
+  const body=z.object({image:z.string().max(15_000_000),stayId:z.string().min(1).max(80),uploadId:z.uuid().optional()}).parse(request.body);
+  const trip=config.store.getTrip(user,tripId);if(trip.archived)throw new InputError('Trip is archived');
+  if(!(trip.stays??[]).some(s=>s.id===body.stayId))throw new InputError('Stay not found');
+  if(body.uploadId){const prior=(trip.photos??[]).find(p=>p.id===body.uploadId);if(prior)return prior;}
+  const source=Buffer.from(body.image,'base64');if(source.length<100||source.length>10_000_000)throw new InputError('Invalid image size');
+  let image:Buffer,thumb:Buffer;
+  try{
+   const format=(await sharp(source).metadata()).format;if(!['jpeg','png','webp','heif'].includes(format??''))throw new Error('format');
+   const upright=sharp(source,{limitInputPixels:40_000_000}).rotate();
+   image=await upright.clone().resize({width:1600,height:1600,fit:'inside',withoutEnlargement:true}).jpeg({quality:82,mozjpeg:true}).toBuffer();
+   thumb=await upright.clone().resize({width:480,height:360,fit:'cover'}).jpeg({quality:76,mozjpeg:true}).toBuffer();
+  }catch{throw new InputError('Invalid photo');}
+  const id=body.uploadId??randomUUID();await mkdir(photoFolder(tripId),{recursive:true});
+  await writeFile(join(photoFolder(tripId),`${id}.jpg`),image,{mode:0o600});await writeFile(join(photoFolder(tripId),`${id}-thumb.jpg`),thumb,{mode:0o600});
+  try{const photo=config.store.addPhoto(user,tripId,id,body.stayId);reply.status(201);return photo;}
+  catch(error){await prunePhotoFiles(tripId,config.store.getTrip(user,tripId));throw error;}
+ });
+ app.get('/api/v1/trips/:tripId/photos/:photoId',async(request,reply)=>{
+  const user=auth(request),{tripId,photoId}=request.params as {tripId:string;photoId:string},trip=config.store.getTrip(user,tripId);
+  if(!(trip.photos??[]).some(p=>p.id===photoId))throw new AccessError();
+  const size=(request.query as {size?:string}).size==='thumb'?'-thumb':'';
+  const image=await readFile(join(photoFolder(tripId),`${photoId}${size}.jpg`));
+  // Photo IDs are never reused, so the image can be cached for long.
+  reply.header('Content-Type','image/jpeg').header('Cache-Control','private, max-age=2592000, immutable');return reply.send(image);
+ });
+ app.delete('/api/v1/trips/:tripId/photos/:photoId',async(request)=>{
+  const user=auth(request),{tripId,photoId}=request.params as {tripId:string;photoId:string};
+  const trip=config.store.removePhoto(user,tripId,photoId);await prunePhotoFiles(tripId,trip);
+  return {trip,role:config.store.role(user,tripId)};
+ });
  app.delete('/api/v1/trips/:tripId',async(request)=>{
   const user=auth(request),id=(request.params as any).tripId;config.store.deleteTrip(user,id);
-  await rm(join(config.dataDir,'receipts',id),{recursive:true,force:true});return {ok:true};
+  await rm(join(config.dataDir,'receipts',id),{recursive:true,force:true});await rm(join(config.dataDir,'photos',id),{recursive:true,force:true});return {ok:true};
  });
  const memberParams=(request:any)=>({user:auth(request),id:request.params.tripId as string,email:emailSchema.parse(decodeURIComponent(request.params.email))});
  app.delete('/api/v1/trips/:tripId/members/:email',async(request)=>{const {user,id,email}=memberParams(request);config.store.removeMember(user,id,email);return {members:config.store.members(user,id)};});

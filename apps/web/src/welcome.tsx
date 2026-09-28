@@ -1,7 +1,7 @@
 import {useEffect,useState,type FormEvent} from 'react';
 import {ArrowRight,Plus,X} from 'lucide-react';
 import type {Trip,User} from '../../../packages/domain/src/model.js';
-import {api,ApiError} from './api.js';
+import {api,ApiError,photoUrl} from './api.js';
 import {Button,Logo,LogoMark,Sheet,fmt,today} from './common.js';
 
 type Notice={kind:'info'|'error';text:string};
@@ -81,7 +81,7 @@ export function NameSheet({user,onSaved,onClose}:{user:User;onSaved:(user:User)=
  </Sheet>;
 }
 
-type TripSummary=Pick<Trip,'id'|'name'|'start'|'end'|'archived'|'theme'>;
+type TripSummary=Pick<Trip,'id'|'name'|'start'|'end'|'archived'|'theme'>&{cover?:string|null};
 const dayMs=86400_000,dayNumber=(iso:string)=>Math.round(new Date(`${iso}T12:00:00`).getTime()/dayMs);
 function status(t:TripSummary,now:string){
  const d=dayNumber(now),s=dayNumber(t.start),e=dayNumber(t.end);
@@ -95,7 +95,7 @@ const GROUPS:[string,string][]=[['now','Happening now'],['upcoming','Coming up']
 function TripCard({trip,label,onOpen}:{trip:TripSummary;label:string;onOpen:()=>void}){
  const start=new Date(`${trip.start}T12:00:00`);
  return <button className="trip-card" onClick={onOpen} data-trip-theme={trip.theme??'classic'}>
-  <span className="date-block" aria-hidden="true"><small>{start.toLocaleDateString('en-GB',{month:'short'})}</small><strong>{start.getDate()}</strong></span>
+  <span className={trip.cover?'date-block with-photo':'date-block'} aria-hidden="true" style={trip.cover?{backgroundImage:`url(${photoUrl(trip.id,trip.cover,true)})`}:undefined}><small>{start.toLocaleDateString('en-GB',{month:'short'})}</small><strong>{start.getDate()}</strong></span>
   <span className="trip-card-text"><strong>{trip.name}</strong><small>{fmt(trip.start)} – {fmt(trip.end)}</small><span className="trip-status">{label}</span></span>
   <ArrowRight size={18} aria-hidden="true"/>
  </button>;

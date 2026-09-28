@@ -1,7 +1,7 @@
 // Regenerates the README screenshots from the production build with an example trip.
 // Usage: npm run build && npm run screenshots   (writes docs/screenshots/*.png)
 import {spawn,execFileSync} from 'node:child_process';
-import {mkdtempSync,mkdirSync,rmSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,readFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {chromium,webkit,devices} from '@playwright/test';
@@ -49,6 +49,11 @@ async function seed(request){
  await save('leg',{id:'fly-home',transportId:'weber-plane',from:'Lisbon (LIS)',to:'Frankfurt (FRA)',departDate:day(7),departTime:'18:40',arriveDate:day(7),arriveTime:'22:35',people:['ben','mia','noah'],note:''});
  await save('stay',{id:'alfama',name:'Casa Alfama',address:'Rua de São Miguel 5, Lisboa',from:day(-2),to:day(-1),checkIn:'15:00',checkOut:'10:00',note:'Keys in the lockbox',expenseId:null});
  await save('stay',{id:'dunas',name:'Casa das Dunas',address:'Rua do Norte 12, Ericeira',from:day(-1),to:day(7),checkIn:'16:00',checkOut:'11:00',note:'',expenseId:'x1'});
+ // Illustrated place pictures (drawn for the example, not real photos).
+ for(const [stayId,file] of [['dunas','dunas'],['alfama','alfama']]){
+  const image=await sharp(readFileSync(resolve('scripts/scenes',`${file}.svg`))).jpeg({quality:88}).toBuffer();
+  await api(`/trips/${trip.id}/photos`,{stayId,image:image.toString('base64')});
+ }
  await save('payment',{id:'p1',from:'R',to:'S',amount:15000,date:day(-1)});
  const photo=await sharp({create:{width:600,height:900,channels:3,background:'#fbfaf5'}}).composite([{input:Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="900"><g font-family="Courier New, monospace" font-size="28" fill="#222"><text x="300" y="70" text-anchor="middle" font-size="34">MERCADO DA RIBEIRA</text><text x="40" y="190">Pão</text><text x="560" y="190" text-anchor="end">2,40</text><text x="40" y="240">Sardinhas</text><text x="560" y="240" text-anchor="end">9,90</text><text x="40" y="290">Vinho verde</text><text x="560" y="290" text-anchor="end">6,50</text><text x="40" y="340">Protetor solar</text><text x="560" y="340" text-anchor="end">4,80</text><text x="40" y="390">Tara garrafa</text><text x="560" y="390" text-anchor="end">-0,50</text><text x="40" y="520" font-size="32">TOTAL EUR</text><text x="560" y="520" text-anchor="end" font-size="32">23,10</text></g></svg>')}]).jpeg().toBuffer();
  await api(`/trips/${trip.id}/receipts`,{image:photo.toString('base64')});

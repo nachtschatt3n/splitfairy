@@ -38,9 +38,11 @@ export type Expense=ExpenseInput & {allocations:Allocation[];authorId:string};
 export type Payment={id:string;from:string;to:string;amount:number;date:string;authorId:string;version:number};
 export type ReceiptStatus='queued'|'processing'|'review'|'failed'|'posted'|'dismissed';
 export type Receipt={id:string;status:ReceiptStatus;items:{label:string;amount:number}[];total:number|null;merchant:string;date:string;error:string|null;version:number;authorId:string;expenseId?:string|null};
+/** A picture of a place (a stay); the image lives on the server, next to the receipts. */
+export type Photo={id:string;stayId:string;authorId:string;author:string;at:string};
 export const TRIP_THEMES=['classic','coast','alpine','city','countryside'] as const;
 export type TripTheme=typeof TRIP_THEMES[number];
-export type Trip={id:string;name:string;start:string;end:string;version:number;archived:boolean;theme?:TripTheme;families:Family[];people:Person[];events:Event[];shopping:Shopping[];gear?:Gear[];transport?:Transport[];stays?:Stay[];legs?:Leg[];expenses:Expense[];payments:Payment[];receipts:Receipt[];activity:{id:string;at:string;actor:string;description:string}[]};
+export type Trip={id:string;name:string;start:string;end:string;version:number;archived:boolean;theme?:TripTheme;families:Family[];people:Person[];events:Event[];shopping:Shopping[];gear?:Gear[];transport?:Transport[];stays?:Stay[];legs?:Leg[];expenses:Expense[];payments:Payment[];receipts:Receipt[];photos?:Photo[];activity:{id:string;at:string;actor:string;description:string}[]};
 export const commandSchema=z.object({mutationId:id,entity:z.enum(['family','person','event','shopping','gear','transport','stay','leg','expense','payment','trip']),action:z.enum(['save','delete']),expectedVersion:z.number().int().nonnegative(),value:z.unknown()});
 export type Command=z.infer<typeof commandSchema>;
 export type User={id:string;email:string;name:string;admin:boolean};

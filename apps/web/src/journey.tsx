@@ -3,6 +3,7 @@ import {ArrowRight,BedDouble,MapPin,Pencil} from 'lucide-react';
 import type {Event,Leg,Stay,Transport,Trip} from '../../../packages/domain/src/model.js';
 import {Button,Sheet,cents,euro,fmt,uid,type Remove,type Save} from './common.js';
 import {TransportIcon} from './packing.js';
+import {StayCover,StayPhotos,type PhotoActions} from './photos.js';
 
 export const tripDays=(trip:Trip)=>!trip.start||!trip.end?[]:Array.from({length:Math.min(62,Math.max(1,Math.round((new Date(`${trip.end}T12:00:00`).getTime()-new Date(`${trip.start}T12:00:00`).getTime())/86400000)+1))},(_,i)=>{const d=new Date(`${trip.start}T12:00:00`);d.setDate(d.getDate()+i);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;});
 const nightsBetween=(from:string,to:string)=>Math.max(0,Math.round((new Date(`${to}T12:00:00`).getTime()-new Date(`${from}T12:00:00`).getTime())/86400000));
@@ -11,7 +12,7 @@ const mapsLink=(address:string)=>`https://www.google.com/maps/search/?api=1&quer
 export const legLoad=(trip:Trip,leg:Leg)=>(trip.gear??[]).filter(g=>(g.route?.length?g.route:g.transportId?[g.transportId]:[]).includes(leg.transportId));
 
 /** A stay with its dates, times, address, notes and optional booking cost (created as a Stay expense). */
-export function StaySheet({trip,stay,day,save,remove,busy,onClose}:{trip:Trip;stay?:Stay;day:string;save:Save;remove:Remove;busy:boolean;onClose:()=>void}){
+export function StaySheet({trip,stay,day,save,remove,busy,photos,onPhoto,onClose}:{trip:Trip;stay?:Stay;day:string;save:Save;remove:Remove;busy:boolean;photos?:PhotoActions;onPhoto?:(index:number)=>void;onClose:()=>void}){
  const next=(d:string)=>{const x=new Date(`${d}T12:00:00`);if(Number.isNaN(x.getTime()))return d;x.setDate(x.getDate()+1);return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;};
  const [name,setName]=useState(stay?.name??''),[address,setAddress]=useState(stay?.address??''),[from,setFrom]=useState(stay?.from??day),[to,setTo]=useState(stay?.to??next(day));
  const [checkIn,setCheckIn]=useState(stay?.checkIn??''),[checkOut,setCheckOut]=useState(stay?.checkOut??''),[note,setNote]=useState(stay?.note??'');
@@ -41,6 +42,7 @@ export function StaySheet({trip,stay,day,save,remove,busy,onClose}:{trip:Trip;st
    {linked?<p className="helper">Booking cost: <strong>{euro(linked.total)}</strong>, recorded as the expense “{linked.title}”.</p>
     :<div className="form-row"><label>Booking cost (optional)<input inputMode="decimal" value={cost} onChange={e=>setCost(e.target.value)} placeholder="480.00"/></label><label>Paid by<select value={payer} onChange={e=>setPayer(e.target.value)}>{trip.families.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></label></div>}
    {!linked&&<p className="helper">The cost is added to Spend and shared by everyone on the trip. You can change the split there.</p>}
+   {stay&&photos&&onPhoto?<StayPhotos trip={trip} stay={stay} actions={photos} onOpen={onPhoto}/>:!stay&&<p className="helper">You can add photos of the place once it's saved.</p>}
    {error&&<p className="form-error" role="alert">{error}</p>}
    <Button type="submit" disabled={busy}>{stay?'Save changes':'Add stay'} <ArrowRight size={17}/></Button>
    {stay&&<Button kind="ghost" disabled={busy} onClick={async()=>{if(!window.confirm(`Remove ${stay.name}?${linked?' Its booking cost stays in Spend.':''}`))return;await remove('stay',stay);onClose();}}>Remove stay</Button>}
@@ -114,12 +116,13 @@ export function LegCard({trip,leg,arriving,onEdit}:{trip:Trip;leg:Leg;arriving?:
  </article>;
 }
 
-export function StayCard({trip,stay,mode,onEdit}:{trip:Trip;stay:Stay;mode:'checkin'|'checkout'|'staying';day:string;onEdit:()=>void}){
+export function StayCard({trip,stay,mode,onEdit,onPhoto}:{trip:Trip;stay:Stay;mode:'checkin'|'checkout'|'staying';day:string;onEdit:()=>void;onPhoto?:(index:number)=>void}){
  const cost=trip.expenses.find(e=>e.id===stay.expenseId&&e.status==='posted');
  const n=nights(stay);
  const title=mode==='checkin'?`Check in · ${stay.name}`:mode==='checkout'?`Check out · ${stay.name}`:`Staying at ${stay.name}`;
  return <article className={`tl-card stay ${mode}`} aria-label={title}>
-  <div className="event-head"><div><span className="event-type">{mode==='checkout'?'Leaving':`${n} night${n===1?'':'s'}`}{cost?` · ${euro(cost.total)}`:''}</span><h3>{title}</h3>
+  {mode==='checkin'&&onPhoto&&<StayCover trip={trip} stay={stay} onOpen={onPhoto}/>}
+  <div className="event-head">{mode==='staying'&&onPhoto&&<StayCover trip={trip} stay={stay} compact onOpen={onPhoto}/>}<div><span className="event-type">{mode==='checkout'?'Leaving':`${n} night${n===1?'':'s'}`}{cost?` · ${euro(cost.total)}`:''}</span><h3>{title}</h3>
    <p>{mode==='checkin'&&stay.checkIn?`From ${stay.checkIn}`:mode==='checkout'&&stay.checkOut?`By ${stay.checkOut}`:`${fmt(stay.from)} – ${fmt(stay.to)}`}{stay.note&&mode!=='staying'?` · ${stay.note}`:''}</p>
    {stay.address&&mode!=='staying'&&<a className="map-link" href={mapsLink(stay.address)} target="_blank" rel="noreferrer"><MapPin size={14}/> {stay.address}</a>}</div>
    <button type="button" className="icon-button subtle" aria-label={`Edit ${stay.name}`} onClick={onEdit}><Pencil size={16}/></button></div>

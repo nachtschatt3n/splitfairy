@@ -27,6 +27,7 @@ async function seedTrip(page:Page,name:string){
  for(const [i,text,familyId,packed,transportId] of [[1,'Beach tent','A',true,'car'],[2,'Travel cot','B',false,'fly'],[3,'Grill',null,false,null]] as const)await save('gear',{id:`g${i}`,text,familyId,transportId,quantity:1,note:'',packed});
  const photo=await sharp({create:{width:500,height:800,channels:3,background:'#fbfaf5'}}).jpeg().toBuffer();
  await api(`/trips/${trip.id}/receipts`,{image:photo.toString('base64')});
+ for(const background of ['#3a7ca5','#e9c46a'])await api(`/trips/${trip.id}/photos`,{stayId:'house',image:(await sharp({create:{width:1200,height:800,channels:3,background}}).jpeg().toBuffer()).toString('base64')});
  await expect.poll(async()=>(await (await page.request.get(`/api/v1/trips/${trip.id}`)).json()).trip.receipts[0]?.status,{timeout:30_000}).toBe('review');
  return trip.id as string;
 }
@@ -112,6 +113,8 @@ for(const scheme of ['light','dark'] as const){
    {name:'family-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'People');await p.getByRole('button',{name:'Add family',exact:true}).click();}},
    {name:'leg-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Plan');await p.getByRole('button',{name:'Add travel'}).click();}},
    {name:'stay-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Plan');await p.getByRole('button',{name:'Add stay'}).click();}},
+   {name:'stay-photos',scope:'[role=dialog]',open:async p=>{await openSection(p,'Plan');await p.getByRole('region',{name:/Plans for/}).getByRole('button',{name:'Edit Casa das Dunas'}).first().click();}},
+   {name:'photo-viewer',scope:'[role=dialog]',open:async p=>{await openSection(p,'Plan');await p.getByRole('button',{name:/Photos of Casa das Dunas/}).first().click();}},
    {name:'plan-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Plan');await p.getByRole('button',{name:'Plan a meal or activity'}).click();}},
    {name:'shopping-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Plan');await p.locator('.shop-group').first().getByRole('button',{name:/^Edit /}).first().click();}},
    {name:'expense-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Spend');await p.getByRole('button',{name:/^Open /}).first().click();}},

@@ -180,3 +180,45 @@ describe('first sign-in and names',()=>{
   expect((await signIn()).json()).toMatchObject({name:'Mathias',isNew:false});
  });
 });
+describe('photos of places',()=>{
+ it('lets everyone add photos to a stay, keeps removal to the author or an organizer, and cleans up files',async()=>{
+  const sharp=(await import('sharp')).default;const {mkdtempSync,readdirSync}=await import('node:fs');const {tmpdir}=await import('node:os');const {join}=await import('node:path');
+  const dataDir=mkdtempSync(join(tmpdir(),'splitfairy-photos-'));
+  const store=new Store(new DatabaseSync(':memory:'));const mails:{to:string;body:string}[]=[];
+  const a=await createApp({store,adminEmail:'admin@example.com',secret:'a very long integration test secret',sendMail:async(to,_subject,body)=>{mails.push({to,body});},dataDir,startWorker:false});
+  const signIn=async(email:string)=>{await a.inject({method:'POST',url:'/api/v1/auth/request',payload:{email}});const code=mails.filter(m=>m.to===email).at(-1)!.body.match(/\b\d{6}\b/)![0];return {host:'splitfairy.example',cookie:`splitfairy_session=${(await a.inject({method:'POST',url:'/api/v1/auth/verify',payload:{email,code,name:'X'}})).cookies.find(c=>c.name==='splitfairy_session')!.value}`};};
+  const admin=await signIn('admin@example.com');
+  const trip=(await a.inject({method:'POST',url:'/api/v1/trips',headers:admin,payload:{name:'Lisbon',start:'2026-10-01',end:'2026-10-05'}})).json();
+  let n=0;const cmd=(action:'save'|'delete',entity:string,value:any,expectedVersion=0)=>a.inject({method:'POST',url:`/api/v1/trips/${trip.id}/commands`,headers:admin,payload:{mutationId:`m${n++}`,entity,action,expectedVersion,value:{version:0,...value}}});
+  await cmd('save','family',{id:'f',name:'Silva',solo:false});await cmd('save','person',{id:'p',name:'Bea',familyId:'f',weight:1,email:'bea@example.com'});
+  await cmd('save','stay',{id:'house',name:'Casa das Dunas',from:'2026-10-01',to:'2026-10-05'});
+  const bea=await signIn('bea@example.com');
+  const jpeg=(await sharp({create:{width:2400,height:1600,channels:3,background:'#3a7ca5'}}).jpeg().toBuffer()).toString('base64');
+  const upload=(headers:any,stayId='house',uploadId?:string)=>a.inject({method:'POST',url:`/api/v1/trips/${trip.id}/photos`,headers,payload:{image:jpeg,stayId,...(uploadId?{uploadId}:{})}});
+
+  const byBea=await upload(bea,'house','6f1c1f65-0d0b-4a53-8a55-6f1f1f1f1f1f');expect(byBea.statusCode).toBe(201);
+  expect((await upload(bea,'house','6f1c1f65-0d0b-4a53-8a55-6f1f1f1f1f1f')).json().id).toBe(byBea.json().id);
+  const byAdmin=(await upload(admin)).json();
+  expect((await upload(admin,'nope')).statusCode).toBe(400);
+  expect((await a.inject({method:'POST',url:`/api/v1/trips/${trip.id}/photos`,headers:bea,payload:{image:Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="400"><rect width="300" height="400"/></svg>').toString('base64'),stayId:'house'}})).statusCode).toBe(400);
+  const view=(await a.inject({method:'GET',url:`/api/v1/trips/${trip.id}`,headers:admin})).json();
+  expect(view.trip.photos.map((p:any)=>p.id)).toEqual([byBea.json().id,byAdmin.id]);
+  expect((await a.inject({method:'GET',url:'/api/v1/trips',headers:admin})).json()[0].cover).toBe(byBea.json().id);
+
+  const full=await a.inject({method:'GET',url:`/api/v1/trips/${trip.id}/photos/${byAdmin.id}`,headers:bea});
+  expect(full.headers['content-type']).toBe('image/jpeg');expect((await sharp(full.rawPayload).metadata()).width).toBe(1600);
+  const thumb=await a.inject({method:'GET',url:`/api/v1/trips/${trip.id}/photos/${byAdmin.id}?size=thumb`,headers:bea});
+  expect(await sharp(thumb.rawPayload).metadata()).toMatchObject({width:480,height:360});
+  expect((await a.inject({method:'GET',url:`/api/v1/trips/${trip.id}/photos/${byAdmin.id}`})).statusCode).toBe(401);
+
+  expect((await a.inject({method:'DELETE',url:`/api/v1/trips/${trip.id}/photos/${byAdmin.id}`,headers:bea})).statusCode).toBe(403);
+  expect((await a.inject({method:'DELETE',url:`/api/v1/trips/${trip.id}/photos/${byBea.json().id}`,headers:bea})).json().trip.photos).toHaveLength(1);
+  expect(readdirSync(join(dataDir,'photos',trip.id)).sort()).toEqual([`${byAdmin.id}-thumb.jpg`,`${byAdmin.id}.jpg`]);
+
+  // Deleting the stay takes its photos and their files with it.
+  await upload(bea);
+  const stay=(await a.inject({method:'GET',url:`/api/v1/trips/${trip.id}`,headers:admin})).json().trip.stays[0];
+  expect((await cmd('delete','stay',{id:'house'},stay.version)).json().trip.photos).toEqual([]);
+  expect(readdirSync(join(dataDir,'photos',trip.id))).toEqual([]);
+ });
+});

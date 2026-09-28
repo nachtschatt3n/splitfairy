@@ -1,12 +1,13 @@
 import {DatabaseSync} from 'node:sqlite';
 import {randomUUID} from 'node:crypto';
 import {allocateExpense} from '../../../packages/domain/src/accounting.js';
-import {TRIP_THEMES,commandSchema,eventSchema,gearSchema,legSchema,staySchema,transportSchema,paymentSchema,expenseSchema,familySchema,personSchema,shoppingSchema,type Command,type Expense,type Trip,type User} from '../../../packages/domain/src/model.js';
+import {TRIP_THEMES,commandSchema,eventSchema,gearSchema,legSchema,staySchema,transportSchema,paymentSchema,expenseSchema,familySchema,personSchema,shoppingSchema,type Command,type Expense,type Photo,type Trip,type User} from '../../../packages/domain/src/model.js';
 
 export class ConflictError extends Error{statusCode=409;constructor(message='This item changed on another device'){super(message);}}
 export class AccessError extends Error{statusCode=403;constructor(){super('Access denied');}}
 export class InputError extends Error{statusCode=400;constructor(message:string){super(message);}}
 export type Role='organizer'|'member';
+export const PHOTOS_PER_STAY=12;
 export const freshTrip=(id:string,name:string,start:string,end:string):Trip=>({id,name,start,end,version:0,archived:false,families:[],people:[],events:[],shopping:[],gear:[],transport:[],stays:[],legs:[],expenses:[],payments:[],receipts:[],activity:[]});
 
 export class Store{
@@ -88,6 +89,39 @@ export class Store{
   catch(error){this.db.exec('ROLLBACK');throw error;}
  }
  /** Remove expired sign-in state and old idempotency keys. */
+ /** Adds a photo of a stay; anyone on the trip may. Re-sending the same upload ID is a no-op. */
+ addPhoto(actor:User,tripId:string,photoId:string,stayId:string):Photo{
+  return this.editTrip(actor,tripId,trip=>{
+   const prior=(trip.photos??[]).find(p=>p.id===photoId);if(prior)return prior;
+   if(!(trip.stays??[]).some(s=>s.id===stayId))throw new InputError('Stay not found');
+   if((trip.photos??[]).filter(p=>p.stayId===stayId).length>=PHOTOS_PER_STAY)throw new InputError(`A stay can have up to ${PHOTOS_PER_STAY} photos`);
+   const photo:Photo={id:photoId,stayId,authorId:actor.id,author:actor.name,at:new Date().toISOString()};
+   trip.photos=[...(trip.photos??[]),photo];return photo;
+  },'add photo');
+ }
+ /** Removes a photo; only whoever added it or an organizer may. */
+ removePhoto(actor:User,tripId:string,photoId:string):Trip{
+  const role=this.role(actor,tripId);
+  return this.editTrip(actor,tripId,trip=>{
+   const photo=(trip.photos??[]).find(p=>p.id===photoId);if(!photo)throw new InputError('Photo not found');
+   if(photo.authorId!==actor.id&&role!=='organizer')throw new AccessError();
+   trip.photos=(trip.photos??[]).filter(p=>p.id!==photoId);return trip;
+  },'delete photo');
+ }
+ private editTrip<T>(actor:User,tripId:string,change:(trip:Trip)=>T,description:string):T{
+  this.role(actor,tripId);
+  this.db.exec('BEGIN IMMEDIATE');
+  try{
+   const row=this.db.prepare('SELECT data FROM trips WHERE id=?').get(tripId) as {data:string}|undefined;if(!row)throw new AccessError();const trip:Trip=JSON.parse(row.data);
+   if(trip.archived)throw new InputError('Trip is archived');
+   const before=JSON.stringify(trip.photos??[]);const result=change(trip);
+   if(JSON.stringify(trip.photos??[])!==before){
+    trip.version++;trip.activity.unshift({id:randomUUID(),at:new Date().toISOString(),actor:actor.name,description});trip.activity=trip.activity.slice(0,300);
+    this.db.prepare('UPDATE trips SET data=? WHERE id=?').run(JSON.stringify(trip),tripId);
+   }
+   this.db.exec('COMMIT');return result;
+  }catch(error){this.db.exec('ROLLBACK');throw error;}
+ }
  prune(now=Date.now()){
   this.db.prepare('DELETE FROM sessions WHERE expires<?').run(now);
   this.db.prepare('DELETE FROM codes WHERE expires<?').run(now);
@@ -131,6 +165,7 @@ export class Store{
      if(command.entity==='event'&&trip.expenses.some(e=>e.lines.some(l=>l.splits.some(s=>s.eventId===value.id))))throw new InputError('Event is linked to an expense');
      list.splice(index,1);
      if(command.entity==='event')for(const item of trip.shopping)if(item.eventId===value.id){item.eventId=null;item.version++;}
+     if(command.entity==='stay')trip.photos=(trip.photos??[]).filter(p=>p.stayId!==value.id);
      // Things a removed family was bringing go back to "not decided yet".
      if(command.entity==='family'){for(const item of trip.gear??[])if(item.familyId===value.id){item.familyId=null;item.version++;}for(const t of trip.transport??[])if(t.familyId===value.id){t.familyId=null;t.version++;}}
      // Items that were going in a removed car or flight stay on the list without a transport.

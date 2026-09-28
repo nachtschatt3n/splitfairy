@@ -1,6 +1,7 @@
-import {useEffect,useState,type FormEvent} from 'react';
+import {useCallback,useEffect,useState,type FormEvent} from 'react';
 import {ArrowRight,BedDouble,CalendarDays,Pencil,Plus,ShoppingBasket,Sun,UtensilsCrossed} from 'lucide-react';
 import {LegCard,LegSheet,StayCard,StaySheet,TripOverview,dayEntries,tripDays} from './journey.js';
+import {PhotoViewer,type PhotoActions} from './photos.js';
 import {TransportIcon} from './packing.js';
 import type {Event,Leg,Shopping,Stay,Trip} from '../../../packages/domain/src/model.js';
 import {Button,Empty,Sheet,euro,fmt,today,uid,type Remove,type Save} from './common.js';
@@ -70,7 +71,7 @@ function QuickAdd({placeholder,label,onAdd,busy}:{placeholder:string;label:strin
  </form>;
 }
 
-export function Plan({trip,save,remove,busy}:{trip:Trip;save:Save;remove:Remove;busy:boolean}){
+export function Plan({trip,save,remove,busy,photos}:{trip:Trip;save:Save;remove:Remove;busy:boolean;photos:PhotoActions}){
  // Open on today while the trip is running, otherwise on its first day.
  const [day,setDay]=useState(()=>trip.start&&today()>=trip.start&&today()<=trip.end?today():trip.start||today());
  const [sheet,setSheet]=useState<{event?:Event}|null>(null);
@@ -79,7 +80,8 @@ export function Plan({trip,save,remove,busy}:{trip:Trip;save:Save;remove:Remove;
  const [target,setTarget]=useState(''),[itemSheet,setItemSheet]=useState<Shopping|null>(null);
  const days=tripDays(trip);
  const {staying,entries}=dayEntries(trip,day);
- const [legSheet,setLegSheet]=useState<{leg?:Leg}|null>(null),[staySheet,setStaySheet]=useState<{stay?:Stay}|null>(null);
+ const [legSheet,setLegSheet]=useState<{leg?:Leg}|null>(null),[staySheet,setStaySheet]=useState<{stay?:Stay}|null>(null),[viewer,setViewer]=useState<{stay:Stay;index:number}|null>(null);
+ const closeViewer=useCallback(()=>setViewer(null),[]);
  const allEvents=[...trip.events].sort((a,b)=>a.date.localeCompare(b.date)||ORDER.indexOf(a.kind)-ORDER.indexOf(b.kind));
  const spent=(id:string)=>trip.expenses.filter(x=>x.status==='posted').flatMap(x=>x.lines.flatMap(l=>l.splits.filter(s=>s.eventId===id).map(s=>s.amount))).reduce((a,b)=>a+b,0);
  const addItem=(text:string,eventId:string|null)=>save('shopping',{id:uid(),text,eventId,done:false,version:0});
@@ -91,7 +93,7 @@ export function Plan({trip,save,remove,busy}:{trip:Trip;save:Save;remove:Remove;
   <div className="two-column plan-grid">
    <section className="card" aria-label={`Plans for ${fmt(day)}`}>
     <div className="card-head"><div><span className="eyebrow">{fmt(day)}</span><h2>The day</h2></div></div>
-    {staying.map(s=><StayCard key={s.id} trip={trip} stay={s} mode="staying" day={day} onEdit={()=>setStaySheet({stay:s})}/>)}
+    {staying.map(s=><StayCard key={s.id} trip={trip} stay={s} mode="staying" day={day} onEdit={()=>setStaySheet({stay:s})} onPhoto={index=>setViewer({stay:s,index})}/>)}
     <div className="timeline">
      {entries.map(x=><div className={`tl-item ${x.kind}`} key={x.key}>
       <time className="tl-time">{x.time||''}</time>
@@ -103,7 +105,7 @@ export function Plan({trip,save,remove,busy}:{trip:Trip;save:Save;remove:Remove;
         <QuickAdd label={`Add to shopping for ${e.title}`} placeholder="Add an ingredient…" busy={busy} onAdd={text=>addItem(text,e.id)}/></div>
       </article>;})()
       :x.leg?<LegCard trip={trip} leg={x.leg} arriving={x.kind==='arrive'} onEdit={()=>setLegSheet({leg:x.leg})}/>
-      :<StayCard trip={trip} stay={x.stay!} mode={x.kind as 'checkin'|'checkout'} day={day} onEdit={()=>setStaySheet({stay:x.stay})}/>}
+      :<StayCard trip={trip} stay={x.stay!} mode={x.kind as 'checkin'|'checkout'} day={day} onEdit={()=>setStaySheet({stay:x.stay})} onPhoto={index=>setViewer({stay:x.stay!,index})}/>}
      </div>)}
     </div>
     {!entries.length&&!staying.length&&<Empty icon={<CalendarDays/>} heading="Nothing planned" body="Add a meal, an activity, the travel or where you sleep."/>}
@@ -121,7 +123,8 @@ export function Plan({trip,save,remove,busy}:{trip:Trip;save:Save;remove:Remove;
    </section>
   </div>
   {legSheet&&<LegSheet key={legSheet.leg?.id??'new-leg'} trip={trip} leg={legSheet.leg} day={day} save={save} remove={remove} busy={busy} onClose={()=>setLegSheet(null)}/>}
-  {staySheet&&<StaySheet key={staySheet.stay?.id??'new-stay'} trip={trip} stay={staySheet.stay} day={day} save={save} remove={remove} busy={busy} onClose={()=>setStaySheet(null)}/>}
+  {staySheet&&<StaySheet key={staySheet.stay?.id??'new-stay'} trip={trip} stay={staySheet.stay} day={day} save={save} remove={remove} busy={busy} photos={photos} onPhoto={index=>staySheet.stay&&setViewer({stay:staySheet.stay,index})} onClose={()=>setStaySheet(null)}/>}
+  {viewer&&<PhotoViewer key={`${viewer.stay.id}-${viewer.index}`} trip={trip} stay={viewer.stay} start={viewer.index} actions={photos} onClose={closeViewer}/>}
   {sheet&&<EventSheet trip={trip} event={sheet.event} day={day} save={save} remove={remove} busy={busy} onClose={()=>setSheet(null)}/>}
   {itemSheet&&<ShoppingSheet key={itemSheet.id} trip={trip} item={trip.shopping.find(s=>s.id===itemSheet.id)??itemSheet} save={save} remove={remove} busy={busy} onClose={()=>setItemSheet(null)}/>}
  </>;
