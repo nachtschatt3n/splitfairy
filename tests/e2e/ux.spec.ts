@@ -2,7 +2,7 @@ import {test,expect,type Page,type TestInfo} from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import sharp from 'sharp';
 import {ADMIN} from './env.js';
-import {isPhone,openSection,shot,signInAsAdmin,switchTrip,tripList,unique} from './helpers.js';
+import {isPhone,openSection,shot,signInAsAdmin,switchTrip,tripList,unique,openExpenseForm} from './helpers.js';
 const iso=(days:number)=>{const d=new Date(Date.now()+days*86400_000);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
 
 /** Builds a realistic trip through the public API, as the signed-in organizer. */
@@ -102,7 +102,7 @@ for(const scheme of ['light','dark'] as const){
    {name:'transport-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Pack');await p.getByRole('button',{name:'Edit Silva car'}).click();}},
    {name:'packing-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Pack');await p.getByRole('button',{name:'Edit Grill'}).click();}},
    {name:'spend',open:p=>openSection(p,'Spend')},
-   {name:'spend-options',open:async p=>{await openSection(p,'Spend');await p.getByText('Custom shares, several payers, or refund').click();}},
+   {name:'spend-options',scope:'[role=dialog]',open:async p=>{await openSection(p,'Spend');await openExpenseForm(p);await p.getByText('Several payers or a refund').click();}},
    {name:'receipt-review',scope:'[role=dialog]',open:async p=>{await openSection(p,'Spend');await p.getByRole('button',{name:'Review'}).click();}},
    {name:'settle',open:p=>openSection(p,'Settle')},
    {name:'people',open:p=>openSection(p,'People')},
@@ -115,6 +115,7 @@ for(const scheme of ['light','dark'] as const){
    {name:'stay-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Plan');await p.getByRole('button',{name:'Add stay'}).click();}},
    {name:'stay-photos',scope:'[role=dialog]',open:async p=>{await openSection(p,'Plan');await p.getByRole('region',{name:/Plans for/}).getByRole('button',{name:'Edit Casa das Dunas'}).first().click();}},
    {name:'photo-viewer',scope:'[role=dialog]',open:async p=>{await openSection(p,'Plan');await p.getByRole('button',{name:/Photos of Casa das Dunas/}).first().click();}},
+   {name:'split-options',scope:'[role=dialog]',open:async p=>{await openSection(p,'Spend');const f=await openExpenseForm(p);await f.getByLabel('Amount in EUR').fill('100');await f.getByRole('button',{name:'Percentages',exact:true}).click();await f.locator('.split-editor').scrollIntoViewIfNeeded();}},
    {name:'plan-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Plan');await p.getByRole('button',{name:'Plan a meal or activity'}).click();}},
    {name:'shopping-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Plan');await p.locator('.shop-group').first().getByRole('button',{name:/^Edit /}).first().click();}},
    {name:'expense-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Spend');await p.getByRole('button',{name:/^Open /}).first().click();}},

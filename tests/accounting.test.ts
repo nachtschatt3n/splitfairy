@@ -42,3 +42,28 @@ describe('settlement cost',()=>{
   }
  });
 });
+describe('split modes stored as weights and fixed amounts',()=>{
+ const people=[{id:'m',familyId:'U'},{id:'a',familyId:'U'},{id:'w',familyId:'M'}];
+ const alloc=(split:any,total=1000)=>allocateExpense({total,payers:[{familyId:'U',amount:total}],splits:[{amount:total,...split}]},people);
+ const perPerson=(rows:any[])=>Object.fromEntries(rows.map(r=>[r.personId,r.amount]));
+ it('splits equally, by percentage and by shares to the cent',()=>{
+  expect(perPerson(alloc({weights:[{id:'m',weight:1},{id:'a',weight:1},{id:'w',weight:1}]}))).toEqual({m:334,a:333,w:333});
+  expect(perPerson(alloc({weights:[{id:'m',weight:50},{id:'a',weight:30},{id:'w',weight:20}]}))).toEqual({m:500,a:300,w:200});
+  expect(perPerson(alloc({weights:[{id:'m',weight:2},{id:'w',weight:3}]}))).toEqual({m:400,w:600});
+ });
+ it('takes exact amounts per person and rejects amounts that do not add up',()=>{
+  const rows=alloc({weights:[],personFixed:[{personId:'m',amount:700},{personId:'w',amount:300}]});
+  expect(rows).toEqual([{personId:'m',familyId:'U',amount:700},{personId:'w',familyId:'M',amount:300}]);
+  expect(()=>alloc({weights:[],personFixed:[{personId:'m',amount:700}]})).toThrow();
+  expect(()=>alloc({weights:[],personFixed:[{personId:'m',amount:1200}]})).toThrow(/exceeds/);
+ });
+ it('adds adjustments on top of an equal share of the rest',()=>{
+  // 10.00 with Will paying 4.00 extra: the other 6.00 is shared equally, so Will owes 6.00 and each Uhl 2.00.
+  const rows=alloc({weights:[{id:'m',weight:1},{id:'a',weight:1},{id:'w',weight:1}],personFixed:[{personId:'w',amount:400}]});
+  const byPerson:Record<string,number>={};for(const r of rows)byPerson[r.personId!]=(byPerson[r.personId!]??0)+r.amount;
+  expect(byPerson).toEqual({m:200,a:200,w:600});
+ });
+ it('keeps refunds negative, including exact amounts',()=>{
+  expect(perPerson(alloc({weights:[],personFixed:[{personId:'m',amount:-600},{personId:'w',amount:-400}]},-1000))).toEqual({m:-600,w:-400});
+ });
+});

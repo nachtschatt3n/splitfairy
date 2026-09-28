@@ -15,21 +15,23 @@ export function splitWeighted(total:number,people:Weighted[]):Record<string,numb
   return Object.fromEntries(rows.map(r=>[r.id,Math.sign(total)*r.amount]));
 }
 
-export function allocateExpense(expense:{total:number;payers:{familyId:string;amount:number}[];splits:{amount:number;weights:Weighted[];fixed?:{familyId:string;amount:number}[]}[]},people:{id:string;familyId:string}[]):Allocation[]{
+export function allocateExpense(expense:{total:number;payers:{familyId:string;amount:number}[];splits:{amount:number;weights:Weighted[];fixed?:{familyId:string;amount:number}[];personFixed?:{personId:string;amount:number}[]}[]},people:{id:string;familyId:string}[]):Allocation[]{
   if(!validCents(expense.total) || !expense.payers.length || expense.payers.some(p=>!validCents(p.amount) || !p.familyId) || expense.payers.reduce((n,p)=>n+p.amount,0)!==expense.total) throw new Error('Payers do not match total');
   if(expense.splits.reduce((n,s)=>n+s.amount,0)!==expense.total) throw new Error('Splits do not match total');
   const byId=new Map(people.map(p=>[p.id,p]));
   const allocations:Allocation[]=[];
   for(const split of expense.splits){
     if(!validCents(split.amount)) throw new Error('Invalid split amount');
-    const fixed=split.fixed??[];
-    if(fixed.some(f=>!validCents(f.amount) || Math.sign(f.amount)!==Math.sign(split.amount))) throw new Error('Invalid fixed amount');
-    const remainder=split.amount-fixed.reduce((n,f)=>n+f.amount,0);
+    // Fixed amounts (per family or per person, e.g. exact amounts or adjustments) come first; weights share the rest.
+    const fixed=split.fixed??[],personFixed=split.personFixed??[];
+    if([...fixed,...personFixed].some(f=>!validCents(f.amount) || (f.amount!==0 && Math.sign(f.amount)!==Math.sign(split.amount)))) throw new Error('Invalid fixed amount');
+    const remainder=split.amount-fixed.reduce((n,f)=>n+f.amount,0)-personFixed.reduce((n,f)=>n+f.amount,0);
     if(Math.sign(remainder)!==Math.sign(split.amount) && remainder!==0) throw new Error('Fixed coverage exceeds split');
     if(remainder){
       for(const [id,amount] of Object.entries(splitWeighted(remainder,split.weights))){const person=byId.get(id);if(!person) throw new Error('Unknown participant');allocations.push({personId:id,familyId:person.familyId,amount});}
     }
     for(const f of fixed) if(f.amount) allocations.push({personId:null,familyId:f.familyId,amount:f.amount});
+    for(const f of personFixed) if(f.amount){const person=byId.get(f.personId);if(!person) throw new Error('Unknown participant');allocations.push({personId:f.personId,familyId:person.familyId,amount:f.amount});}
   }
   return allocations;
 }

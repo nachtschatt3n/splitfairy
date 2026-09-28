@@ -1,7 +1,7 @@
 import {test,expect,type Page} from '@playwright/test';
 import sharp from 'sharp';
 import {ADMIN} from './env.js';
-import {addFamily,addPerson,createTrip,isPhone,mailedCode,mailsTo,nameIfAsked,openSection,planEvent,shot,signInAsAdmin,switchTrip,tripList,unique,withAdminLock} from './helpers.js';
+import {addFamily,addPerson,createTrip,isPhone,mailedCode,mailsTo,nameIfAsked,openSection,planEvent,shot,signInAsAdmin,switchTrip,tripList,unique,withAdminLock,openExpenseForm} from './helpers.js';
 const iso=(days:number)=>{const d=new Date(Date.now()+days*86400_000);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
 async function receiptPhoto(){return sharp({create:{width:500,height:800,channels:3,background:'#fbfaf5'}}).composite([{input:Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="500" height="800"><text x="30" y="60" font-size="30">MERCADO</text><text x="30" y="700" font-size="30">TOTAL 23,10</text></svg>')}]).jpeg().toBuffer();}
 async function toTripList(page:Page){
@@ -74,7 +74,7 @@ test('organizer plans a trip, splits a receipt, settles up and switches trips',a
  await shot(page,testInfo,'plan');
 
  await openSection(page,'Spend');
- const quick=page.locator('#quick-expense');
+ const quick=await openExpenseForm(page);
  await quick.getByLabel('What was it?').fill('Taxi from the airport');
  await quick.getByLabel('Amount in EUR').fill('30,00');
  await quick.getByLabel('Paid by').selectOption({label:'Weber'});
@@ -164,7 +164,7 @@ test('an invited member signs in by email, sees only member tools, and adds an e
  await expect(mp.getByRole('button',{name:'Add family',exact:true})).toHaveCount(0);
  await expect(mp.getByRole('button',{name:'Edit Ana'})).toHaveCount(0);
  await openSection(mp,'Spend');
- const quick=mp.locator('#quick-expense');
+ const quick=await openExpenseForm(mp);
  await quick.getByLabel('What was it?').fill('Pastéis de nata');await quick.getByLabel('Amount in EUR').fill('7.20');
  await quick.getByRole('button',{name:'Save expense'}).click();
  await expect(mp.locator('.list-row',{hasText:'Pastéis de nata'})).toBeVisible();

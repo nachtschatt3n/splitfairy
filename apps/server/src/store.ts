@@ -161,6 +161,7 @@ export class Store{
      if(command.entity==='person'&&trip.expenses.some(e=>e.allocations.some(a=>a.personId===value.id)))throw new InputError('Person is in use');
      if(command.entity==='person'&&trip.events.some(e=>e.participants.some(p=>p.id===value.id)))throw new InputError('Remove this person from planned events first');
      if(command.entity==='person'&&(trip.legs??[]).some(l=>l.people.includes(value.id)))throw new InputError('Remove this person from travel first');
+     if(command.entity==='person'&&(trip.stays??[]).some(x=>x.guests?.some(g=>g.id===value.id)))throw new InputError('Remove this person from stays first');
      if(command.entity==='transport'&&(trip.legs??[]).some(l=>l.transportId===value.id))throw new InputError('Travel legs still use this car or flight');
      if(command.entity==='event'&&trip.expenses.some(e=>e.lines.some(l=>l.splits.some(s=>s.eventId===value.id))))throw new InputError('Event is linked to an expense');
      list.splice(index,1);
@@ -181,10 +182,10 @@ export class Store{
        if(!parsed.route.length&&parsed.transportId)parsed.route=[parsed.transportId];
        for(const t of parsed.route)if(!(trip.transport??[]).some(x=>x.id===t))throw new InputError('Unknown transport');
        parsed.transportId=parsed.route[0]??null;break;}
-      case 'stay':parsed=staySchema.parse(value);if(parsed.expenseId&&!trip.expenses.some(e=>e.id===parsed.expenseId))throw new InputError('Unknown booking cost');break;
+      case 'stay':parsed=staySchema.parse(value);for(const g of parsed.guests)if(!trip.people.some(x=>x.id===g.id))throw new InputError('Unknown guest');if(parsed.expenseId&&!trip.expenses.some(e=>e.id===parsed.expenseId))throw new InputError('Unknown booking cost');break;
       case 'leg':parsed=legSchema.parse(value);if(!(trip.transport??[]).some(t=>t.id===parsed.transportId))throw new InputError('Unknown car or flight');for(const p of parsed.people)if(!trip.people.some(x=>x.id===p))throw new InputError('Unknown traveller');break;
       case 'transport':parsed=transportSchema.parse(value);if(parsed.familyId&&!trip.families.some(f=>f.id===parsed.familyId))throw new InputError('Unknown family');break;
-      case 'shopping':parsed=shoppingSchema.parse(value);if(parsed.eventId&&!trip.events.some(e=>e.id===parsed.eventId))throw new InputError('Unknown event');break;
+      case 'shopping':{parsed=shoppingSchema.parse(value);const ev=parsed.eventId?trip.events.find(e=>e.id===parsed.eventId):null;if(parsed.eventId&&!ev)throw new InputError('Unknown event');if(ev?.kind==='restaurant')throw new InputError('Restaurants have no shopping list');break;}
       case 'expense':{
        const e=expenseSchema.parse(value);
        if(old&&role!=='organizer'&&old.authorId!==actor.id)throw new AccessError();

@@ -9,7 +9,7 @@ import sharp from 'sharp';
 
 const out=resolve('docs/screenshots');mkdirSync(out,{recursive:true});
 const data=mkdtempSync(join(tmpdir(),'splitfairy-shots-'));
-const env={...process.env,NODE_ENV:'test',PORT:'3190',DATA_DIR:data,MAIL_CAPTURE_DIR:join(data,'mail'),ADMIN_EMAIL:'ana@example.com',AUTH_SECRET:'screenshots-secret-that-is-long-enough-000',OLLAMA_URL:'http://127.0.0.1:3191',OLLAMA_MODEL:'fake-vision',LOG_LEVEL:'warn',AUTH_RATE_LIMIT_FACTOR:'100'};
+const env={...process.env,NODE_ENV:'test',PORT:'3190',DATA_DIR:data,MAIL_CAPTURE_DIR:join(data,'mail'),ADMIN_EMAIL:'ana@example.com',AUTH_SECRET:'screenshots-secret-that-is-long-enough-000',OLLAMA_URL:'http://127.0.0.1:3191',PLACES_URL:'',OLLAMA_MODEL:'fake-vision',LOG_LEVEL:'warn',AUTH_RATE_LIMIT_FACTOR:'100'};
 const ollama=spawn(process.execPath,['tests/e2e/fake-ollama.mjs','3191'],{stdio:'inherit'});
 const server=spawn(process.execPath,['dist/server/apps/server/src/index.js'],{env,stdio:'inherit'});
 const base='http://127.0.0.1:3190';
@@ -32,8 +32,9 @@ async function seed(request){
  const people=[['ana','Ana','S',1,'ana@example.com'],['tiago','Tiago','S',1,''],['ines','Inês','S',.5,''],['ben','Ben','W',1,'ben@example.com'],['mia','Mia','W',1,''],['noah','Noah','W',.25,''],['giulia','Giulia','R',1,''],['marco','Marco','R',1,''],['lena','Lena','L',1,'']];
  for(const [id,name,familyId,weight,email] of people)await save('person',{id,name,familyId,weight,email});
  const all=people.map(p=>({id:p[0],weight:p[3]}));
- await save('event',{id:'dinner',title:'Grilled sardines on the terrace',date:day(0),time:'20:00',kind:'dinner',owner:'Tiago',notes:'',participants:all});
+ await save('event',{id:'dinner',title:'Grilled sardines on the terrace',date:day(0),time:'20:00',kind:'dinner',owner:'Tiago',notes:'Tiago brings the grill; sardines from the market in the morning',participants:all});
  await save('event',{id:'surf',title:'Surf lesson in Ericeira',date:day(0),time:'10:00',kind:'activity',owner:'Ben',notes:'',participants:all.filter(p=>!['ines','noah'].includes(p.id))});
+ await save('event',{id:'tasca',title:'Tasca do Chico',date:day(1),time:'20:30',kind:'restaurant',address:'Rua do Diário de Notícias 39, Lisboa',owner:'',notes:'Fado from 21:00; table for 11 booked',participants:all});
  await save('event',{id:'breakfast',title:'Pastéis de nata breakfast',date:day(1),time:'09:00',kind:'breakfast',owner:'',notes:'',participants:all});
  for(const [i,text,eventId,done] of [[1,'Sardines (2 kg)','dinner',true],[2,'Lemons','dinner',false],[3,'Vinho verde','dinner',false],[4,'Sunscreen SPF 50',null,false],[5,'Oat milk','breakfast',false]])await save('shopping',{id:`s${i}`,text,eventId,done});
  for(const [id,name,kind,familyId,note] of [['silva-car','Silva car','car','S','Roof box'],['rossi-car','Rossi car','car','R',''],['weber-plane','Weber plane','plane','W','2 checked bags']])await save('transport',{id,name,kind,familyId,note});
@@ -42,13 +43,14 @@ async function seed(request){
  await expense('x1','Holiday house deposit',day(-2),'stay',120000,'S',all);
  await expense('x2','Surf lesson',day(0),'activity',28000,'W',all.filter(p=>!['ines','noah'].includes(p.id)),'surf');
  await expense('x3','Fuel for the rental car',day(-1),'transport',8640,'R',all);
+ await expense('x5','Tasca do Chico',day(1),'food',21450,'W',all,'tasca');
  await expense('x4','Gelato at the harbour',day(-1),'food',3150,'L',all);
  // Getting there: the Webers fly in and ride on with the Silvas; one night in Lisbon, then the house in Ericeira.
  await save('leg',{id:'fly-in',transportId:'weber-plane',from:'Frankfurt (FRA)',to:'Lisbon (LIS)',departDate:day(-2),departTime:'07:10',arriveDate:day(-2),arriveTime:'09:05',people:['ben','mia','noah'],note:'LH 1172'});
  await save('leg',{id:'drive-in',transportId:'silva-car',from:'Lisbon',to:'Ericeira',departDate:day(-1),departTime:'11:00',arriveDate:day(-1),arriveTime:'11:45',people:['ana','tiago','ines','ben','mia','noah'],note:''});
  await save('leg',{id:'fly-home',transportId:'weber-plane',from:'Lisbon (LIS)',to:'Frankfurt (FRA)',departDate:day(7),departTime:'18:40',arriveDate:day(7),arriveTime:'22:35',people:['ben','mia','noah'],note:''});
- await save('stay',{id:'alfama',name:'Casa Alfama',address:'Rua de São Miguel 5, Lisboa',from:day(-2),to:day(-1),checkIn:'15:00',checkOut:'10:00',note:'Keys in the lockbox',expenseId:null});
- await save('stay',{id:'dunas',name:'Casa das Dunas',address:'Rua do Norte 12, Ericeira',from:day(-1),to:day(7),checkIn:'16:00',checkOut:'11:00',note:'',expenseId:'x1'});
+ await save('stay',{id:'alfama',name:'Casa Alfama',address:'Rua de São Miguel 5, Lisboa',from:day(-2),to:day(-1),checkIn:'15:00',checkOut:'10:00',note:'Keys in the lockbox',guests:all.filter(p=>['ben','mia','noah'].includes(p.id)),expenseId:null});
+ await save('stay',{id:'dunas',name:'Casa das Dunas',address:'Rua do Norte 12, Ericeira',from:day(-1),to:day(7),checkIn:'16:00',checkOut:'11:00',note:'',guests:all,expenseId:'x1'});
  // Illustrated place pictures (drawn for the example, not real photos).
  for(const [stayId,file] of [['dunas','dunas'],['alfama','alfama']]){
   const image=await sharp(readFileSync(resolve('scripts/scenes',`${file}.svg`))).jpeg({quality:88}).toBuffer();

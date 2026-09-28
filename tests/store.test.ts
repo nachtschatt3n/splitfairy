@@ -170,6 +170,21 @@ describe('journey: stays, travel legs and routes',()=>{
   expect(()=>store.mutate(actor,id,cmd('stay',{id:'x',name:'Bad',from:'2026-10-05',to:'2026-10-04',version:0},0,'j6'))).toThrow(/Check-out/);
   expect(()=>store.mutate(actor,id,cmd('stay',{id:'y',name:'Bad',from:'2026-10-05',to:'2026-10-06',expenseId:'nope',version:0},0,'j7'))).toThrow(/booking cost/);
  });
+ it('stores restaurants with an address and keeps shopping items off them',()=>{
+  const id=base();
+  const t=store.mutate(actor,id,cmd('event',{id:'r',title:'Tasca do Chico',date:'2026-10-02',kind:'restaurant',address:'Rua do Diário de Notícias 39, Lisboa',participants:[{id:'m',weight:1}],version:0},0,'r1'));
+  expect(t.events[0]).toMatchObject({kind:'restaurant',address:'Rua do Diário de Notícias 39, Lisboa'});
+  expect(()=>store.mutate(actor,id,cmd('shopping',{id:'s',text:'Bread',eventId:'r',done:false,version:0},0,'r2'))).toThrow(/no shopping list/);
+ });
+ it('keeps who is staying, rejects unknown guests, and protects guests from deletion',()=>{
+  const id=base();
+  const t=store.mutate(actor,id,cmd('stay',{id:'s',name:'Casa',from:'2026-10-01',to:'2026-10-03',guests:[{id:'m',weight:1}],version:0},0,'g1'));
+  expect(t.stays![0].guests).toEqual([{id:'m',weight:1}]);
+  expect(()=>store.mutate(actor,id,cmd('stay',{id:'x',name:'Bad',from:'2026-10-01',to:'2026-10-02',guests:[{id:'ghost',weight:1}],version:0},0,'g2'))).toThrow(/Unknown guest/);
+  expect(()=>store.mutate(actor,id,{mutationId:'g3',entity:'person',action:'delete',expectedVersion:1,value:{id:'m'}})).toThrow(/stays first/);
+  // Stays saved before guests existed still load as an empty list.
+  expect(store.mutate(actor,id,cmd('stay',{id:'old',name:'Old',from:'2026-10-04',to:'2026-10-05',version:0},0,'g4')).stays![1].guests).toEqual([]);
+ });
  it('stores travel legs with their vehicle and travellers, and protects both from deletion',()=>{
   const id=base();
   const t=store.mutate(actor,id,cmd('leg',{id:'l',transportId:'plane',from:'FRA',to:'LIS',departDate:'2026-10-01',departTime:'07:10',arriveDate:'2026-10-01',arriveTime:'09:05',people:['m'],version:0},0,'j8'));

@@ -51,7 +51,7 @@ export function expenseFromDraft(draft:ReceiptDraft,trip:Trip,receiptId:string,m
  const lines=draft.items.map(item=>{
   const amount=parseCents(item.amount)!;
   const event=item.target?trip.events.find(e=>e.id===item.target):undefined;
-  return {id:makeId(),label:item.label.trim(),amount,splits:[{amount,eventId:event?.id??null,eventVersion:event?.version,weights:event?event.participants:everyone,fixed:[]}]};
+  return {id:makeId(),label:item.label.trim(),amount,splits:[{amount,eventId:event?.id??null,eventVersion:event?.version,weights:event?event.participants:everyone,fixed:[],personFixed:[]}]};
  });
  return {id:makeId(),title:draft.title.trim(),date:draft.date,category:draft.category,total:summary.total!,payers:[{familyId:draft.payer,amount:summary.total!}],lines,notes:'',receiptIds:[receiptId],status:'posted',version:0};
 }

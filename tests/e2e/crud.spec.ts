@@ -1,6 +1,6 @@
 import {test,expect,type Page} from '@playwright/test';
 import {ADMIN} from './env.js';
-import {addFamily,addPerson,createTrip,mailsTo,openSection,planEvent,signInAsAdmin,switchTrip,tripList,unique} from './helpers.js';
+import {addFamily,addPerson,createTrip,mailsTo,openSection,planEvent,signInAsAdmin,switchTrip,tripList,unique,openExpenseForm} from './helpers.js';
 const iso=(days:number)=>{const d=new Date(Date.now()+days*86400_000);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
 const sheet=(page:Page)=>page.getByRole('dialog');
 const closed=(page:Page)=>expect(page.getByRole('dialog')).toHaveCount(0);
@@ -109,7 +109,7 @@ test('every entity can be created, changed and removed from the interface',async
 
  // Expenses: add, open, edit, void, find in voided, restore.
  await openSection(page,'Spend');
- const quick=page.locator('#quick-expense');
+ const quick=await openExpenseForm(page);
  await quick.getByLabel('What was it?').fill('Fish market');await quick.getByLabel('Amount in EUR').fill('40');
  await quick.getByLabel('Paid by').selectOption({label:'Costa'});
  const forOption=await quick.getByLabel('For').locator('option',{hasText:'Fish dinner'}).getAttribute('value');await quick.getByLabel('For').selectOption(forOption!);

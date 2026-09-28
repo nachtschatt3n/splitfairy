@@ -109,3 +109,8 @@ export async function nameIfAsked(page:Page,name:string){
  await expect(tripList(page).or(sheet).first()).toBeVisible();
  if(await sheet.isVisible()){await sheet.getByLabel('Your name').fill(name);await sheet.getByRole('button',{name:'Continue'}).click();await expect(sheet).toHaveCount(0);}
 }
+/** Opens the add-expense sheet on the Spend page and returns its form. */
+export async function openExpenseForm(page:Page){
+ await page.getByRole('region',{name:'Trip spending'}).getByRole('button',{name:'Add expense'}).click();
+ const form=page.locator('#quick-expense');await expect(form).toBeVisible();return form;
+}

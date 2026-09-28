@@ -4,6 +4,7 @@ import type {Event,Leg,Stay,Transport,Trip} from '../../../packages/domain/src/m
 import {Button,Sheet,cents,euro,fmt,uid,type Remove,type Save} from './common.js';
 import {TransportIcon} from './packing.js';
 import {StayCover,StayPhotos,type PhotoActions} from './photos.js';
+import {SplitEditor,compileSplit,initialSplit,type SplitState} from './split.js';
 
 export const tripDays=(trip:Trip)=>!trip.start||!trip.end?[]:Array.from({length:Math.min(62,Math.max(1,Math.round((new Date(`${trip.end}T12:00:00`).getTime()-new Date(`${trip.start}T12:00:00`).getTime())/86400000)+1))},(_,i)=>{const d=new Date(`${trip.start}T12:00:00`);d.setDate(d.getDate()+i);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;});
 const nightsBetween=(from:string,to:string)=>Math.max(0,Math.round((new Date(`${to}T12:00:00`).getTime()-new Date(`${from}T12:00:00`).getTime())/86400000));
@@ -11,26 +12,51 @@ const nights=(s:Stay)=>nightsBetween(s.from,s.to);
 const mapsLink=(address:string)=>`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 export const legLoad=(trip:Trip,leg:Leg)=>(trip.gear??[]).filter(g=>(g.route?.length?g.route:g.transportId?[g.transportId]:[]).includes(leg.transportId));
 
-/** A stay with its dates, times, address, notes and optional booking cost (created as a Stay expense). */
-export function StaySheet({trip,stay,day,save,remove,busy,photos,onPhoto,onClose}:{trip:Trip;stay?:Stay;day:string;save:Save;remove:Remove;busy:boolean;photos?:PhotoActions;onPhoto?:(index:number)=>void;onClose:()=>void}){
+/** Who may change an existing cost: organizers, or whoever added it. */
+export type Who={id:string;organizer:boolean};
+/** A stay with its dates, times, address, notes, who is staying, and an optional booking cost (kept as a Stay expense). */
+export function StaySheet({trip,stay,day,save,remove,busy,who,photos,onPhoto,onClose}:{trip:Trip;stay?:Stay;day:string;save:Save;remove:Remove;busy:boolean;who:Who;photos?:PhotoActions;onPhoto?:(index:number)=>void;onClose:()=>void}){
  const next=(d:string)=>{const x=new Date(`${d}T12:00:00`);if(Number.isNaN(x.getTime()))return d;x.setDate(x.getDate()+1);return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;};
  const [name,setName]=useState(stay?.name??''),[address,setAddress]=useState(stay?.address??''),[from,setFrom]=useState(stay?.from??day),[to,setTo]=useState(stay?.to??next(day));
  const [checkIn,setCheckIn]=useState(stay?.checkIn??''),[checkOut,setCheckOut]=useState(stay?.checkOut??''),[note,setNote]=useState(stay?.note??'');
- const linked=trip.expenses.find(e=>e.id===stay?.expenseId);
- const [cost,setCost]=useState(''),[payer,setPayer]=useState(trip.families[0]?.id??''),[error,setError]=useState('');
+ // Older stays have no guest list: they count as everyone.
+ const [staying,setStaying]=useState<string[]>(stay?.guests?.length?stay.guests.map(g=>g.id):trip.people.map(p=>p.id));
+ const linked=trip.expenses.find(e=>e.id===stay?.expenseId&&e.status==='posted');
+ // A cost that was reshaped in Spend (several items, payers or custom amounts) is left alone here.
+ const simple=!linked||(linked.lines.length===1&&linked.lines[0].splits.length===1&&!linked.lines[0].splits[0].eventId&&linked.payers.length===1);
+ const mayEdit=!linked||who.organizer||linked.authorId===who.id;
+ const [cost,setCost]=useState(linked?(linked.total/100).toFixed(2):''),[payer,setPayer]=useState(linked?.payers[0]?.familyId??''),[error,setError]=useState('');
+ const guestPeople=trip.people.filter(p=>staying.includes(p.id)),guests=guestPeople.map(p=>({id:p.id,weight:p.weight}));
+ const total=cost.trim()?cents(cost):0;
+ // The booking is split among the people staying; by their trip shares unless changed.
+ const [split,setSplit]=useState<SplitState>(()=>initialSplit(trip,guestPeople,simple?linked?.lines[0]?.splits[0]:null,'shares'));
+ const toggle=(id:string)=>{
+  const adding=!staying.includes(id),person=trip.people.find(p=>p.id===id);
+  setStaying(list=>adding?[...list,id]:list.filter(x=>x!==id));
+  // Someone who joins the stay also joins an equal split and starts with their trip share.
+  if(adding&&person)setSplit(s=>({...s,people:s.people.includes(id)?s.people:[...s.people,id],shares:s.shares[id]!==undefined?s.shares:{...s.shares,[id]:String(person.weight)}}));
+ };
  const submit=async(e:FormEvent)=>{
   e.preventDefault();setError('');
   if(!name.trim()){setError('Give the stay a name.');return;}
   if(to<from){setError('Check-out must be on or after the first night.');return;}
-  let expenseId=stay?.expenseId??null;
-  if(!linked&&cost.trim()){
-   const total=cents(cost);if(!Number.isSafeInteger(total)||total<=0){setError('Enter the booking cost like 480.00.');return;}
-   if(!payer||!trip.people.length){setError('Add people and choose who paid before adding a cost.');return;}
-   // The booking becomes a normal Stay expense shared by everyone, so it is settled like any other cost.
-   expenseId=uid();const everyone=trip.people.map(p=>({id:p.id,weight:p.weight}));
-   await save('expense',{id:expenseId,title:`Stay: ${name.trim()}`,date:from,category:'stay',total,payers:[{familyId:payer,amount:total}],lines:[{id:uid(),label:name.trim(),amount:total,splits:[{amount:total,eventId:null,weights:everyone,fixed:[]}]}],notes:'',receiptIds:[],status:'posted',version:0});
+  let expenseId=linked?.id??null;
+  if(simple&&mayEdit){
+   if(cost.trim()){
+    if(!Number.isSafeInteger(total)||total<=0){setError('Enter the booking cost like 480.00.');return;}
+    if(!payer){setError('Choose who paid the booking, or leave the cost empty.');return;}
+    if(!guests.length){setError('Choose who is staying, so the cost can be split.');return;}
+    const compiled=compileSplit(split,guestPeople,total,trip);if('error' in compiled){setError(compiled.error);return;}
+    // The booking is a normal Stay expense, split among the people staying.
+    const id=linked?.id??uid(),line=linked?.lines[0];
+    await save('expense',{id,title:`Stay: ${name.trim()}`,date:from,category:'stay',total,payers:[{familyId:payer,amount:total}],lines:[{id:line?.id??uid(),label:name.trim(),amount:total,splits:[{amount:total,eventId:null,...compiled}]}],notes:linked?.notes??'',receiptIds:linked?.receiptIds??[],status:'posted',version:linked?.version??0},linked);
+    expenseId=id;
+   }else if(linked){
+    // Clearing the cost voids the expense; it can be restored from Spend.
+    await save('expense',{...linked,status:'void'},linked);expenseId=null;
+   }
   }
-  await save('stay',{id:stay?.id??uid(),name:name.trim(),address:address.trim(),from,to,checkIn,checkOut,note:note.trim(),expenseId,version:stay?.version??0},stay);onClose();
+  await save('stay',{id:stay?.id??uid(),name:name.trim(),address:address.trim(),from,to,checkIn,checkOut,note:note.trim(),guests,expenseId,version:stay?.version??0},stay);onClose();
  };
  return <Sheet title={stay?`Edit ${stay.name}`:'Add a stay'} eyebrow="Where you sleep" onClose={onClose}>
   <form className="form-stack" onSubmit={submit}>
@@ -39,9 +65,18 @@ export function StaySheet({trip,stay,day,save,remove,busy,photos,onPhoto,onClose
    <div className="form-row"><label>First night<input type="date" value={from} min={trip.start} max={trip.end} onChange={e=>setFrom(e.target.value)} required/></label><label>Check-out day<input type="date" value={to} min={from} onChange={e=>setTo(e.target.value)} required/></label></div>
    <div className="form-row"><label>Check-in time<input type="time" value={checkIn} onChange={e=>setCheckIn(e.target.value)}/></label><label>Check-out time<input type="time" value={checkOut} onChange={e=>setCheckOut(e.target.value)}/></label></div>
    <label>Notes (optional)<input value={note} onChange={e=>setNote(e.target.value)} placeholder="Key box at the gate, code in the booking email"/></label>
-   {linked?<p className="helper">Booking cost: <strong>{euro(linked.total)}</strong>, recorded as the expense “{linked.title}”.</p>
-    :<div className="form-row"><label>Booking cost (optional)<input inputMode="decimal" value={cost} onChange={e=>setCost(e.target.value)} placeholder="480.00"/></label><label>Paid by<select value={payer} onChange={e=>setPayer(e.target.value)}>{trip.families.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></label></div>}
-   {!linked&&<p className="helper">The cost is added to Spend and shared by everyone on the trip. You can change the split there.</p>}
+   <fieldset><legend>Who is staying?</legend>
+    {trip.people.length?<>
+     <div className="chip-actions"><button type="button" className="text-button" onClick={()=>setStaying(trip.people.map(p=>p.id))}>Everyone</button><button type="button" className="text-button" onClick={()=>setStaying([])}>Nobody yet</button></div>
+     <div className="chip-list">{trip.people.map(p=><label key={p.id} className={staying.includes(p.id)?'chip checked':'chip'}><input type="checkbox" checked={staying.includes(p.id)} onChange={()=>toggle(p.id)}/>{p.name}</label>)}</div>
+    </>:<p className="helper">No people on the trip yet. You can add the stay now and choose who stays later.</p>}
+   </fieldset>
+   {simple&&mayEdit?<>
+    <div className="form-row"><label>Booking cost (optional)<input inputMode="decimal" value={cost} onChange={e=>setCost(e.target.value)} placeholder="480.00"/></label>
+     <label>Paid by (optional)<select value={payer} onChange={e=>setPayer(e.target.value)}><option value="">Not paid yet</option>{trip.families.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></label></div>
+    {total>0&&guestPeople.length>0?<SplitEditor trip={trip} people={guestPeople} total={total} value={split} onChange={setSplit} legend="How is the booking split?"/>
+     :<p className="helper">{linked?'Clear the cost to remove it from Spend (it is voided and can be restored).':'Add the cost and who paid to put it in Spend, split among the people staying.'}</p>}
+   </>:linked&&<p className="helper">Booking cost: <strong>{euro(linked.total)}</strong>, recorded as “{linked.title}”. {mayEdit?'It was changed in Spend, so edit it there.':'Only the organizer or whoever added it can change it, in Spend.'}</p>}
    {stay&&photos&&onPhoto?<StayPhotos trip={trip} stay={stay} actions={photos} onOpen={onPhoto}/>:!stay&&<p className="helper">You can add photos of the place once it's saved.</p>}
    {error&&<p className="form-error" role="alert">{error}</p>}
    <Button type="submit" disabled={busy}>{stay?'Save changes':'Add stay'} <ArrowRight size={17}/></Button>
@@ -122,7 +157,7 @@ export function StayCard({trip,stay,mode,onEdit,onPhoto}:{trip:Trip;stay:Stay;mo
  const title=mode==='checkin'?`Check in · ${stay.name}`:mode==='checkout'?`Check out · ${stay.name}`:`Staying at ${stay.name}`;
  return <article className={`tl-card stay ${mode}`} aria-label={title}>
   {mode==='checkin'&&onPhoto&&<StayCover trip={trip} stay={stay} onOpen={onPhoto}/>}
-  <div className="event-head">{mode==='staying'&&onPhoto&&<StayCover trip={trip} stay={stay} compact onOpen={onPhoto}/>}<div><span className="event-type">{mode==='checkout'?'Leaving':`${n} night${n===1?'':'s'}`}{cost?` · ${euro(cost.total)}`:''}</span><h3>{title}</h3>
+  <div className="event-head">{mode==='staying'&&onPhoto&&<StayCover trip={trip} stay={stay} compact onOpen={onPhoto}/>}<div><span className="event-type">{mode==='checkout'?'Leaving':`${n} night${n===1?'':'s'}`}{stay.guests?.length&&mode!=='checkout'?` · ${stay.guests.length} staying`:''}{cost?` · ${euro(cost.total)}`:''}</span><h3>{title}</h3>
    <p>{mode==='checkin'&&stay.checkIn?`From ${stay.checkIn}`:mode==='checkout'&&stay.checkOut?`By ${stay.checkOut}`:`${fmt(stay.from)} – ${fmt(stay.to)}`}{stay.note&&mode!=='staying'?` · ${stay.note}`:''}</p>
    {stay.address&&mode!=='staying'&&<a className="map-link" href={mapsLink(stay.address)} target="_blank" rel="noreferrer"><MapPin size={14}/> {stay.address}</a>}</div>
    <button type="button" className="icon-button subtle" aria-label={`Edit ${stay.name}`} onClick={onEdit}><Pencil size={16}/></button></div>
@@ -131,17 +166,20 @@ export function StayCard({trip,stay,mode,onEdit,onPhoto}:{trip:Trip;stay:Stay;mo
 
 /** Whole trip on one screen for wide layouts: stays as bars, travel days, and a dot per plan. */
 export function TripOverview({trip,day,onDay}:{trip:Trip;day:string;onDay:(d:string)=>void}){
- const days=tripDays(trip);const col=(d:string)=>Math.max(0,days.indexOf(d))+2;
+ // Two grid tracks per day: a stay runs from midday on its first night to midday on its check-out day,
+ // so a check-out and the next check-in share a day without overlapping.
+ const days=tripDays(trip);const at=(d:string)=>2+2*Math.max(0,days.indexOf(d));const col=(d:string)=>`${at(d)} / span 2`;
+ const stayColumns=(s:Stay)=>`${s.from<trip.start?2:at(s.from)+1} / ${s.to>trip.end?2+2*days.length:at(s.to)+1}`;
  return <section className="card overview" aria-label="Whole trip">
   <div className="card-head"><div><span className="eyebrow">{fmt(trip.start)} – {fmt(trip.end)}</span><h2>The whole trip</h2></div></div>
-  <div className="overview-scroll"><div className="overview-grid" style={{gridTemplateColumns:`84px repeat(${days.length},minmax(46px,1fr))`}}>
+  <div className="overview-scroll"><div className="overview-grid" style={{gridTemplateColumns:`84px repeat(${days.length*2},minmax(23px,1fr))`}}>
    <span/>
-   {days.map(d=><button key={d} type="button" className={d===day?'ov-day on':'ov-day'} onClick={()=>onDay(d)} aria-label={`Open ${fmt(d)}`}><small>{new Date(`${d}T12:00:00`).toLocaleDateString('en-GB',{weekday:'short'})}</small><strong>{Number(d.slice(-2))}</strong></button>)}
-   <span className="ov-lane">Stays</span>
-   {(trip.stays??[]).filter(s=>s.to>trip.start&&s.from<=trip.end).map((s,i)=><span key={s.id} className={`ov-stay c${i%3}`} style={{gridColumn:`${col(s.from<trip.start?trip.start:s.from)} / ${Math.min(days.length+2,col(s.to>trip.end?trip.end:s.to)+(s.to>trip.end?1:0))}`,gridRow:2}} title={`${s.name}: ${nights(s)} nights`}><BedDouble size={13}/> {s.name}</span>)}
-   <span className="ov-lane" style={{gridRow:3}}>Travel</span>
+   {days.map(d=><button key={d} type="button" style={{gridColumn:col(d),gridRow:1}} className={d===day?'ov-day on':'ov-day'} onClick={()=>onDay(d)} aria-label={`Open ${fmt(d)}`}><small>{new Date(`${d}T12:00:00`).toLocaleDateString('en-GB',{weekday:'short'})}</small><strong>{Number(d.slice(-2))}</strong></button>)}
+   <span className="ov-lane" style={{gridColumn:1,gridRow:2}}>Stays</span>
+   {(trip.stays??[]).filter(s=>s.to>trip.start&&s.from<=trip.end).map((s,i)=><span key={s.id} className={`ov-stay c${i%3}`} style={{gridColumn:stayColumns(s),gridRow:2}} title={`${s.name}: ${nights(s)} nights`}><BedDouble size={13}/> {s.name}</span>)}
+   <span className="ov-lane" style={{gridColumn:1,gridRow:3}}>Travel</span>
    {days.map(d=>{const legs=(trip.legs??[]).filter(l=>l.departDate===d);return <span key={d} className="ov-travel" style={{gridColumn:col(d),gridRow:3}}>{legs.slice(0,3).map(l=>{const v=(trip.transport??[]).find(t=>t.id===l.transportId);return <TransportIcon key={l.id} kind={v?.kind??'other'} size={14}/>;})}</span>;})}
-   <span className="ov-lane" style={{gridRow:4}}>Plans</span>
+   <span className="ov-lane" style={{gridColumn:1,gridRow:4}}>Plans</span>
    {days.map(d=><span key={d} className="ov-plans" style={{gridColumn:col(d),gridRow:4}}>{trip.events.filter(e=>e.date===d).slice(0,4).map(e=><i key={e.id} className={e.kind==='activity'?'act':''}/>)}</span>)}
   </div></div>
  </section>;

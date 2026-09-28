@@ -222,3 +222,22 @@ describe('photos of places',()=>{
   expect(readdirSync(join(dataDir,'photos',trip.id))).toEqual([]);
  });
 });
+describe('restaurant address lookup',()=>{
+ it('asks the place search with the name and returns up to five places, only for signed-in people',async()=>{
+  const {createServer}=await import('node:http');const seen:string[]=[];
+  const server=createServer((req,res)=>{seen.push(`${req.url} ${req.headers['user-agent']}`);res.setHeader('content-type','application/json');res.end(JSON.stringify(Array.from({length:7},(_,i)=>({name:i?'':'Tasca do Chico',display_name:i?`Tasca ${i}, Rua do Diário de Notícias 39, Lisboa`:'Tasca do Chico, 39, Rua do Diário de Notícias, Lisboa'}))));});
+  await new Promise<void>(r=>server.listen(0,'127.0.0.1',()=>r()));const port=(server.address() as {port:number}).port;
+  const store=new Store(new DatabaseSync(':memory:'));let mailed='';
+  const a=await createApp({store,adminEmail:'admin@example.com',secret:'a very long integration test secret',sendMail:async(_to,_s,body)=>{mailed=body;},dataDir:'/tmp/splitfairy-api-tests',startWorker:false,placesUrl:`http://127.0.0.1:${port}/search`});
+  await a.inject({method:'POST',url:'/api/v1/auth/request',payload:{email:'admin@example.com'}});
+  const cookie=(await a.inject({method:'POST',url:'/api/v1/auth/verify',payload:{email:'admin@example.com',code:mailed.match(/\b\d{6}\b/)![0],name:'A'}})).cookies.find(c=>c.name==='splitfairy_session')!.value;
+  expect((await a.inject({method:'GET',url:'/api/v1/places?q=Tasca%20do%20Chico'})).statusCode).toBe(401);
+  const found=await a.inject({method:'GET',url:'/api/v1/places?q=Tasca%20do%20Chico%20Lisboa',headers:{cookie:`splitfairy_session=${cookie}`}});
+  expect(found.statusCode).toBe(200);expect(found.json()).toHaveLength(5);
+  expect(found.json()[0]).toEqual({name:'Tasca do Chico',address:'39, Rua do Diário de Notícias, Lisboa'});
+  expect(found.json()[1].name).toBe('Tasca 1');
+  expect(seen[0]).toMatch(/q=Tasca\+do\+Chico\+Lisboa.*format=jsonv2.*limit=5.* Splitfairy/);
+  expect((await a.inject({method:'GET',url:'/api/v1/places?q=ab',headers:{cookie:`splitfairy_session=${cookie}`}})).statusCode).toBe(400);
+  server.close();
+ });
+});

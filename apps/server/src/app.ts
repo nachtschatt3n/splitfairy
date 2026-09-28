@@ -17,7 +17,7 @@ const emailSchema=z.string().trim().pipe(z.email()).transform(v=>v.toLowerCase()
 const inviteSchema=z.object({email:emailSchema,role:z.enum(['organizer','member']).default('member')});
 const codeSchema=z.object({email:emailSchema,code:z.string().max(40).transform(v=>v.replace(/\D/g,'')).pipe(z.string().regex(/^\d{6}$/)),name:z.string().trim().max(80).optional()});
 export type Mail=(to:string,subject:string,text:string,html?:string)=>Promise<void>;
-export type Config={store:Store;adminEmail:string;secret:string;sendMail:Mail;dataDir:string;startWorker?:boolean;secureCookies?:boolean;ollamaUrl?:string;ollamaModel?:string;logLevel?:string;/** Multiplies the per-IP sign-in limits; only the browser test server raises it. */authRateLimitFactor?:number};
+export type Config={/** Nominatim-compatible search for restaurant addresses; empty turns lookup off. */placesUrl?:string;store:Store;adminEmail:string;secret:string;sendMail:Mail;dataDir:string;startWorker?:boolean;secureCookies?:boolean;ollamaUrl?:string;ollamaModel?:string;logLevel?:string;/** Multiplies the per-IP sign-in limits; only the browser test server raises it. */authRateLimitFactor?:number};
 export function codeHash(secret:string,email:string,code:string){return createHmac('sha256',secret).update(`${email}:${code}`).digest('hex');}
 export async function createApp(config:Config):Promise<FastifyInstance>{
  const app=Fastify({logger:config.logLevel?{level:config.logLevel}:false,logController:new LogController({disableRequestLogging:true}),bodyLimit:16_000_000,trustProxy:true});
@@ -50,6 +50,19 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
  });
  app.get('/healthz',async()=>({ok:true}));
  app.get('/readyz',async()=>{config.store.db.prepare('SELECT 1').get();return {ok:true};});
+ // Address lookup for restaurants, via OpenStreetMap Nominatim (one request per search, as its usage policy asks).
+ app.get('/api/v1/places',{config:{rateLimit:{max:30,timeWindow:'1 minute'}}},async(request,reply)=>{
+  auth(request);const q=z.string().trim().min(3).max(200).parse((request.query as {q?:string}).q);
+  if(!config.placesUrl){reply.status(503);return {error:'Address lookup is not available'};}
+  const url=new URL(config.placesUrl);url.searchParams.set('q',q);url.searchParams.set('format','jsonv2');url.searchParams.set('limit','5');url.searchParams.set('addressdetails','0');
+  try{
+   const response=await fetch(url,{headers:{'User-Agent':'Splitfairy (self-hosted trip planner)','Accept-Language':'en'},signal:AbortSignal.timeout(8000)});
+   if(!response.ok)throw new Error(String(response.status));
+   const rows=z.array(z.object({name:z.string().optional().default(''),display_name:z.string(),lat:z.string().optional(),lon:z.string().optional()}).loose()).parse(await response.json());
+   // Nominatim repeats the place's name at the start of the address; keep the address itself.
+   return rows.slice(0,5).map(r=>{const name=r.name||r.display_name.split(',')[0];const address=r.display_name.startsWith(`${name}, `)?r.display_name.slice(name.length+2):r.display_name;return {name,address};});
+  }catch{reply.status(502);return {error:'Address lookup failed; type the address instead'};}
+ });
  app.get('/api/v1/me',async(request)=>{try{return auth(request);}catch{return null;}});
  app.post('/api/v1/auth/request',{config:{rateLimit:{max:5*(config.authRateLimitFactor??1),timeWindow:'15 minutes'}}},async(request)=>{
   const {email}=z.object({email:emailSchema}).parse(request.body);

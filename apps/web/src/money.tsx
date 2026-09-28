@@ -1,4 +1,5 @@
 import {useState,type FormEvent} from 'react';
+import {SplitEditor,compileSplit,describeSplit,initialSplit,type SplitState} from './split.js';
 import {ArrowRight,Pencil,RotateCcw} from 'lucide-react';
 import type {Expense,Payment,Trip,User} from '../../../packages/domain/src/model.js';
 import {Button,Sheet,cents,euro,fmt,money,today,uid,type Remove,type Save} from './common.js';
@@ -7,25 +8,29 @@ const CATEGORIES:[Expense['category'],string][]=[['food','Food'],['activity','Ac
 const familyName=(trip:Trip,id:string)=>trip.families.find(f=>f.id===id)?.name??'Removed family';
 export const canChange=(trip:Trip,user:User|null|undefined,role:string,item:{authorId:string})=>role==='organizer'||item.authorId===user?.id;
 
-/** A single-line, single-split expense without fixed amounts can be edited completely; anything richer keeps its split. */
-function simpleSplit(e:Expense){const split=e.lines.length===1&&e.lines[0].splits.length===1?e.lines[0].splits[0]:null;return split&&!split.fixed.length&&!e.receiptIds.length?split:null;}
+/** A single-line, single-split expense (not from a receipt) can be edited completely, split options included; anything richer keeps its split. */
+function simpleSplit(e:Expense){const split=e.lines.length===1&&e.lines[0].splits.length===1?e.lines[0].splits[0]:null;return split&&!e.receiptIds.length?split:null;}
 
 export function ExpenseSheet({trip,expense,editable,save,busy,onClose}:{trip:Trip;expense:Expense;editable:boolean;save:Save;busy:boolean;onClose:()=>void}){
  const split=simpleSplit(expense),singlePayer=expense.payers.length===1;
  const [editing,setEditing]=useState(false),[error,setError]=useState('');
- const [title,setTitle]=useState(expense.title),[date,setDate]=useState(expense.date),[category,setCategory]=useState(expense.category);
+ const [notes,setNotes]=useState(expense.notes??''),[title,setTitle]=useState(expense.title),[date,setDate]=useState(expense.date),[category,setCategory]=useState(expense.category);
  const [amount,setAmount]=useState(money(Math.abs(expense.total))),[payer,setPayer]=useState(expense.payers[0]?.familyId??'');
- const [eventId,setEventId]=useState(split?.eventId??''),[people,setPeople]=useState<string[]>(split?.weights.map(w=>w.id)??[]);
+ const [eventId,setEventId]=useState(split?.eventId??''),[splitState,setSplitState]=useState<SplitState>(()=>initialSplit(trip,trip.people,split));
+ // Who in each family owes what (family-level amounts, e.g. "by family", have no person).
+ const perPerson=trip.people.map(p=>({name:p.name,familyId:p.familyId,amount:expense.allocations.filter(a=>a.personId===p.id).reduce((n,a)=>n+a.amount,0)})).filter(p=>p.amount);
  const shares=trip.families.map(f=>({id:f.id,amount:expense.allocations.filter(a=>a.familyId===f.id).reduce((n,a)=>n+a.amount,0)})).filter(s=>s.amount);
  const submit=async(e:FormEvent)=>{
   e.preventDefault();setError('');
-  const sign=Math.sign(expense.total)||1;let next:Expense={...expense,title:title.trim()||expense.title,date,category};
+  const sign=Math.sign(expense.total)||1;let next:Expense={...expense,title:title.trim()||expense.title,date,category,notes:notes.trim()};
   if(split){
    const total=cents(amount)*sign;if(!Number.isSafeInteger(total)||!total){setError('Enter a valid amount.');return;}
    const ev=trip.events.find(x=>x.id===eventId);
-   const weights=ev?ev.participants:trip.people.filter(p=>people.includes(p.id)).map(p=>({id:p.id,weight:p.weight}));
-   if(!weights.length){setError(ev?'Nobody has joined that plan yet.':'Choose at least one person.');return;}
-   next={...next,total,payers:[{familyId:payer,amount:total}],lines:[{...expense.lines[0],label:next.title,amount:total,splits:[{amount:total,eventId:ev?.id??null,eventVersion:ev?.version,weights,fixed:[]}]}]};
+   const compiled=ev?{weights:ev.participants,fixed:[],personFixed:[],mode:undefined}:compileSplit(splitState,trip.people,total,trip);
+   if('error' in compiled){setError(compiled.error);return;}if(ev&&!ev.participants.length){setError('Nobody has joined that plan yet.');return;}
+   const payers=singlePayer?[{familyId:payer,amount:total}]:expense.payers;
+   if(payers.reduce((n,p)=>n+p.amount,0)!==total){setError('Several families paid this one; keep the amount or void it and add it again.');return;}
+   next={...next,total,payers,lines:[{...expense.lines[0],label:next.title,amount:total,splits:[{amount:total,eventId:ev?.id??null,eventVersion:ev?.version,...compiled}]}]};
   }else if(singlePayer)next={...next,payers:[{familyId:payer,amount:expense.total}]};
   const {allocations:_a,authorId:_b,...value}=next;
   await save('expense',value,expense);onClose();
@@ -33,9 +38,10 @@ export function ExpenseSheet({trip,expense,editable,save,busy,onClose}:{trip:Tri
  const setStatus=async(status:Expense['status'])=>{const {allocations:_a,authorId:_b,...value}=expense;await save('expense',{...value,status},expense);onClose();};
  return <Sheet title={expense.title} eyebrow={expense.status==='void'?'Voided expense':'Expense'} onClose={onClose}>
   {!editing?<div className="detail">
-   <dl className="facts"><div><dt>Amount</dt><dd>{euro(expense.total)}</dd></div><div><dt>Date</dt><dd>{fmt(expense.date)}</dd></div><div><dt>Paid by</dt><dd>{expense.payers.map(p=>`${familyName(trip,p.familyId)}${expense.payers.length>1?` ${euro(p.amount)}`:''}`).join(', ')}</dd></div><div><dt>Category</dt><dd>{CATEGORIES.find(([c])=>c===expense.category)?.[1]}</dd></div></dl>
+   <dl className="facts"><div><dt>Amount</dt><dd>{euro(expense.total)}</dd></div><div><dt>Date</dt><dd>{fmt(expense.date)}</dd></div><div><dt>Paid by</dt><dd>{expense.payers.map(p=>`${familyName(trip,p.familyId)}${expense.payers.length>1?` ${euro(p.amount)}`:''}`).join(', ')}</dd></div><div><dt>Category</dt><dd>{CATEGORIES.find(([c])=>c===expense.category)?.[1]}</dd></div><div className="wide"><dt>Split</dt><dd>{describeSplit(trip,expense).replace(/^./,c=>c.toUpperCase())}</dd></div></dl>
+   {expense.notes&&<p className="event-notes expense-notes">{expense.notes}</p>}
    {expense.lines.length>1&&<div className="detail-block"><h3>Items</h3>{expense.lines.map(l=><div className="detail-row" key={l.id}><span>{l.label}<small>{l.splits.map(s=>s.eventId?trip.events.find(x=>x.id===s.eventId)?.title??'Removed plan':'Everyone').join(', ')}</small></span><b>{euro(l.amount)}</b></div>)}</div>}
-   {expense.status!=='void'&&<div className="detail-block"><h3>Who pays what</h3>{shares.map(s=><div className="detail-row" key={s.id}><span>{familyName(trip,s.id)}</span><b>{euro(s.amount)}</b></div>)}</div>}
+   {expense.status!=='void'&&<div className="detail-block"><h3>Who pays what</h3>{shares.map(s=>{const members=perPerson.filter(p=>p.familyId===s.id);return <div className="detail-row" key={s.id}><span>{familyName(trip,s.id)}{members.length>0&&<small>{members.map(m=>`${m.name} ${euro(m.amount)}`).join(' · ')}</small>}</span><b>{euro(s.amount)}</b></div>;})}</div>}
    {editable?<div className="sheet-actions">
     {expense.status!=='void'&&<Button onClick={()=>setEditing(true)}><Pencil size={16}/> Edit</Button>}
     {expense.status!=='void'?<Button kind="ghost" disabled={busy} onClick={()=>{if(window.confirm(`Void ${expense.title}? It leaves the balances but stays in the history, and you can restore it.`))void setStatus('void');}}>Void expense</Button>
@@ -44,11 +50,12 @@ export function ExpenseSheet({trip,expense,editable,save,busy,onClose}:{trip:Tri
   </div>:<form className="form-stack" onSubmit={submit}>
    <label>What was it?<input value={title} onChange={e=>setTitle(e.target.value)} required/></label>
    <div className="form-row"><label>Date<input type="date" value={date} onChange={e=>setDate(e.target.value)} required/></label><label>Category<select value={category} onChange={e=>setCategory(e.target.value as Expense['category'])}>{CATEGORIES.map(([c,l])=><option key={c} value={c}>{l}</option>)}</select></label></div>
+   <label>Notes (optional)<textarea rows={2} maxLength={2000} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Tip included, paid by card"/></label>
    {split&&<label>Amount in EUR{expense.total<0?' (refund)':''}<input inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} required/></label>}
    {singlePayer&&<label>Paid by<select value={payer} onChange={e=>setPayer(e.target.value)}>{trip.families.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></label>}
    {split&&<><label>For<select value={eventId} onChange={e=>setEventId(e.target.value)}><option value="">General expense</option>{trip.events.map(x=><option key={x.id} value={x.id} disabled={!x.participants.length}>{x.title} · {fmt(x.date)}</option>)}</select></label>
-    {!eventId&&<fieldset><legend>Shared by</legend><div className="chip-list">{trip.people.map(p=><label key={p.id} className={people.includes(p.id)?'chip checked':'chip'}><input type="checkbox" checked={people.includes(p.id)} onChange={()=>setPeople(x=>x.includes(p.id)?x.filter(i=>i!==p.id):[...x,p.id])}/>{p.name}</label>)}</div></fieldset>}</>}
-   {!split&&<p className="helper">{expense.receiptIds.length?'Items from a scanned receipt keep their split. To change them, void this expense and review the receipt again.':'This expense uses a custom split. To change amounts or shares, void it and add it again.'}</p>}
+    {!eventId&&<SplitEditor trip={trip} people={trip.people} total={(Math.sign(expense.total)||1)*(amount.trim()?cents(amount):0)} value={splitState} onChange={setSplitState}/>}</>}
+   {!split&&<p className="helper">{expense.receiptIds.length?'Items from a scanned receipt keep their split. To change them, void this expense and review the receipt again.':'This expense has several items. To change their split, void it and add it again.'}</p>}
    {error&&<p className="form-error" role="alert">{error}</p>}
    <Button type="submit" disabled={busy}>Save changes <ArrowRight size={17}/></Button>
    <Button kind="ghost" onClick={()=>setEditing(false)}>Cancel</Button>
