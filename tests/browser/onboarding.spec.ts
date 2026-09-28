@@ -16,9 +16,8 @@ test('invited traveler enters a code and reaches a trip dashboard',async({page})
  await page.getByLabel('Email address').fill('andrea@example.com');
  await page.getByRole('button',{name:'Email me a code'}).click();
  await page.getByLabel('Your six-digit code').fill('123456');
- await page.getByLabel('Your name').fill('Andrea');
- await page.getByRole('button',{name:'Start planning'}).click();
- await page.locator('.trip-switch select').selectOption('t');
+ await page.getByRole('button',{name:'Sign in'}).click();
+ await page.locator('.trip-card',{hasText:'Summer in Italy'}).click();
  await expect(page.getByText("Here's what's happening in Summer in Italy.")).toBeVisible();
  if(process.env.SCREENSHOT_PATH) await page.screenshot({path:process.env.SCREENSHOT_PATH,fullPage:true});
 });
@@ -29,8 +28,8 @@ test('a code already in the inbox can be used without requesting another',async(
  await page.getByLabel('Email address').fill('a@example.com');
  await page.getByRole('button',{name:'I already have a code'}).click();
  await page.getByLabel('Your six-digit code').fill('123456');
- await page.getByRole('button',{name:'Start planning'}).click();
- await expect(page.getByText('Every shared trip')).toBeVisible();
+ await page.getByRole('button',{name:'Sign in'}).click();
+ await expect(page.getByRole('region',{name:'Your trips'})).toBeVisible();
  expect(requested).toBe(0);
 });
 test('a hung start-up offers a reload instead of spinning forever',async({page})=>{

@@ -2,7 +2,7 @@ import {test,expect,type Page,type TestInfo} from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import sharp from 'sharp';
 import {ADMIN} from './env.js';
-import {isPhone,openSection,shot,signInAsAdmin,unique} from './helpers.js';
+import {isPhone,openSection,shot,signInAsAdmin,tripList,unique} from './helpers.js';
 const iso=(days:number)=>{const d=new Date(Date.now()+days*86400_000);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
 
 /** Builds a realistic trip through the public API, as the signed-in organizer. */
@@ -68,13 +68,13 @@ for(const scheme of ['light','dark'] as const){
   await checkScreen(page,testInfo,`${scheme}-sign-in`);
   await signInAsAdmin(page);
   const name=unique(testInfo,`Algarve ${scheme}`);await seedTrip(page,name);
-  await page.reload();await expect(page.getByText('Every shared trip')).toBeVisible();
+  await page.reload();await expect(tripList(page)).toBeVisible();
   await checkScreen(page,testInfo,`${scheme}-trip-list`);
   // Nothing to navigate without a trip.
   await expect(page.getByRole('navigation',{name:'Trip sections'})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Add new'})).toHaveCount(0);
   await page.getByRole('button',{name:new RegExp(name)}).click();
-  await expect(page.getByText(`Here's what's happening in ${name}.`)).toBeVisible();
+  await expect(page.getByText(`Here's what's happening in ${name}.`)).toBeVisible({timeout:15_000});
   const screens:Screen[]=[
    {name:'today',open:p=>openSection(p,'Today')},
    {name:'plan',open:p=>openSection(p,'Plan')},

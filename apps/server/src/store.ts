@@ -24,6 +24,7 @@ export class Store{
  }
  resetForTests(){this.db.exec('DELETE FROM auth_throttle;DELETE FROM expense_revisions;DELETE FROM mutations;DELETE FROM sessions;DELETE FROM codes;DELETE FROM invites;DELETE FROM memberships;DELETE FROM trips;DELETE FROM users;');}
  addUser(user:User){this.db.prepare('INSERT INTO users(id,email,name,admin) VALUES(?,?,?,?) ON CONFLICT(email) DO UPDATE SET name=excluded.name').run(user.id,user.email.toLowerCase(),user.name,user.admin?1:0);}
+ renameUser(id:string,name:string){this.db.prepare('UPDATE users SET name=? WHERE id=?').run(name,id);}
  userByEmail(email:string):User|null{const row=this.db.prepare('SELECT * FROM users WHERE email=?').get(email.toLowerCase()) as any;return row?{id:row.id,email:row.email,name:row.name,admin:!!row.admin}:null;}
  userById(id:string):User|null{const row=this.db.prepare('SELECT * FROM users WHERE id=?').get(id) as any;return row?{id:row.id,email:row.email,name:row.name,admin:!!row.admin}:null;}
  canLogin(email:string,adminEmail:string){return email.toLowerCase()===adminEmail.toLowerCase() || !!this.db.prepare('SELECT 1 FROM users WHERE email=?').get(email.toLowerCase()) || !!this.db.prepare('SELECT 1 FROM invites WHERE email=?').get(email.toLowerCase());}

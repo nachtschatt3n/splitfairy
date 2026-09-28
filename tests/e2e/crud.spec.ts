@@ -1,10 +1,10 @@
 import {test,expect,type Page} from '@playwright/test';
 import {ADMIN} from './env.js';
-import {addFamily,addPerson,createTrip,mailsTo,openSection,planEvent,signInAsAdmin,switchTrip,unique} from './helpers.js';
+import {addFamily,addPerson,createTrip,mailsTo,openSection,planEvent,signInAsAdmin,switchTrip,tripList,unique} from './helpers.js';
 const iso=(days:number)=>{const d=new Date(Date.now()+days*86400_000);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
 const sheet=(page:Page)=>page.getByRole('dialog');
 const closed=(page:Page)=>expect(page.getByRole('dialog')).toHaveCount(0);
-async function toTripList(page:Page){const chip=page.getByRole('button',{name:/Switch trip/});if(await chip.isVisible())await chip.click();else await page.getByLabel('Current trip').selectOption({label:'All trips'});await expect(page.getByText('Every shared trip')).toBeVisible();}
+async function toTripList(page:Page){const chip=page.getByRole('button',{name:/Switch trip/});if(await chip.isVisible())await chip.click();else await page.getByLabel('Current trip').selectOption({label:'All trips'});await expect(tripList(page)).toBeVisible();}
 test.describe.configure({mode:'serial'});
 
 test('every entity can be created, changed and removed from the interface',async({page},testInfo)=>{
@@ -167,7 +167,7 @@ test('every entity can be created, changed and removed from the interface',async
  await toTripList(page);
  const empty=unique(testInfo,'Empty');await createTrip(page,empty,iso(30),iso(31));
  await openSection(page,'People');await page.getByRole('button',{name:'Edit trip'}).click();await sheet(page).getByRole('button',{name:'Delete trip'}).click();
- await expect(page.getByText('Every shared trip')).toBeVisible();await expect(page.getByRole('button',{name:new RegExp(empty)})).toHaveCount(0);
+ await expect(tripList(page)).toBeVisible();await expect(page.getByRole('button',{name:new RegExp(empty)})).toHaveCount(0);
 
  // Signing out ends the session on the server, not just in the browser.
  const cookie=(await page.context().cookies()).find(c=>c.name==='splitfairy_session')!.value;
