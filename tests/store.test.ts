@@ -82,3 +82,38 @@ describe('receipt lifecycle',()=>{
   expect(()=>store.mutate(actor,tripId,{mutationId:'r7',entity:'person',action:'delete',expectedVersion:1,value:{id:'p1'}})).toThrow(/planned events/);
  });
 });
+describe('review fixes',()=>{
+ const member={id:'u2',email:'b@example.com',name:'B',admin:false};
+ function base(){
+  store.addUser(actor);store.addUser(member);const trip=store.createTrip(actor,'Italy','2026-10-01','2026-10-09');store.addMember(actor,trip.id,member.email,'member');
+  store.mutate(actor,trip.id,cmd('family',{id:'f1',name:'A',version:0},0,'b1'));
+  store.mutate(actor,trip.id,cmd('family',{id:'f2',name:'B',version:0},0,'b2'));
+  store.mutate(actor,trip.id,cmd('person',{id:'p1',name:'Ann',familyId:'f1',weight:1,version:0},0,'b3'));
+  return trip.id;
+ }
+ it('only lets the author or an organizer delete a repayment',()=>{
+  const id=base();
+  store.mutate(actor,id,cmd('payment',{id:'pay',from:'f2',to:'f1',amount:500,date:'2026-10-02',version:0},0,'b4'));
+  expect(()=>store.mutate(member,id,{mutationId:'b5',entity:'payment',action:'delete',expectedVersion:1,value:{id:'pay'}})).toThrow(/Access denied/);
+  expect(store.getTrip(actor,id).payments).toHaveLength(1);
+ });
+ it('validates repayment fields strictly',()=>{
+  const id=base();
+  expect(()=>store.mutate(member,id,cmd('payment',{id:'x'.repeat(5000),from:'f2',to:'f1',amount:5,date:'2026-10-02',version:0},0,'b6'))).toThrow();
+  expect(()=>store.mutate(member,id,cmd('payment',{id:'p',from:'f2',to:'f1',amount:5,date:'soon',version:0},0,'b7'))).toThrow();
+ });
+ it('lets an organizer unarchive a trip',()=>{
+  const id=base();
+  const t=store.mutate(actor,id,{mutationId:'b8',entity:'trip',action:'save',expectedVersion:store.getTrip(actor,id).version,value:{archived:true}});
+  expect(store.mutate(actor,id,{mutationId:'b9',entity:'trip',action:'save',expectedVersion:t.version,value:{archived:false}}).archived).toBe(false);
+ });
+ it('voids an event expense after the event changed, and keeps paying families',()=>{
+  const id=base();
+  store.mutate(actor,id,cmd('event',{id:'e1',title:'Dinner',date:'2026-10-01',kind:'dinner',owner:'',notes:'',participants:[{id:'p1',weight:1}],version:0},0,'c1'));
+  const expense={id:'x',title:'Dinner',date:'2026-10-01',category:'food',total:100,payers:[{familyId:'f2',amount:100}],lines:[{id:'l',label:'Dinner',amount:100,splits:[{amount:100,eventId:'e1',eventVersion:1,weights:[{id:'p1',weight:1}],fixed:[]}]}],notes:'',receiptIds:[],status:'posted',version:0};
+  store.mutate(actor,id,cmd('expense',expense,0,'c2'));
+  store.mutate(actor,id,cmd('event',{id:'e1',title:'Dinner',date:'2026-10-01',kind:'dinner',owner:'',notes:'',participants:[],version:1},1,'c3'));
+  expect(()=>store.mutate(actor,id,{mutationId:'c4',entity:'family',action:'delete',expectedVersion:1,value:{id:'f2'}})).toThrow(/in use/);
+  expect(store.mutate(actor,id,cmd('expense',{...expense,status:'void'},1,'c5')).expenses[0].status).toBe('void');
+ });
+});

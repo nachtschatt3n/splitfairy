@@ -12,7 +12,21 @@ class OfflineDb extends Dexie{
 }
 export const localDb=new OfflineDb();
 export class SessionExpired extends Error{constructor(){super('Please sign in again to sync your changes.');}}
-let lastSeq=0;
+let lastSeq=0,rejectedPhotos=0;
+/** Photos dropped because the server refused them since the last call; lets the UI tell the user once. */
+export function takeRejectedPhotos(){const n=rejectedPhotos;rejectedPhotos=0;return n;}
+/** Everything still only on this device, across all trips. */
+export async function unsyncedCount(){return (await localDb.outbox.count())+(await localDb.photos.count());}
+/** Shrinks camera photos before storing or sending them: receipts stay legible at 2000px. */
+export async function shrinkPhoto(file:File):Promise<File>{
+ try{
+  const bitmap=await createImageBitmap(file);const scale=Math.min(1,2000/Math.max(bitmap.width,bitmap.height));
+  const canvas=new OffscreenCanvas(Math.round(bitmap.width*scale),Math.round(bitmap.height*scale));
+  canvas.getContext('2d')!.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();
+  const blob=await canvas.convertToBlob({type:'image/jpeg',quality:.85});
+  return new File([blob],file.name.replace(/\.\w+$/,'')+'.jpg',{type:'image/jpeg'});
+ }catch{return file;}
+}
 /** Monotonic ordering key so offline edits replay in the order they were made (IDs are random UUIDs). */
 export function nextSeq(now=Date.now()){lastSeq=Math.max(now*1000,lastSeq+1);return lastSeq;}
 export function replayOrder<T extends {seq?:number}>(entries:T[]):T[]{return [...entries].sort((a,b)=>(a.seq??0)-(b.seq??0));}
@@ -39,7 +53,11 @@ export function syncTrip(tripId:string):Promise<TripView>{
 async function replay(tripId:string):Promise<TripView>{
  try{
   const photos=await localDb.photos.where('tripId').equals(tripId).toArray();
-  for(const photo of photos){await api.receipt(tripId,photo.file,photo.id);await localDb.photos.delete(photo.id);}
+  for(const photo of photos){
+   try{await api.receipt(tripId,photo.file,photo.id);await localDb.photos.delete(photo.id);}
+   // A photo the server refuses (unreadable, too large) must not hold back every later edit.
+   catch(error){if(classifyFailure(error)!=='rejected')throw error;await localDb.photos.delete(photo.id);rejectedPhotos++;}
+  }
   for(const entry of await pendingFor(tripId)){
    if(entry.state!=='pending')continue;
    try{const view=await api.command(tripId,entry.command);await saveTrip(view);await localDb.outbox.delete(entry.id);}

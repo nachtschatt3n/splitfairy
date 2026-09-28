@@ -7,6 +7,7 @@ export const familySchema=z.object({id,name:z.string().trim().min(1).max(80),ver
 export const personSchema=z.object({id,name:z.string().trim().min(1).max(80),familyId:id,weight,version});
 export const weightedSchema=z.object({id,weight});
 export const eventSchema=z.object({id,title:z.string().trim().min(1).max(160),date:z.iso.date(),kind:z.enum(['breakfast','lunch','dinner','activity']),owner:z.string().max(80).default(''),notes:z.string().max(2000).default(''),participants:z.array(weightedSchema).max(100),version});
+export const paymentSchema=z.object({id,from:id,to:id,amount:money.positive(),date:z.iso.date(),version});
 export const shoppingSchema=z.object({id,text:z.string().trim().min(1).max(200),eventId:id.nullable(),done:z.boolean(),version});
 export const splitSchema=z.object({amount:money,eventId:id.nullable().default(null),eventVersion:z.number().int().optional(),weights:z.array(weightedSchema).max(100),fixed:z.array(z.object({familyId:id,amount:money})).default([])});
 export const lineSchema=z.object({id,label:z.string().min(1).max(300),amount:money,splits:z.array(splitSchema).max(100)});

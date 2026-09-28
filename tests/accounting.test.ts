@@ -27,3 +27,18 @@ describe('settlement',()=>{
  it('repayments reduce debt, not expenses',()=>expect(balances(['A','B'],[{total:100,payers:[{familyId:'A',amount:100}],allocations:[{personId:null,familyId:'B',amount:100}]}],[{from:'B',to:'A',amount:40}])).toEqual({A:60,B:-60}));
  it('rejects nonconserving balances',()=>expect(()=>settle({a:100,b:-99})).toThrow());
 });
+describe('settlement cost',()=>{
+ it('stays fast for 15 families and labels a budget-limited plan',()=>{
+  let seed=7;const rand=()=>(seed=(seed*1103515245+12345)%2147483648)/2147483648;
+  for(let round=0;round<5;round++){
+   const input:Record<string,number>={};let sum=0;
+   for(let i=0;i<14;i++){const v=Math.round((rand()-.5)*100000);input[`f${i}`]=v;sum+=v;}
+   input.f14=-sum;
+   const started=performance.now();const result=settle(input);
+   expect(performance.now()-started).toBeLessThan(1500);
+   const b={...input};for(const t of result.transfers){b[t.from]+=t.amount;b[t.to]-=t.amount;}
+   expect(Object.values(b).every(n=>n===0)).toBe(true);
+   expect(result.transfers.length).toBeLessThanOrEqual(14);
+  }
+ });
+});

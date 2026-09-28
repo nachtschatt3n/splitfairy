@@ -62,7 +62,10 @@ export function settle(input:Record<string,number>):{transfers:Transfer[];optima
   const names=entries.map(([id])=>id);
   const amounts=entries.map(([,v])=>v);
   const path:Transfer[]=[];
+  // Exhaustive search is exponential; past this many steps return the best plan found so far, labeled non-minimal.
+  let budget=200_000,exhausted=false;
   function visit(start:number){
+    if(--budget<0){exhausted=true;return;}
     while(start<amounts.length && amounts[start]===0) start++;
     if(start===amounts.length){if(path.length<best.length)best=[...path];return;}
     if(path.length>=best.length) return;
@@ -76,5 +79,5 @@ export function settle(input:Record<string,number>):{transfers:Transfer[];optima
     }
   }
   visit(0);
-  return {transfers:best,optimal:true};
+  return {transfers:best,optimal:!exhausted};
 }

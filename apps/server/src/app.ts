@@ -89,11 +89,11 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
   return {balances:out,...settle(out)};
  });
  app.post('/api/v1/trips/:tripId/receipts',async(request,reply)=>{
-  const user=auth(request),tripId=(request.params as any).tripId;config.store.getTrip(user,tripId);
+  const user=auth(request),tripId=(request.params as any).tripId;if(config.store.getTrip(user,tripId).archived)throw new InputError('Trip is archived');
   const body=z.object({image:z.string().max(15_000_000),uploadId:z.uuid().optional()}).parse(request.body);
   if(body.uploadId){const prior=config.store.getTrip(user,tripId).receipts.find(r=>r.id===body.uploadId);if(prior)return prior;}
   const source=Buffer.from(body.image,'base64');if(source.length<100||source.length>10_000_000)throw new InputError('Invalid image size');
-  let image:Buffer;try{image=await sharp(source,{limitInputPixels:30_000_000}).rotate().resize({width:1800,withoutEnlargement:true}).jpeg({quality:83}).toBuffer();}catch{throw new InputError('Invalid photo');}
+  let image:Buffer;try{const format=(await sharp(source).metadata()).format;if(!['jpeg','png','webp','heif'].includes(format??''))throw new Error('format');image=await sharp(source,{limitInputPixels:30_000_000}).rotate().resize({width:1800,withoutEnlargement:true}).jpeg({quality:83}).toBuffer();}catch{throw new InputError('Invalid photo');}
   const id=body.uploadId??randomUUID(),folder=join(config.dataDir,'receipts',tripId);await mkdir(folder,{recursive:true});try{await writeFile(join(folder,`${id}.jpg`),image,{flag:'wx',mode:0o600});}catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error;}
   const trip=config.store.getTrip(user,tripId);const prior=trip.receipts.find(r=>r.id===id);if(prior)return prior;
   const receipt:Receipt={id,status:'queued',items:[],total:null,merchant:'',date:'',error:null,version:1,authorId:user.id};trip.receipts.push(receipt);trip.version++;
@@ -109,6 +109,6 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
   if(!trip.receipts.some(r=>r.id===receiptId))throw new AccessError();
   const image=await readFile(join(config.dataDir,'receipts',tripId,`${receiptId}.jpg`));reply.header('Content-Type','image/jpeg').header('Cache-Control','private, max-age=3600');return reply.send(image);
  });
- if(config.startWorker!==false){resetInterruptedReceipts(config.store);const timer=setInterval(async()=>{try{const job=claimReceipt(config.store);if(job)await processReceipt(config.store,config.dataDir,config.ollamaUrl??'http://192.168.30.111:11434',config.ollamaModel??'gemma4:26b-mlx',job);}catch(error){app.log.error(error);}},5000);timer.unref();app.addHook('onClose',async()=>clearInterval(timer));}
+ if(config.startWorker!==false){resetInterruptedReceipts(config.store);let working=false;const timer=setInterval(async()=>{if(working)return;working=true;try{const job=claimReceipt(config.store);if(job)await processReceipt(config.store,config.dataDir,config.ollamaUrl??'http://192.168.30.111:11434',config.ollamaModel??'gemma4:26b-mlx',job);}catch(error){app.log.error(error);}finally{working=false;}},5000);timer.unref();app.addHook('onClose',async()=>clearInterval(timer));}
  return app;
 }

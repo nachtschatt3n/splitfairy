@@ -69,3 +69,15 @@ describe('sign-in throttling per email',()=>{
   expect(sent).toBe(5);
  });
 });
+describe('receipt upload',()=>{
+ it('accepts photos and refuses other image formats such as SVG',async()=>{
+  const sharp=(await import('sharp')).default;
+  const cookie=await login();const headers={cookie:`splitfairy_session=${cookie}`};
+  const trip=(await app.inject({method:'POST',url:'/api/v1/trips',headers,payload:{name:'Italy',start:'2026-10-01',end:'2026-10-09'}})).json();
+  const png=await sharp({create:{width:300,height:400,channels:3,background:'#fff'}}).png().toBuffer();
+  const ok=await app.inject({method:'POST',url:`/api/v1/trips/${trip.id}/receipts`,headers,payload:{image:png.toString('base64')}});
+  expect(ok.statusCode).toBe(201);expect(ok.json().status).toBe('queued');
+  const svg=Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="400"><rect width="300" height="400" fill="#fff"/><text x="10" y="20">receipt text padding padding padding</text></svg>');
+  expect((await app.inject({method:'POST',url:`/api/v1/trips/${trip.id}/receipts`,headers,payload:{image:svg.toString('base64')}})).statusCode).toBe(400);
+ });
+});
