@@ -15,6 +15,8 @@ env:
   IMAGE: ghcr.io/nachtschatt3n/splitfairy
 jobs:
   verify:
+    # Tags do not re-test: a release promotes a main commit whose verify already passed (checked in the release job).
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,9 +28,19 @@ jobs:
         env:
           SHARP_IGNORE_GLOBAL_LIBVIPS: '1'
       - run: npm run check
-      - run: npx playwright install --with-deps chromium webkit
+      - name: Cache Playwright browsers
+        id: browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - name: Install Playwright browsers
+        if: steps.browsers.outputs.cache-hit != 'true'
+        run: npx playwright install chromium webkit
+      - name: Install browser system libraries
+        run: npx playwright install-deps chromium webkit
       # Mocked UI tests plus real-server flow and UX tests on iPhone (WebKit, Chromium) and desktop.
-      - run: npm run test:e2e
+      - run: npx playwright test
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -38,9 +50,9 @@ jobs:
             test-results/
           retention-days: 14
   image:
-    # Pull requests build to prove the Dockerfile; main pushes publish sha-<commit> candidates. Tags never rebuild.
+    # Runs next to verify instead of after it: pull requests build and smoke-test the container, main pushes publish
+    # sha-<commit> candidates. A candidate is only released if verify passed for the same commit (see release).
     if: github.ref_type != 'tag'
-    needs: verify
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -54,8 +66,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build tested commit
-        id: build
+      - name: Build commit image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -80,29 +91,42 @@ jobs:
           docker stop -t 10 splitfairy
           test "$(docker inspect -f '{{.State.ExitCode}}' splitfairy)" = 0
   release:
-    # A v* tag promotes the image that main already built and tested for that exact commit.
+    # A v* tag promotes the image main built for that exact commit, after confirming main's verify passed for it.
     if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
-    needs: verify
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+      checks: read
     steps:
+      - name: Require a tested main commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in $(seq 1 40); do
+            state=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?check_name=verify" \
+              --jq '[.check_runs[] | select(.status=="completed")] | if length==0 then "pending" elif any(.conclusion=="success") then "success" else "failure" end')
+            echo "verify for ${GITHUB_SHA}: $state"
+            [ "$state" = success ] && exit 0
+            [ "$state" = failure ] && { echo "::error::verify failed for this commit; not releasing"; exit 1; }
+            sleep 30
+          done
+          echo "::error::no verify result for this commit (tag a commit that is on main)"; exit 1
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Wait for the tested main image
+      - name: Wait for the main image
         run: |
-          for i in $(seq 1 60); do
+          for i in $(seq 1 40); do
             docker buildx imagetools inspect "${IMAGE}:sha-${GITHUB_SHA}" >/dev/null 2>&1 && exit 0
-            echo "Waiting for ${IMAGE}:sha-${GITHUB_SHA} (tag a commit that is on main)"; sleep 30
+            echo "Waiting for ${IMAGE}:sha-${GITHUB_SHA}"; sleep 30
           done
           exit 1
       - name: Promote tested image without rebuilding
         run: |
           docker buildx imagetools create --tag "${IMAGE}:${GITHUB_REF_NAME}" "${IMAGE}:sha-${GITHUB_SHA}"
           docker buildx imagetools inspect "${IMAGE}:${GITHUB_REF_NAME}"
-          echo "Released ${IMAGE}:${GITHUB_REF_NAME} from sha-${GITHUB_SHA}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Released ${IMAGE}:${GITHUB_REF_NAME} from tested sha-${GITHUB_SHA}" >> "$GITHUB_STEP_SUMMARY"
