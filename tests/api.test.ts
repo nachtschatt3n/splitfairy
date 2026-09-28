@@ -168,3 +168,15 @@ describe('forgiving code entry',()=>{
   expect(res.statusCode).toBe(200);
  });
 });
+describe('first sign-in and names',()=>{
+ it('marks the first sign-in, derives a starting name from the address, and lets people rename themselves',async()=>{
+  const store=new Store(new DatabaseSync(':memory:'));const mails:{to:string;subject:string}[]=[];
+  const a=await createApp({store,adminEmail:'mathias.uhl@example.com',secret:'a very long integration test secret',sendMail:async(to,subject)=>{mails.push({to,subject});},dataDir:'/tmp/splitfairy-api-tests',startWorker:false});
+  const signIn=async()=>{await a.inject({method:'POST',url:'/api/v1/auth/request',payload:{email:'mathias.uhl@example.com'}});const code=mails.at(-1)!.subject.slice(0,6);return a.inject({method:'POST',url:'/api/v1/auth/verify',payload:{email:'mathias.uhl@example.com',code}});};
+  const first=await signIn();expect(first.json()).toMatchObject({name:'Mathias Uhl',isNew:true});
+  const cookie=`splitfairy_session=${first.cookies.find(c=>c.name==='splitfairy_session')!.value}`;
+  expect((await a.inject({method:'PUT',url:'/api/v1/me',headers:{cookie},payload:{name:'Mathias'}})).json().name).toBe('Mathias');
+  expect((await a.inject({method:'PUT',url:'/api/v1/me',headers:{cookie},payload:{name:'  '}})).statusCode).toBe(400);
+  expect((await signIn()).json()).toMatchObject({name:'Mathias',isNew:false});
+ });
+});

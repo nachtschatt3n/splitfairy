@@ -36,7 +36,8 @@ async function seed(request){
  await save('event',{id:'surf',title:'Surf lesson in Ericeira',date:day(0),kind:'activity',owner:'Ben',notes:'',participants:all.filter(p=>!['ines','noah'].includes(p.id))});
  await save('event',{id:'breakfast',title:'Pastéis de nata breakfast',date:day(1),kind:'breakfast',owner:'',notes:'',participants:all});
  for(const [i,text,eventId,done] of [[1,'Sardines (2 kg)','dinner',true],[2,'Lemons','dinner',false],[3,'Vinho verde','dinner',false],[4,'Sunscreen SPF 50',null,false],[5,'Oat milk','breakfast',false]])await save('shopping',{id:`s${i}`,text,eventId,done});
- for(const [i,text,familyId,packed,quantity,note] of [[1,'Beach tent','S',true,1,''],[2,'Charcoal grill','R',false,1,'Borrow from Marco’s brother'],[3,'Travel cot','W',true,1,''],[4,'Snorkel sets','W',false,4,''],[5,'Board games','L',false,1,''],[6,'Speaker',null,false,1,'']])await save('gear',{id:`g${i}`,text,familyId,quantity,note,packed});
+ for(const [id,name,kind,familyId,note] of [['silva-car','Silva car','car','S','Roof box'],['rossi-car','Rossi car','car','R',''],['weber-plane','Weber plane','plane','W','2 checked bags']])await save('transport',{id,name,kind,familyId,note});
+ for(const [i,text,familyId,packed,quantity,note,transportId] of [[1,'Beach tent','S',true,1,'','silva-car'],[2,'Charcoal grill','R',false,1,'Borrow from Marco’s brother','rossi-car'],[3,'Travel cot','W',true,1,'','weber-plane'],[4,'Snorkel sets','W',false,4,'','weber-plane'],[5,'Board games','L',false,1,'',null],[6,'Speaker',null,false,1,'',null]])await save('gear',{id:`g${i}`,text,familyId,quantity,note,packed,transportId});
  const expense=(id,title,date,category,total,payer,weights,eventId=null)=>save('expense',{id,title,date,category,total,payers:[{familyId:payer,amount:total}],lines:[{id:`${id}-l`,label:title,amount:total,splits:[{amount:total,eventId,eventVersion:eventId?1:undefined,weights,fixed:[]}]}],notes:'',receiptIds:[],status:'posted'});
  await expense('x1','Holiday house deposit',day(-2),'stay',120000,'S',all);
  await expense('x2','Surf lesson',day(0),'activity',28000,'W',all.filter(p=>!['ines','noah'].includes(p.id)),'surf');
@@ -73,7 +74,7 @@ try{
   if(scheme==='light'){
    await capture(context,tripId,'phone-today',{});
    await capture(context,tripId,'phone-plan',{tab:'Plan'});
-   await capture(context,tripId,'phone-packing',{tab:'Pack',action:p=>p.evaluate(()=>window.scrollTo(0,420))});
+   await capture(context,tripId,'phone-packing',{tab:'Pack',action:p=>p.evaluate(()=>{const el=document.querySelector('.transport-strip');window.scrollTo(0,(el?.getBoundingClientRect().top??0)+window.scrollY-90);})});
    await capture(context,tripId,'phone-receipt-review',{tab:'Spend',action:async p=>{await p.getByRole('button',{name:'Review'}).click();await p.getByRole('dialog').waitFor();await p.waitForTimeout(300);}});
    await capture(context,tripId,'phone-settle',{tab:'Settle'});
    await capture(context,tripId,'phone-people',{tab:'People'});

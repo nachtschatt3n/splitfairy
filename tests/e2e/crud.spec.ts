@@ -1,10 +1,10 @@
 import {test,expect,type Page} from '@playwright/test';
 import {ADMIN} from './env.js';
-import {addFamily,addPerson,createTrip,mailsTo,openSection,planEvent,signInAsAdmin,switchTrip,unique} from './helpers.js';
+import {addFamily,addPerson,createTrip,mailsTo,openSection,planEvent,signInAsAdmin,switchTrip,tripList,unique} from './helpers.js';
 const iso=(days:number)=>{const d=new Date(Date.now()+days*86400_000);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
 const sheet=(page:Page)=>page.getByRole('dialog');
 const closed=(page:Page)=>expect(page.getByRole('dialog')).toHaveCount(0);
-async function toTripList(page:Page){const chip=page.getByRole('button',{name:/Switch trip/});if(await chip.isVisible())await chip.click();else await page.getByLabel('Current trip').selectOption({label:'All trips'});await expect(page.getByText('Every shared trip')).toBeVisible();}
+async function toTripList(page:Page){const chip=page.getByRole('button',{name:/Switch trip/});if(await chip.isVisible())await chip.click();else await page.getByLabel('Current trip').selectOption({label:'All trips'});await expect(tripList(page)).toBeVisible();}
 test.describe.configure({mode:'serial'});
 
 test('every entity can be created, changed and removed from the interface',async({page},testInfo)=>{
@@ -85,6 +85,25 @@ test('every entity can be created, changed and removed from the interface',async
  await pack.locator('.filter-chips').getByRole('button',{name:'Everything'}).click();
  await pack.locator('.shop-row',{hasText:'Grill'}).getByRole('checkbox').click();
  await expect(page.getByText('1 of 2 packed')).toBeVisible();
+ // Transport: a car with a suggested name, a flight, items travelling in them, grouping, removal.
+ await pack.getByRole('button',{name:'Add car or flight'}).click();
+ await sheet(page).getByLabel('Whose (optional)').selectOption({label:'Costa'});
+ await expect(sheet(page).getByLabel('Name')).toHaveValue('Costa car');
+ await sheet(page).getByRole('button',{name:'Add',exact:true}).click();await closed(page);
+ await pack.getByRole('button',{name:'Add car or flight'}).click();
+ await sheet(page).getByLabel('Type').selectOption('plane');await sheet(page).getByLabel('Whose (optional)').selectOption({label:'Weber'});
+ await expect(sheet(page).getByLabel('Name')).toHaveValue('Weber plane');
+ await sheet(page).getByRole('button',{name:'Add',exact:true}).click();await closed(page);
+ await pack.getByRole('button',{name:'Edit Beach tent'}).click();await sheet(page).getByLabel('Travels in (optional)').selectOption({label:'Costa car'});await sheet(page).getByRole('button',{name:'Save changes'}).click();await closed(page);
+ await page.getByLabel('Add something to bring').fill('Snorkels');await page.getByLabel('Travels in (optional)').first().selectOption({label:'Weber plane'});await page.getByRole('button',{name:'Add item'}).click();
+ await pack.getByRole('button',{name:'By transport'}).click();
+ await expect(pack.locator('.shop-group',{hasText:'Costa car'})).toContainText('Beach tent');
+ await expect(pack.locator('.shop-group',{hasText:'Weber plane'})).toContainText('Snorkels');
+ await expect(pack.getByRole('button',{name:'Edit Costa car'})).toContainText('1');
+ await pack.getByRole('button',{name:'Edit Costa car'}).click();await sheet(page).getByRole('button',{name:'Remove'}).click();await closed(page);
+ await expect(pack.getByRole('button',{name:'Edit Costa car'})).toHaveCount(0);
+ await expect(pack.locator('.shop-group',{hasText:'No transport yet'})).toContainText('Beach tent');
+ await pack.getByRole('button',{name:'By family'}).click();
  await page.getByRole('button',{name:'Edit Grill'}).click();await sheet(page).getByRole('button',{name:'Delete item'}).click();await closed(page);
  await expect(pack.locator('.shop-row',{hasText:'Grill'})).toHaveCount(0);
 
@@ -148,7 +167,7 @@ test('every entity can be created, changed and removed from the interface',async
  await toTripList(page);
  const empty=unique(testInfo,'Empty');await createTrip(page,empty,iso(30),iso(31));
  await openSection(page,'People');await page.getByRole('button',{name:'Edit trip'}).click();await sheet(page).getByRole('button',{name:'Delete trip'}).click();
- await expect(page.getByText('Every shared trip')).toBeVisible();await expect(page.getByRole('button',{name:new RegExp(empty)})).toHaveCount(0);
+ await expect(tripList(page)).toBeVisible();await expect(page.getByRole('button',{name:new RegExp(empty)})).toHaveCount(0);
 
  // Signing out ends the session on the server, not just in the browser.
  const cookie=(await page.context().cookies()).find(c=>c.name==='splitfairy_session')!.value;

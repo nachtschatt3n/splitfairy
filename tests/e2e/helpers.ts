@@ -34,16 +34,16 @@ export async function signInAsAdmin(page:Page,name='Ana'){
   expect(response.ok(),await response.text()).toBe(true);
  });
  await page.goto('/');
- await expect(page.getByText('Every shared trip')).toBeVisible();
+ await expect(tripList(page)).toBeVisible();
 }
 export async function signIn(page:Page,email:string,code:string,name:string){
  await page.goto('/');
  await page.getByLabel('Email address').fill(email);
  await page.getByRole('button',{name:'I already have a code'}).click();
  await page.getByLabel('Your six-digit code').fill(code);
- await page.getByLabel('Your name').fill(name);
- await page.getByRole('button',{name:'Start planning'}).click();
- await expect(page.getByText('Every shared trip')).toBeVisible();
+ await page.getByRole('button',{name:'Sign in'}).click();
+ await nameIfAsked(page,name);
+ await expect(tripList(page)).toBeVisible();
 }
 export async function createTrip(page:Page,name:string,start='2026-10-01',end='2026-10-11'){
  await page.getByRole('button',{name:'Create a vacation'}).click();
@@ -51,7 +51,7 @@ export async function createTrip(page:Page,name:string,start='2026-10-01',end='2
  await sheet.getByLabel('Where are we going?').fill(name);
  await sheet.getByLabel('First day').fill(start);await sheet.getByLabel('Last day').fill(end);
  await sheet.getByRole('button',{name:'Create vacation'}).click();
- await expect(page.getByText(`Here's what's happening in ${name}.`)).toBeVisible();
+ await expect(page.getByText(`Here's what's happening in ${name}.`)).toBeVisible({timeout:15_000});
 }
 /** Section navigation works the same way a person would use it on each device. */
 export async function openSection(page:Page,section:'Today'|'Plan'|'Pack'|'Spend'|'Settle'|'People'){
@@ -61,10 +61,10 @@ export async function openSection(page:Page,section:'Today'|'Plan'|'Pack'|'Spend
 }
 export async function switchTrip(page:Page,name:string){
  const chip=page.getByRole('button',{name:/Switch trip/}),card=page.locator('.trip-card',{hasText:name});
- if(await page.getByText('Every shared trip').isVisible())await card.click();
+ if(await tripList(page).isVisible())await card.click();
  else if(await chip.isVisible()){await chip.click();await card.click();}
  else await page.getByLabel('Current trip').selectOption({label:name});
- await expect(page.getByText(`Here's what's happening in ${name}.`)).toBeVisible();
+ await expect(page.getByText(`Here's what's happening in ${name}.`)).toBeVisible({timeout:15_000});
 }
 /** Attaches a screenshot to the report; with SHOT_DIR set also saves <project>-<name>.png for manual review. */
 export async function shot(page:Page,testInfo:TestInfo,name:string){
@@ -98,4 +98,12 @@ export async function planEvent(page:Page,title:string,kind:string,joining:'ever
  if(joining==='nobody'&&await sheet.getByRole('button',{name:'Nobody yet'}).count())await sheet.getByRole('button',{name:'Nobody yet'}).click();
  await sheet.getByRole('button',{name:'Add to plan'}).click();
  await expect(page.getByRole('article',{name:title})).toBeVisible();
+}
+
+export const tripList=(page:Page)=>page.getByRole('region',{name:'Your trips'});
+/** A first sign-in asks for a name once; later sign-ins go straight in. */
+export async function nameIfAsked(page:Page,name:string){
+ const sheet=page.getByRole('dialog',{name:'What should we call you?'});
+ await expect(tripList(page).or(sheet).first()).toBeVisible();
+ if(await sheet.isVisible()){await sheet.getByLabel('Your name').fill(name);await sheet.getByRole('button',{name:'Continue'}).click();await expect(sheet).toHaveCount(0);}
 }

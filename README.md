@@ -23,7 +23,7 @@ A self-hosted, installable app for group vacations: plan meals and activities, k
 - **Families and people.** Add families, people who travel on their own, and kids. Everyone has a share of costs: an adult pays a full share, a child half, a baby nothing, or any custom weight. Adults can get an email invitation and sign in; children don't need an account.
 - **Plan the days.** Breakfasts, dinners and activities per day, with who joins and who organizes. Each meal has its own shopping items.
 - **Shopping list.** Shared, grouped by meal, ticked off as people buy things.
-- **Packing and equipment.** Who brings the tent, the grill, the travel cot? Every item belongs to a family or waits for someone to take it, and gets ticked off when it's packed.
+- **Packing and equipment.** Who brings the tent, the grill, the travel cot, and in which car or on which flight does it travel? Every item belongs to a family or waits for someone to take it, can be put in a car or flight ("Uhl car", "Weber plane"), and gets ticked off when it's packed. The list can be grouped by family or by transport.
 - **Expenses.** Add what you paid in seconds, for a meal, an activity or everyone. It also handles refunds, several payers, and equal or exact amounts per family.
 - **Receipt scanning.** Take a photo. A private vision model (via [Ollama](https://ollama.com)) reads the items, and you check them next to the photo. Assign each item to a meal, an activity or everyone. Nothing counts until the items add up to the receipt total and a person confirms.
 - **Fair balances.** Costs are split by each person's share to the cent and rolled up per family. Settle up suggests the smallest number of payments. Splitfairy records repayments; it never moves money.

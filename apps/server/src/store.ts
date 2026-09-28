@@ -1,13 +1,13 @@
 import {DatabaseSync} from 'node:sqlite';
 import {randomUUID} from 'node:crypto';
 import {allocateExpense} from '../../../packages/domain/src/accounting.js';
-import {commandSchema,eventSchema,gearSchema,paymentSchema,expenseSchema,familySchema,personSchema,shoppingSchema,type Command,type Expense,type Trip,type User} from '../../../packages/domain/src/model.js';
+import {commandSchema,eventSchema,gearSchema,transportSchema,paymentSchema,expenseSchema,familySchema,personSchema,shoppingSchema,type Command,type Expense,type Trip,type User} from '../../../packages/domain/src/model.js';
 
 export class ConflictError extends Error{statusCode=409;constructor(message='This item changed on another device'){super(message);}}
 export class AccessError extends Error{statusCode=403;constructor(){super('Access denied');}}
 export class InputError extends Error{statusCode=400;constructor(message:string){super(message);}}
 export type Role='organizer'|'member';
-export const freshTrip=(id:string,name:string,start:string,end:string):Trip=>({id,name,start,end,version:0,archived:false,families:[],people:[],events:[],shopping:[],gear:[],expenses:[],payments:[],receipts:[],activity:[]});
+export const freshTrip=(id:string,name:string,start:string,end:string):Trip=>({id,name,start,end,version:0,archived:false,families:[],people:[],events:[],shopping:[],gear:[],transport:[],expenses:[],payments:[],receipts:[],activity:[]});
 
 export class Store{
  constructor(public db:DatabaseSync){
@@ -24,6 +24,7 @@ export class Store{
  }
  resetForTests(){this.db.exec('DELETE FROM auth_throttle;DELETE FROM expense_revisions;DELETE FROM mutations;DELETE FROM sessions;DELETE FROM codes;DELETE FROM invites;DELETE FROM memberships;DELETE FROM trips;DELETE FROM users;');}
  addUser(user:User){this.db.prepare('INSERT INTO users(id,email,name,admin) VALUES(?,?,?,?) ON CONFLICT(email) DO UPDATE SET name=excluded.name').run(user.id,user.email.toLowerCase(),user.name,user.admin?1:0);}
+ renameUser(id:string,name:string){this.db.prepare('UPDATE users SET name=? WHERE id=?').run(name,id);}
  userByEmail(email:string):User|null{const row=this.db.prepare('SELECT * FROM users WHERE email=?').get(email.toLowerCase()) as any;return row?{id:row.id,email:row.email,name:row.name,admin:!!row.admin}:null;}
  userById(id:string):User|null{const row=this.db.prepare('SELECT * FROM users WHERE id=?').get(id) as any;return row?{id:row.id,email:row.email,name:row.name,admin:!!row.admin}:null;}
  canLogin(email:string,adminEmail:string){return email.toLowerCase()===adminEmail.toLowerCase() || !!this.db.prepare('SELECT 1 FROM users WHERE email=?').get(email.toLowerCase()) || !!this.db.prepare('SELECT 1 FROM invites WHERE email=?').get(email.toLowerCase());}
@@ -111,7 +112,7 @@ export class Store{
     if(!/^\d{4}-\d{2}-\d{2}$/.test(start)||!/^\d{4}-\d{2}-\d{2}$/.test(end)||end<start)throw new InputError('The last day must be on or after the first day');
     trip.start=start;trip.end=end;
    }else{
-    const key=({family:'families',person:'people',event:'events',shopping:'shopping',gear:'gear',expense:'expenses',payment:'payments'} as Record<string,string>)[command.entity];
+    const key=({family:'families',person:'people',event:'events',shopping:'shopping',gear:'gear',transport:'transport',expense:'expenses',payment:'payments'} as Record<string,string>)[command.entity];
     const list=((trip as any)[key]??=[]) as any[];
     const value=command.value as any;
     if(!value?.id || typeof value.id!=='string')throw new InputError('Item ID required');
@@ -128,14 +129,17 @@ export class Store{
      list.splice(index,1);
      if(command.entity==='event')for(const item of trip.shopping)if(item.eventId===value.id){item.eventId=null;item.version++;}
      // Things a removed family was bringing go back to "not decided yet".
-     if(command.entity==='family')for(const item of trip.gear??[])if(item.familyId===value.id){item.familyId=null;item.version++;}
+     if(command.entity==='family'){for(const item of trip.gear??[])if(item.familyId===value.id){item.familyId=null;item.version++;}for(const t of trip.transport??[])if(t.familyId===value.id){t.familyId=null;t.version++;}}
+     // Items that were going in a removed car or flight stay on the list without a transport.
+     if(command.entity==='transport')for(const item of trip.gear??[])if(item.transportId===value.id){item.transportId=null;item.version++;}
     }else{
      let parsed:any;
      switch(command.entity){
       case 'family':parsed=familySchema.parse(value);break;
       case 'person':parsed=personSchema.parse(value);if(!trip.families.some(f=>f.id===parsed.familyId))throw new InputError('Unknown family');if(parsed.email&&trip.people.some(p=>p.id!==parsed.id&&p.email===parsed.email))throw new InputError('Someone on this trip already uses that email');break;
       case 'event':parsed=eventSchema.parse(value);for(const p of parsed.participants)if(!trip.people.some(x=>x.id===p.id))throw new InputError('Unknown participant');break;
-      case 'gear':parsed=gearSchema.parse(value);if(parsed.familyId&&!trip.families.some(f=>f.id===parsed.familyId))throw new InputError('Unknown family');break;
+      case 'gear':parsed=gearSchema.parse(value);if(parsed.familyId&&!trip.families.some(f=>f.id===parsed.familyId))throw new InputError('Unknown family');if(parsed.transportId&&!(trip.transport??[]).some(t=>t.id===parsed.transportId))throw new InputError('Unknown transport');break;
+      case 'transport':parsed=transportSchema.parse(value);if(parsed.familyId&&!trip.families.some(f=>f.id===parsed.familyId))throw new InputError('Unknown family');break;
       case 'shopping':parsed=shoppingSchema.parse(value);if(parsed.eventId&&!trip.events.some(e=>e.id===parsed.eventId))throw new InputError('Unknown event');break;
       case 'expense':{
        const e=expenseSchema.parse(value);

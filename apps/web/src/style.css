@@ -208,3 +208,56 @@ input[type=date]{min-width:0;max-width:100%}
 .claim{font-size:13px;white-space:nowrap}
 @media(max-width:740px){.mobile-nav button{min-width:0;flex:1;font-size:10px}}
 @media(prefers-color-scheme:dark){.progress{background:#2a4036}.progress>div{background:#8ddab8}.gear-note{color:#bfcec7}}
+/* ---- Transport on the packing list ---- */
+.transport-strip{margin:14px 0 10px}
+.transport-list{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.transport-chip{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 14px;border-radius:22px;border:1px solid #dce3dc;background:#fffefa;color:#1f5f53;font-weight:700;cursor:pointer}
+.transport-chip small{background:#e9f2ed;color:#1f5f53;border-radius:10px;padding:1px 7px;font-size:12px}
+.transport-chip.add{border-style:dashed;color:#56675f}
+.group-toggle{display:flex;gap:8px;margin:14px 0 0}
+.shop-group h3 svg{vertical-align:-2px}
+@media(prefers-color-scheme:dark){.transport-chip{background:#24392f;border-color:#456151;color:#93dcc4}.transport-chip small{background:#315647;color:#d4ede0}.transport-chip.add{color:#bfcec7}}
+/* ---- Sign-in and trip list (split-sparkle identity) ---- */
+.auth-art{background:#153f40;color:#f5e8ca;display:flex;align-items:center;justify-content:center;padding:48px}
+.auth-art-inner{max-width:380px}
+.auth-mark{display:inline-flex;padding:18px;border-radius:24px;background:#1d4d4d;color:#f5e8ca;margin-bottom:28px}
+.auth-art h2{font:600 40px/1.08 'Outfit',sans-serif;letter-spacing:-.03em;margin:0 0 26px;color:#fbf6e8}
+.auth-art ul{list-style:none;margin:0;padding:0;display:grid;gap:16px}
+.auth-art li{display:flex;gap:12px;align-items:center;font-size:16px;color:#e8dfc8}
+.auth-art li svg{color:#e58465;flex:none}
+.auth-content .brand{margin-bottom:40px}
+.auth-content h1{font-size:clamp(34px,4.2vw,58px)}
+.auth-lead{margin:12px 0 26px!important}
+.sent-to{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0;font-size:14px;color:#56675f}
+.sent-to strong{color:#243533;overflow-wrap:anywhere}
+.code-input{font-size:26px!important;letter-spacing:.25em;font-variant-numeric:tabular-nums;text-align:center}
+.form-message.info{background:#e9f2ed;color:#1f5f53!important}
+.form-message.error{background:#fbe6df;color:#8f3f2d!important}
+.trip-list{max-width:980px}
+.trip-list-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:8px}
+.trip-list-head h1{font:600 clamp(32px,4vw,46px)/1.08 'Outfit',sans-serif;letter-spacing:-.04em;margin:8px 0}
+.trip-list-head h1 em{color:#bd7059;font-style:normal}
+.trip-list-head p{margin:0;color:#56675f}
+.trip-group h2{font:600 20px 'Outfit',sans-serif;margin:28px 0 12px;color:#263e39}
+.trip-list .trip-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-top:0}
+.trip-list .trip-card{display:flex;align-items:center;gap:14px;min-width:0;padding:16px;text-align:left}
+.date-block{display:flex;flex-direction:column;align-items:center;justify-content:center;width:56px;height:60px;border-radius:14px;background:#153f40;color:#f5e8ca;flex:none}
+.date-block small{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+.date-block strong{font:600 24px/1 'Outfit',sans-serif}
+.trip-card-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.trip-card-text strong{font-size:16px;overflow-wrap:anywhere}
+.trip-status{align-self:flex-start;font-size:12px;font-weight:800;border-radius:12px;padding:3px 9px;background:#e9f2ed;color:#1f5f53;margin-top:4px}
+.trip-grid.archived .date-block{background:#8a978f}
+.landing-mark{display:inline-flex;padding:14px;border-radius:18px;background:#153f40;color:#f5e8ca;margin-bottom:18px}
+.account-actions{display:flex;gap:16px}
+.hero-plate{color:#153f40}
+@media(max-width:740px){.auth-content .brand{margin-bottom:28px}.auth-content h1{font-size:36px}.auth-content{padding:36px 0 28px}.trip-list-head .btn{width:100%}}
+@media(prefers-color-scheme:dark){
+ .auth-content{color:#e6eee6}.sent-to{color:#bfcec7}.sent-to strong{color:#eef3ef}
+ .form-message.info{background:#294e44;color:#e6f3ec!important}.form-message.error{background:#4b2f2a;color:#f8b7a2!important}
+ .trip-list-head h1,.trip-group h2{color:#eef3ef}.trip-list-head p{color:#bfcec7}
+ .date-block{background:#93dcc4;color:#10302b}.trip-status{background:#294e44;color:#bff0d8}.trip-grid.archived .date-block{background:#56675f;color:#eef3ef}
+ .landing-mark{background:#93dcc4;color:#10302b}
+}
+.trip-list .trip-card .date-block small,.trip-list .trip-card .date-block strong{color:inherit}
+@media(max-width:740px){.topbar.no-trip .mobile-logo .brand span:not(.brand-mark){display:inline}}

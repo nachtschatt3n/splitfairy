@@ -10,7 +10,8 @@ async function request<T>(path:string,init:RequestInit={},timeoutMs=15_000):Prom
 export const api={
  me:()=>request<User|null>('/me'),
  requestCode:(email:string)=>request<{ok:boolean}>('/auth/request',{method:'POST',body:JSON.stringify({email})}),
- verify:(email:string,code:string,name:string)=>request<User>('/auth/verify',{method:'POST',body:JSON.stringify({email,code,name})}),
+ verify:(email:string,code:string,name?:string)=>request<User&{isNew?:boolean}>('/auth/verify',{method:'POST',body:JSON.stringify({email,code,...(name?{name}:{})})}),
+ rename:(name:string)=>request<User>('/me',{method:'PUT',body:JSON.stringify({name})}),
  logout:()=>request('/auth/logout',{method:'POST'}),
  trips:()=>request<Pick<Trip,'id'|'name'|'start'|'end'|'archived'>[]>('/trips'),
  createTrip:(name:string,start:string,end:string)=>request<Trip>('/trips',{method:'POST',body:JSON.stringify({name,start,end})}),

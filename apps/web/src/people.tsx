@@ -107,7 +107,7 @@ function TripSheet({trip,save,busy,onClose,onDeleted,onMessage}:{trip:Trip;save:
  </Sheet>;
 }
 
-export function People({trip,view,user,onLogout,save,remove,onInvite,pending,selected,onRefresh,onTripDeleted,onMessage,busy,describeActivity}:{trip:Trip;view:TripView;user:User|null|undefined;onLogout:()=>void;save:Save;remove:Remove;onInvite:()=>void;pending:number;selected:string;onRefresh:()=>void;onTripDeleted:()=>void;onMessage:(m:string)=>void;busy:boolean;describeActivity:(s:string)=>string}){
+export function People({trip,view,user,onRename,onLogout,save,remove,onInvite,pending,selected,onRefresh,onTripDeleted,onMessage,busy,describeActivity}:{trip:Trip;view:TripView;user:User|null|undefined;onRename:()=>void;onLogout:()=>void;save:Save;remove:Remove;onInvite:()=>void;pending:number;selected:string;onRefresh:()=>void;onTripDeleted:()=>void;onMessage:(m:string)=>void;busy:boolean;describeActivity:(s:string)=>string}){
  const [tripSheet,setTripSheet]=useState(false);
  const memberAction=async(work:()=>Promise<unknown>,done:string)=>{try{await work();onMessage(done);onRefresh();}catch(error){onMessage(error instanceof Error?error.message:'That did not work');}};
  const organizer=view.role==='organizer',members=view.members??[];
@@ -145,7 +145,7 @@ export function People({trip,view,user,onLogout,save,remove,onInvite,pending,sel
     </div>;})}
     {organizer&&<Button kind="ghost" onClick={onInvite}><Mail size={17}/> Invite someone without adding them</Button>}
     {organizer&&<div className="settings-block"><span className="eyebrow">Trip settings</span><h3>{trip.name}{trip.archived?' · archived':''}</h3><p>{fmt(trip.start)} – {fmt(trip.end)}</p><Button kind="secondary" onClick={()=>setTripSheet(true)}><Settings2 size={16}/> Edit trip</Button></div>}
-    <div className="settings-block account-block"><span className="eyebrow">Your account</span><div className="account-row"><span>Signed in as <strong>{user?.email??'—'}</strong></span><button className="text-button" onClick={onLogout}>Sign out</button></div></div>
+    <div className="settings-block account-block"><span className="eyebrow">Your account</span><div className="account-row"><span><strong>{user?.name}</strong> · {user?.email??'—'}</span><span className="account-actions"><button className="text-button" onClick={onRename}>Change name</button><button className="text-button" onClick={onLogout}>Sign out</button></span></div></div>
    </section>
    <section className="card">
     <div className="settings-block first"><span className="eyebrow">Sync & history</span><h3>{pending?`${pending} change${pending===1?'':'s'} waiting`:'Everything is up to date'}</h3><p>Edits saved offline sync when this app is open and connected.</p>

@@ -1,13 +1,13 @@
 import {test,expect,type Page} from '@playwright/test';
 import sharp from 'sharp';
 import {ADMIN} from './env.js';
-import {addFamily,addPerson,createTrip,isPhone,mailedCode,mailsTo,openSection,planEvent,shot,signInAsAdmin,switchTrip,unique,withAdminLock} from './helpers.js';
+import {addFamily,addPerson,createTrip,isPhone,mailedCode,mailsTo,nameIfAsked,openSection,planEvent,shot,signInAsAdmin,switchTrip,tripList,unique,withAdminLock} from './helpers.js';
 const iso=(days:number)=>{const d=new Date(Date.now()+days*86400_000);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
 async function receiptPhoto(){return sharp({create:{width:500,height:800,channels:3,background:'#fbfaf5'}}).composite([{input:Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="500" height="800"><text x="30" y="60" font-size="30">MERCADO</text><text x="30" y="700" font-size="30">TOTAL 23,10</text></svg>')}]).jpeg().toBuffer();}
 async function toTripList(page:Page){
  const chip=page.getByRole('button',{name:/Switch trip/});
  if(await chip.isVisible())await chip.click();else await page.getByLabel('Current trip').selectOption({label:'All trips'});
- await expect(page.getByText('Every shared trip')).toBeVisible();
+ await expect(tripList(page)).toBeVisible();
 }
 test.describe.configure({mode:'serial'});
 test('organizer plans a trip, splits a receipt, settles up and switches trips',async({page},testInfo)=>{
@@ -19,24 +19,24 @@ test('organizer plans a trip, splits a receipt, settles up and switches trips',a
   await page.goto('/');
   // Guidance instead of a silently disabled button.
   await page.getByRole('button',{name:'I already have a code'}).click();
-  await expect(page.getByRole('status')).toContainText('Enter the email address the code was sent to');
+  await expect(page.getByRole('alert')).toContainText('Enter the email address the code was sent to first');
   await page.getByLabel('Email address').fill(ADMIN);
   await page.getByRole('button',{name:'Email me a code'}).click();
-  await expect(page.getByText(/six-digit code is on its way/)).toBeVisible();
+  await expect(page.getByText(/a code is on its way/)).toBeVisible();
   const code=await mailedCode(ADMIN,before);
   // The styled email carries the code and the inline logo reference.
   const mail=mailsTo(ADMIN).filter(m=>Date.parse(m.at)>=before).at(-1)!;
   expect(mail.subject).toBe(`${code} is your Splitfairy sign-in code`);expect(mail.html).toContain('cid:logo@splitfairy');expect(mail.html).toContain(`${code.slice(0,3)} ${code.slice(3)}`);
   // A wrong code explains what to do; a code copied with spaces and the full stop still works.
-  await page.getByLabel('Your six-digit code').fill(code==='000000'?'111111':'000000');await page.getByLabel('Your name').fill('Ana');
-  await page.getByRole('button',{name:'Start planning'}).click();
-  await expect(page.getByRole('status')).toContainText('only the newest one works');
+  await page.getByLabel('Your six-digit code').fill(code==='000000'?'111111':'000000');
+  await page.getByRole('button',{name:'Sign in'}).click();
+  await expect(page.getByRole('alert')).toContainText('only the newest one works');
   await page.getByLabel('Your six-digit code').fill(` ${code.slice(0,3)} ${code.slice(3)}.`);
-  await page.getByLabel('Your name').fill('Ana');
-  await page.getByRole('button',{name:'Start planning'}).click();
+  await page.getByRole('button',{name:'Sign in'}).click();
+  await nameIfAsked(page,'Ana');
  });
  // Without a trip there is nothing to navigate: no section menu, no Add new.
- await expect(page.getByText('Every shared trip')).toBeVisible();
+ await expect(tripList(page)).toBeVisible();
  await expect(page.getByRole('navigation',{name:'Trip sections'})).toHaveCount(0);
  await expect(page.getByRole('button',{name:'Add new'})).toHaveCount(0);
  await createTrip(page,tripName,iso(1),iso(9));
@@ -154,8 +154,10 @@ test('an invited member signs in by email, sees only member tools, and adds an e
  const memberContext=await browser.newContext(testInfo.project.use);const mp=await memberContext.newPage();
  const before=Date.now();
  await mp.goto('/');await mp.getByLabel('Email address').fill(member);await mp.getByRole('button',{name:'Email me a code'}).click();
- await mp.getByLabel('Your six-digit code').fill(await mailedCode(member,before));await mp.getByLabel('Your name').fill('Bea');
- await mp.getByRole('button',{name:'Start planning'}).click();
+ await mp.getByLabel('Your six-digit code').fill(await mailedCode(member,before));
+ await mp.getByRole('button',{name:'Sign in'}).click();
+ // A brand-new member is asked for their name once.
+ await expect(mp.getByRole('dialog',{name:'What should we call you?'})).toBeVisible();await nameIfAsked(mp,'Bea');
  await expect(mp.getByRole('button',{name:'Create a vacation'})).toHaveCount(0);
  await mp.getByRole('button',{name:new RegExp(tripName)}).click();
  await openSection(mp,'People');

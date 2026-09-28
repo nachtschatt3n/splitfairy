@@ -15,7 +15,7 @@ import {inviteEmail,signInEmail} from './mail.js';
 const sha=(input:string)=>createHash('sha256').update(input).digest('hex');
 const emailSchema=z.string().trim().pipe(z.email()).transform(v=>v.toLowerCase());
 const inviteSchema=z.object({email:emailSchema,role:z.enum(['organizer','member']).default('member')});
-const codeSchema=z.object({email:emailSchema,code:z.string().max(40).transform(v=>v.replace(/\D/g,'')).pipe(z.string().regex(/^\d{6}$/)),name:z.string().trim().min(1).max(80)});
+const codeSchema=z.object({email:emailSchema,code:z.string().max(40).transform(v=>v.replace(/\D/g,'')).pipe(z.string().regex(/^\d{6}$/)),name:z.string().trim().max(80).optional()});
 export type Mail=(to:string,subject:string,text:string,html?:string)=>Promise<void>;
 export type Config={store:Store;adminEmail:string;secret:string;sendMail:Mail;dataDir:string;startWorker?:boolean;secureCookies?:boolean;ollamaUrl?:string;ollamaModel?:string;logLevel?:string;/** Multiplies the per-IP sign-in limits; only the browser test server raises it. */authRateLimitFactor?:number};
 export function codeHash(secret:string,email:string,code:string){return createHmac('sha256',secret).update(`${email}:${code}`).digest('hex');}
@@ -72,14 +72,16 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
   const supplied=Buffer.from(codeHash(config.secret,input.email,input.code),'hex'),expected=Buffer.from(row.hash,'hex');
   if(expected.length!==supplied.length||!timingSafeEqual(expected,supplied)){config.store.authBudget(input.email,'failure');reply.status(401);return {error:'Invalid or expired code'};}
   config.store.db.prepare('DELETE FROM codes WHERE email=?').run(input.email);
-  let user=config.store.userByEmail(input.email);
-  if(!user){user={id:randomUUID(),email:input.email,name:input.name,admin:input.email===config.adminEmail.toLowerCase()};config.store.addUser(user);}
+  let user=config.store.userByEmail(input.email);const isNew=!user;
+  // First sign-in: start with the name part of the address; the app then asks what to call them.
+  if(!user){const local=input.email.split('@')[0].replace(/[._-]+/g,' ').trim();user={id:randomUUID(),email:input.email,name:input.name||local.replace(/\b\w/g,c=>c.toUpperCase())||'Traveller',admin:input.email===config.adminEmail.toLowerCase()};config.store.addUser(user);}
   config.store.promoteInvites(input.email);
   const token=randomBytes(32).toString('base64url');
   config.store.db.prepare('INSERT INTO sessions(token_hash,user_id,expires) VALUES(?,?,?)').run(sha(token),user.id,Date.now()+30*86400_000);
   reply.setCookie('splitfairy_session',token,{httpOnly:true,sameSite:'strict',secure:config.secureCookies??false,path:'/',maxAge:30*86400});
-  return user;
+  return {...user,isNew};
  });
+ app.put('/api/v1/me',async(request)=>{const user=auth(request),{name}=z.object({name:z.string().trim().min(1).max(80)}).parse(request.body);config.store.renameUser(user.id,name);return config.store.userById(user.id);});
  app.post('/api/v1/auth/logout',async(request,reply)=>{const token=request.cookies.splitfairy_session;if(token)config.store.db.prepare('DELETE FROM sessions WHERE token_hash=?').run(sha(token));reply.clearCookie('splitfairy_session',{path:'/'});return {ok:true};});
  app.get('/api/v1/trips',async(request)=>config.store.listTrips(auth(request)).map(t=>({id:t.id,name:t.name,start:t.start,end:t.end,archived:t.archived})));
  app.post('/api/v1/trips',async(request,reply)=>{const body=z.object({name:z.string().trim().min(1).max(160),start:z.iso.date(),end:z.iso.date()}).parse(request.body);const trip=config.store.createTrip(auth(request),body.name,body.start,body.end);reply.status(201);return trip;});
