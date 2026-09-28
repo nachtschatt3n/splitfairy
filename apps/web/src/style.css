@@ -28,3 +28,6 @@
 @media(prefers-color-scheme:dark){.receipt-bulk{background:#2a4036}.assignment-summary{border-color:#355046}.assignment-row{border-color:#355046}.review-problems{background:#4b3d2f;color:#f3d8c4}.form-error{background:#4b2f2a;color:#f5cfc4}.receipt-item.invalid input{background:#3d2a25}}
 .form-stack label.chip,.inline-form label.chip{flex-direction:row}
 @media(max-width:740px){.form-row>label{min-width:130px}}
+.loading-help{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;max-width:300px}
+.loading-help p{margin:0;color:#5f746c}
+.loading-help small{color:#8a978f}

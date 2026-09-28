@@ -33,3 +33,13 @@ test('a code already in the inbox can be used without requesting another',async(
  await expect(page.getByText('Every shared trip')).toBeVisible();
  expect(requested).toBe(0);
 });
+test('a hung start-up offers a reload instead of spinning forever',async({page})=>{
+ await page.route('**/api/v1/me',()=>{/* never answer */});
+ await page.goto('/');
+ await expect(page.getByText('Gathering your trip…')).toBeVisible();
+ await expect(page.getByRole('button',{name:'Reload Splitfairy'})).toBeVisible({timeout:12_000});
+ await page.unroute('**/api/v1/me');
+ await page.route('**/api/v1/me',route=>route.fulfill({status:200,contentType:'application/json',body:'null'}));
+ await page.getByRole('button',{name:'Reload Splitfairy'}).click();
+ await expect(page.getByRole('heading',{name:/Good trips are/i})).toBeVisible();
+});
