@@ -283,3 +283,57 @@ describe('stay documents',()=>{
   expect(readdirSync(join(dataDir,'files',trip.id))).toEqual([]);
  });
 });
+describe('sign-up mode',()=>{
+ it('lets only people in a trip sign in unless the admin opens sign-up',async()=>{
+  const store=new Store(new DatabaseSync(':memory:'));const mails:{to:string;body:string}[]=[];
+  const a=await createApp({store,adminEmail:'admin@example.com',secret:'a very long integration test secret',sendMail:async(to,_s,body)=>{mails.push({to,body});},dataDir:'/tmp/splitfairy-api-tests',startWorker:false,authRateLimitFactor:100});
+  const request=async(email:string)=>{const before=mails.length;await a.inject({method:'POST',url:'/api/v1/auth/request',payload:{email}});return mails.length>before;};
+  const signIn=async(email:string)=>{await request(email);const code=mails.filter(m=>m.to===email).at(-1)!.body.match(/\b\d{6}\b/)![0];return {host:'splitfairy.example',cookie:`splitfairy_session=${(await a.inject({method:'POST',url:'/api/v1/auth/verify',payload:{email,code,name:'X'}})).cookies.find(c=>c.name==='splitfairy_session')!.value}`};};
+  expect((await a.inject({method:'GET',url:'/api/v1/config'})).json()).toEqual({signupOpen:false});
+  expect(await request('stranger@example.com')).toBe(false);
+  const admin=await signIn('admin@example.com');
+  const trip=(await a.inject({method:'POST',url:'/api/v1/trips',headers:admin,payload:{name:'Porto',start:'2026-10-01',end:'2026-10-05'}})).json();
+  let n=0;const cmd=(action:'save'|'delete',entity:string,value:any,expectedVersion=0)=>a.inject({method:'POST',url:`/api/v1/trips/${trip.id}/commands`,headers:admin,payload:{mutationId:`s${n++}`,entity,action,expectedVersion,value:{version:0,...value}}});
+  await cmd('save','family',{id:'f',name:'Silva',solo:false});
+  // Added to a family with an email: may sign in.
+  await cmd('save','person',{id:'p',name:'Bea',familyId:'f',weight:1,email:'bea@example.com'});
+  const bea=await signIn('bea@example.com');expect(bea.cookie).toMatch(/splitfairy_session=.+/);
+  // Taken off the trip (and no longer a member): no more codes, although the account exists.
+  const person=(await a.inject({method:'GET',url:`/api/v1/trips/${trip.id}`,headers:admin})).json().trip.people[0];
+  await cmd('save','person',{...person,email:''},person.version);
+  await a.inject({method:'DELETE',url:`/api/v1/trips/${trip.id}/members/bea%40example.com`,headers:admin});
+  expect(await request('bea@example.com')).toBe(false);
+  // Only the admin can open sign-up; then anyone gets a code and can start a trip.
+  expect((await a.inject({method:'PUT',url:'/api/v1/admin/settings',headers:bea,payload:{signupOpen:true}})).statusCode).toBe(403);
+  expect((await a.inject({method:'PUT',url:'/api/v1/admin/settings',headers:admin,payload:{signupOpen:true}})).json()).toEqual({signupOpen:true});
+  expect((await a.inject({method:'GET',url:'/api/v1/config'})).json()).toEqual({signupOpen:true});
+  const stranger=await signIn('stranger@example.com');
+  expect((await a.inject({method:'POST',url:'/api/v1/trips',headers:stranger,payload:{name:'Mine',start:'2026-11-01',end:'2026-11-03'}})).statusCode).toBe(201);
+ });
+});
+describe('private packing items',()=>{
+ it('are only sent to their own family, and others cannot read, change or create them',async()=>{
+  const store=new Store(new DatabaseSync(':memory:'));const mails:{to:string;body:string}[]=[];
+  const a=await createApp({store,adminEmail:'admin@example.com',secret:'a very long integration test secret',sendMail:async(to,_s,body)=>{mails.push({to,body});},dataDir:'/tmp/splitfairy-api-tests',startWorker:false,authRateLimitFactor:100});
+  const signIn=async(email:string)=>{await a.inject({method:'POST',url:'/api/v1/auth/request',payload:{email}});const code=mails.filter(m=>m.to===email).at(-1)!.body.match(/\b\d{6}\b/)![0];return {host:'splitfairy.example',cookie:`splitfairy_session=${(await a.inject({method:'POST',url:'/api/v1/auth/verify',payload:{email,code,name:'X'}})).cookies.find(c=>c.name==='splitfairy_session')!.value}`};};
+  const admin=await signIn('admin@example.com');
+  const trip=(await a.inject({method:'POST',url:'/api/v1/trips',headers:admin,payload:{name:'Algarve',start:'2026-10-01',end:'2026-10-05'}})).json();
+  let n=0;const cmd=(headers:any,action:'save'|'delete',entity:string,value:any,expectedVersion=0)=>a.inject({method:'POST',url:`/api/v1/trips/${trip.id}/commands`,headers,payload:{mutationId:`g${n++}`,entity,action,expectedVersion,value:{version:0,...value}}});
+  await cmd(admin,'save','family',{id:'U',name:'Uhl',solo:false});await cmd(admin,'save','family',{id:'M',name:'Moncrief',solo:false});
+  await cmd(admin,'save','person',{id:'m',name:'Mathias',familyId:'U',weight:1,email:'admin@example.com'});
+  await cmd(admin,'save','person',{id:'w',name:'Will',familyId:'M',weight:1,email:'will@example.com'});
+  const will=await signIn('will@example.com');
+  expect((await cmd(admin,'save','gear',{id:'u1',text:'Underwear',familyId:'U',visibility:'family'})).statusCode).toBe(200);
+  await cmd(admin,'save','gear',{id:'g1',text:'Grill',familyId:'U'});
+  const texts=async(headers:any)=>(await a.inject({method:'GET',url:`/api/v1/trips/${trip.id}`,headers})).json().trip.gear.map((g:any)=>g.text).sort();
+  expect(await texts(admin)).toEqual(['Grill','Underwear']);
+  expect(await texts(will)).toEqual(['Grill']);
+  // The command response is filtered too.
+  expect((await cmd(will,'save','gear',{id:'w1',text:'Tent',familyId:'M'})).json().trip.gear.map((g:any)=>g.text)).not.toContain('Underwear');
+  // Will cannot change or delete it, and cannot make items private for another family.
+  expect((await cmd(will,'save','gear',{id:'u1',text:'Mine now',familyId:'M'},1)).json().error).toBe('Item not found');
+  expect((await cmd(will,'delete','gear',{id:'u1'},1)).json().error).toBe('Item not found');
+  expect((await cmd(will,'save','gear',{id:'w2',text:'Secret',familyId:'U',visibility:'family'})).json().error).toMatch(/own family/);
+  expect((await cmd(admin,'save','gear',{id:'x',text:'Nobody',visibility:'family'})).statusCode).toBe(400);
+ });
+});

@@ -37,10 +37,13 @@ function Tour({compact=false}:{compact?:boolean}){
 export function SignIn({onSignedIn,initialNotice}:{onSignedIn:(user:User&{isNew?:boolean})=>Promise<void>;initialNotice?:string}){
  const [email,setEmail]=useState(''),[code,setCode]=useState(''),[step,setStep]=useState<'email'|'code'>('email'),[busy,setBusy]=useState(false);
  const [notice,setNotice]=useState<Notice|null>(initialNotice?{kind:'info',text:initialNotice}:null);
+ // Whether anyone may sign up, or only people who are in a trip (decided by the admin).
+ const [open,setOpen]=useState(false);
+ useEffect(()=>{api.config().then(c=>setOpen(c.signupOpen)).catch(()=>{});},[]);
  const run=async(work:()=>Promise<void>)=>{setBusy(true);try{await work();}catch(error){setNotice(failure(error));}finally{setBusy(false);}};
  const request=(e?:FormEvent)=>{e?.preventDefault();
-  if(!validEmail(email)){setNotice({kind:'error',text:'Enter the email address you were invited with.'});return;}
-  void run(async()=>{await api.requestCode(email.trim());setCode('');setStep('code');setNotice({kind:'info',text:'If this address is invited, a code is on its way. It can take a few minutes; check spam too.'});});};
+  if(!validEmail(email)){setNotice({kind:'error',text:open?'Enter your email address.':'Enter the email address you were invited with.'});return;}
+  void run(async()=>{await api.requestCode(email.trim());setCode('');setStep('code');setNotice({kind:'info',text:open?'A code is on its way. It can take a few minutes; check spam too.':'If this address belongs to a trip, a code is on its way. It can take a few minutes; check spam too.'});});};
  const haveCode=()=>{if(!validEmail(email)){setNotice({kind:'error',text:'Enter the email address the code was sent to first.'});return;}setStep('code');setNotice({kind:'info',text:'Enter the newest code from your email.'});};
  const verify=(e:FormEvent)=>{e.preventDefault();
   if(digits(code).length!==6){setNotice({kind:'error',text:'The code has six digits. Paste or type it from the email.'});return;}
@@ -50,7 +53,7 @@ export function SignIn({onSignedIn,initialNotice}:{onSignedIn:(user:User&{isNew?
   <div className="auth-content">
    <Logo/>
    <h1>Good trips are<br/><em>shared fairly.</em></h1>
-   <p className="auth-lead">Sign in with the email address your trip organizer invited. No password needed.</p>
+   <p className="auth-lead">{open?'Sign in or sign up with your email address. No password needed.':'Sign in with the email address your trip organizer invited. No password needed.'}</p>
    {step==='email'?<form onSubmit={request} className="form-stack" noValidate>
     <label>Email address<input type="email" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email" placeholder="you@example.com" autoFocus/></label>
     <Button type="submit" disabled={busy}>Email me a code <ArrowRight size={17}/></Button>
@@ -103,7 +106,7 @@ function TripCard({trip,label,urgent=false,onOpen}:{trip:TripSummary;label:strin
  </button>;
 }
 
-export function TripList({user,trips,message,onDismiss,onOpen,onCreate,onLogout}:{user:User|null|undefined;trips:TripSummary[];message:string;onDismiss:()=>void;onOpen:(id:string)=>void;onCreate:()=>void;onLogout:()=>void}){
+export function TripList({user,trips,message,onDismiss,onOpen,onCreate,onLogout,canCreate=!!user?.admin}:{canCreate?:boolean;user:User|null|undefined;trips:TripSummary[];message:string;onDismiss:()=>void;onOpen:(id:string)=>void;onCreate:()=>void;onLogout:()=>void}){
  const now=today(),first=user?.name?.split(' ')[0]??'there';
  const withStatus=trips.map(t=>({trip:t,...status(t,now)}));
  const sorted=(group:string)=>withStatus.filter(x=>x.group===group).sort((a,b)=>group==='past'||group==='archived'?b.trip.start.localeCompare(a.trip.start):a.trip.start.localeCompare(b.trip.start));
@@ -111,15 +114,15 @@ export function TripList({user,trips,message,onDismiss,onOpen,onCreate,onLogout}
   {message&&<div className="toast" onClick={onDismiss}>{message}<X size={16}/></div>}
   {trips.length?<>
    <div className="trip-list-head"><div><span className="eyebrow">Your trips</span><h1>Hello, <em>{first}.</em></h1><p>Pick up where you left off.</p></div>
-    {user?.admin&&<Button kind="secondary" onClick={onCreate}><Plus size={17}/> Create a vacation</Button>}</div>
+    {canCreate&&<Button kind="secondary" onClick={onCreate}><Plus size={17}/> Create a vacation</Button>}</div>
    {GROUPS.map(([group,title])=>{const items=sorted(group);return items.length?<div key={group} className="trip-group"><h2 className={group==='archived'?'archived-heading':undefined}>{title}</h2>
     <div className={`trip-grid${group==='archived'?' archived':''}`}>{items.map(x=><TripCard key={x.trip.id} trip={x.trip} label={x.label} urgent={x.group==='overdue'} onOpen={()=>onOpen(x.trip.id)}/>)}</div></div>:null;})}
   </>:<div className="landing">
    <span className="landing-mark"><LogoMark size={56}/></span>
    <div className="eyebrow">Your next chapter</div>
    <h1>Every shared trip<br/><em>starts somewhere.</em></h1>
-   <p>{user?.admin?'Create the trip, add the families, and invite the grown-ups by email.':'No trips yet. Ask your organizer to add you with this email address.'}</p>
-   {user?.admin&&<Button onClick={onCreate}><Plus size={18}/> Create a vacation</Button>}
+   <p>{canCreate?'Create the trip, add the families, and invite the grown-ups by email.':'No trips yet. Ask your organizer to add you with this email address.'}</p>
+   {canCreate&&<Button onClick={onCreate}><Plus size={18}/> Create a vacation</Button>}
   </div>}
   <div className="account-row"><span>Signed in as <strong>{user?.email}</strong></span><button className="text-button" onClick={onLogout}>Sign out</button></div>
  </section>;

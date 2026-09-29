@@ -34,6 +34,7 @@ Prefer the MCP tools when a `splitfairy` MCP server is connected (`${SPLITFAIRY_
 4. Before deleting, voiding, archiving or changing someone else's expense, say what will happen and get a yes. Voided expenses can be restored by saving `status: "posted"`.
 5. Only organizers can change trip settings, members and other people's expenses; a 403 means "ask an organizer".
 6. After changes, give the user the app link to check, e.g. `/trips/<id>/spend`.
+7. Packing items can be private to a family (`visibility: "family"`): you only see and can change private items of your own family, and only create them for it. Once a trip has ended, open repayments are overdue: say so, and note the trip cannot be archived until settled.
 
 ## Common tasks (MCP)
 

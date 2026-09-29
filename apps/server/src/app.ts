@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {mkdir,readFile,readdir,rm,writeFile} from 'node:fs/promises';
 import sharp from 'sharp';
 import {z,ZodError} from 'zod';
-import {Store,AccessError,ConflictError,InputError} from './store.js';
+import {Store,AccessError,ConflictError,InputError,visibleTrip} from './store.js';
 import {balances,settle} from '../../../packages/domain/src/accounting.js';
 import {TRIP_THEMES,commandSchema,type Trip,type User,type Receipt} from '../../../packages/domain/src/model.js';
 import {processReceipt,claimReceipt,resetInterruptedReceipts} from './receipt.js';
@@ -20,7 +20,7 @@ const emailSchema=z.string().trim().pipe(z.email()).transform(v=>v.toLowerCase()
 const inviteSchema=z.object({email:emailSchema,role:z.enum(['organizer','member']).default('member')});
 const codeSchema=z.object({email:emailSchema,code:z.string().max(40).transform(v=>v.replace(/\D/g,'')).pipe(z.string().regex(/^\d{6}$/)),name:z.string().trim().max(80).optional()});
 export type Mail=(to:string,subject:string,text:string,html?:string)=>Promise<void>;
-export type Config={/** Public address for links in background emails (reminders); falls back to the last address the app was reached at. */publicUrl?:string;/** Time zone for sending reminders in the daytime. */timeZone?:string;/** Nominatim-compatible search for restaurant addresses; empty turns lookup off. */placesUrl?:string;store:Store;adminEmail:string;secret:string;sendMail:Mail;dataDir:string;startWorker?:boolean;secureCookies?:boolean;ollamaUrl?:string;ollamaModel?:string;logLevel?:string;/** Multiplies the per-IP sign-in limits; only the browser test server raises it. */authRateLimitFactor?:number};
+export type Config={/** Default for the admin's sign-up switch (SIGNUP_OPEN); the admin can change it in the app. */signupOpen?:boolean;/** Public address for links in background emails (reminders); falls back to the last address the app was reached at. */publicUrl?:string;/** Time zone for sending reminders in the daytime. */timeZone?:string;/** Nominatim-compatible search for restaurant addresses; empty turns lookup off. */placesUrl?:string;store:Store;adminEmail:string;secret:string;sendMail:Mail;dataDir:string;startWorker?:boolean;secureCookies?:boolean;ollamaUrl?:string;ollamaModel?:string;logLevel?:string;/** Multiplies the per-IP sign-in limits; only the browser test server raises it. */authRateLimitFactor?:number};
 export function codeHash(secret:string,email:string,code:string){return createHmac('sha256',secret).update(`${email}:${code}`).digest('hex');}
 export async function createApp(config:Config):Promise<FastifyInstance>{
  const app=Fastify({logger:config.logLevel?{level:config.logLevel}:false,logController:new LogController({disableRequestLogging:true}),bodyLimit:16_000_000,trustProxy:true});
@@ -85,11 +85,19 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
   reply.status(201);return config.store.createAccessToken(user,name);
  });
  app.delete('/api/v1/me/tokens/:id',async request=>{config.store.revokeAccessToken(sessionUser(request),(request.params as {id:string}).id);return {ok:true};});
+ const signupOpen=()=>{const v=config.store.setting('signup_open');return v===null?!!config.signupOpen:v==='true';};
+ // Public: the sign-in screen says whether new people can sign up.
+ app.get('/api/v1/config',async()=>({signupOpen:signupOpen()}));
+ app.get('/api/v1/admin/settings',async request=>{if(!sessionUser(request).admin)throw new AccessError();return {signupOpen:signupOpen()};});
+ app.put('/api/v1/admin/settings',async request=>{
+  if(!sessionUser(request).admin)throw new AccessError();
+  const body=z.object({signupOpen:z.boolean()}).parse(request.body);config.store.setSetting('signup_open',String(body.signupOpen));return {signupOpen:signupOpen()};
+ });
  app.get('/api/v1/me',async(request)=>{try{return auth(request);}catch{return null;}});
  app.post('/api/v1/auth/request',{config:{rateLimit:{max:5*(config.authRateLimitFactor??1),timeWindow:'15 minutes'}}},async(request)=>{
   const {email}=z.object({email:emailSchema}).parse(request.body);
   // Same response whether or not the address may sign in, and whether or not the budget is spent.
-  if(config.store.canLogin(email,config.adminEmail)&&config.store.authBudget(email,'request')){
+  if(config.store.canLogin(email,config.adminEmail,signupOpen())&&config.store.authBudget(email,'request')){
    const code=String(randomInt(0,1_000_000)).padStart(6,'0');
    // 30 minutes: some mail providers deliver slowly; attempts per code and per hour stay limited.
    config.store.issueCode(email,codeHash(config.secret,email,code),Date.now()+30*60_000);
@@ -119,8 +127,8 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
  app.put('/api/v1/me',async(request)=>{const user=auth(request),{name}=z.object({name:z.string().trim().min(1).max(80)}).parse(request.body);config.store.renameUser(user.id,name);return config.store.userById(user.id);});
  app.post('/api/v1/auth/logout',async(request,reply)=>{const token=request.cookies.splitfairy_session;if(token)config.store.db.prepare('DELETE FROM sessions WHERE token_hash=?').run(sha(token));reply.clearCookie('splitfairy_session',{path:'/'});return {ok:true};});
  app.get('/api/v1/trips',async(request)=>config.store.listTrips(auth(request)).map(t=>{const status=settleStatus(t,new Date().toISOString().slice(0,10));return {id:t.id,name:t.name,start:t.start,end:t.end,archived:t.archived,theme:t.theme??'classic',cover:t.photos?.[0]?.id??null,settle:{open:status.open,overdueDays:status.overdueDays}};}));
- app.post('/api/v1/trips',async(request,reply)=>{const body=z.object({name:z.string().trim().min(1).max(160),start:z.iso.date(),end:z.iso.date(),theme:z.enum(TRIP_THEMES).default('classic')}).parse(request.body);const trip=config.store.createTrip(auth(request),body.name,body.start,body.end,body.theme);reply.status(201);return trip;});
- app.get('/api/v1/trips/:tripId',async(request)=>{const user=auth(request),id=(request.params as any).tripId;return {trip:config.store.getTrip(user,id),role:config.store.role(user,id),members:config.store.members(user,id)};});
+ app.post('/api/v1/trips',async(request,reply)=>{const body=z.object({name:z.string().trim().min(1).max(160),start:z.iso.date(),end:z.iso.date(),theme:z.enum(TRIP_THEMES).default('classic')}).parse(request.body);const trip=config.store.createTrip(auth(request),body.name,body.start,body.end,body.theme,signupOpen());reply.status(201);return trip;});
+ app.get('/api/v1/trips/:tripId',async(request)=>{const user=auth(request),id=(request.params as any).tripId;return {trip:visibleTrip(config.store.getTrip(user,id),user),role:config.store.role(user,id),members:config.store.members(user,id)};});
  app.post('/api/v1/trips/:tripId/invites',async(request)=>{const user=auth(request),id=(request.params as any).tripId,body=inviteSchema.parse(request.body);config.store.addMember(user,id,body.email,body.role);const mail=inviteEmail({inviter:user.name,tripName:config.store.getTrip(user,id).name,url:siteUrl(request)});await config.sendMail(body.email,mail.subject,mail.text,mail.html);return {ok:true};});
  const siteUrl=(request:{protocol:string;host:string})=>`${request.protocol}://${request.host}`;
  app.post('/api/v1/trips/:tripId/commands',async(request)=>{
@@ -137,7 +145,7 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
    try{await config.sendMail(person.email,mail.subject,mail.text,mail.html);}
    catch(error){request.log.error({err:error},'invitation email failed');}
   }
-  return {trip,role:config.store.role(user,id),members:config.store.members(user,id)};
+  return {trip:visibleTrip(trip,user),role:config.store.role(user,id),members:config.store.members(user,id)};
  });
  app.get('/api/v1/trips/:tripId/settlement',async(request)=>{
   const trip=config.store.getTrip(auth(request),(request.params as any).tripId);
@@ -194,7 +202,7 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
  app.delete('/api/v1/trips/:tripId/photos/:photoId',async(request)=>{
   const user=auth(request),{tripId,photoId}=request.params as {tripId:string;photoId:string};
   const trip=config.store.removePhoto(user,tripId,photoId);await prunePhotoFiles(tripId,trip);
-  return {trip,role:config.store.role(user,tripId)};
+  return {trip:visibleTrip(trip,user),role:config.store.role(user,tripId)};
  });
  // Documents on a stay (booking confirmations and the like). The type comes from the file's content, never its name.
  const fileFolder=(tripId:string)=>join(config.dataDir,'files',tripId);
@@ -234,7 +242,7 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
  app.delete('/api/v1/trips/:tripId/files/:fileId',async(request)=>{
   const user=auth(request),{tripId,fileId}=request.params as {tripId:string;fileId:string};
   const trip=config.store.removeFile(user,tripId,fileId);await pruneFiles(tripId,trip);
-  return {trip,role:config.store.role(user,tripId)};
+  return {trip:visibleTrip(trip,user),role:config.store.role(user,tripId)};
  });
  app.delete('/api/v1/trips/:tripId',async(request)=>{
   const user=auth(request),id=(request.params as any).tripId;config.store.deleteTrip(user,id);
@@ -246,7 +254,7 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
  app.post('/api/v1/trips/:tripId/receipts/:receiptId/:action',async(request)=>{
   const user=auth(request),{tripId,receiptId,action}=request.params as {tripId:string;receiptId:string;action:string};
   if(action!=='retry'&&action!=='dismiss')throw Object.assign(new Error('Not found'),{statusCode:404});
-  return {trip:config.store.updateReceipt(user,tripId,receiptId,action),role:config.store.role(user,tripId)};
+  return {trip:visibleTrip(config.store.updateReceipt(user,tripId,receiptId,action),user),role:config.store.role(user,tripId)};
  });
  app.get('/api/v1/trips/:tripId/receipts/:receiptId/image',async(request,reply)=>{
   const user=auth(request),{tripId,receiptId}=request.params as any,trip=config.store.getTrip(user,tripId);

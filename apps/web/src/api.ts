@@ -15,6 +15,9 @@ export const fileUrl=(tripId:string,fileId:string)=>`/api/v1/trips/${tripId}/fil
 export const photoUrl=(tripId:string,photoId:string,thumb=false)=>`/api/v1/trips/${tripId}/photos/${photoId}${thumb?'?size=thumb':''}`;
 export const api={
  me:()=>request<User|null>('/me'),
+ config:()=>request<{signupOpen:boolean}>('/config'),
+ adminSettings:()=>request<{signupOpen:boolean}>('/admin/settings'),
+ setAdminSettings:(settings:{signupOpen:boolean})=>request<{signupOpen:boolean}>('/admin/settings',{method:'PUT',body:JSON.stringify(settings)}),
  requestCode:(email:string)=>request<{ok:boolean}>('/auth/request',{method:'POST',body:JSON.stringify({email})}),
  verify:(email:string,code:string,name?:string)=>request<User&{isNew?:boolean}>('/auth/verify',{method:'POST',body:JSON.stringify({email,code,...(name?{name}:{})})}),
  rename:(name:string)=>request<User>('/me',{method:'PUT',body:JSON.stringify({name})}),

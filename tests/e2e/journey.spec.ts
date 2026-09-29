@@ -105,7 +105,7 @@ test('travel, stays and routed packing come together on the day timeline',async(
  await sheet(page).getByRole('button',{name:'Add another vehicle'}).click();
  await sheet(page).getByLabel('Vehicle 2',{exact:true}).selectOption({label:'Moncrief car'});
  await sheet(page).getByRole('button',{name:'Save changes'}).click();await closed(page);
- await expect(pack.locator('.shop-row',{hasText:'Travel cot'})).toContainText('Uhl plane → Moncrief car');
+ await expect(pack.locator('.pack-row',{hasText:'Travel cot'})).toContainText('Uhl plane → Moncrief car');
  await pack.getByRole('button',{name:'By transport'}).click();
  await expect(pack.locator('.shop-group',{has:page.locator('h3',{hasText:'Uhl plane'})})).toContainText('Travel cot');
  await expect(pack.locator('.shop-group',{has:page.locator('h3',{hasText:'Moncrief car'})})).toContainText('Travel cot');

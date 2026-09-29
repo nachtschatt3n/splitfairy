@@ -1,12 +1,11 @@
 import {AccessTokens} from './tokens.js';
 import {settleStatus} from '../../../packages/domain/src/settle-status.js';
-import {useState,type FormEvent} from 'react';
+import {useEffect,useState,type FormEvent} from 'react';
 import {ArrowRight,Mail,Pencil,Plus,Settings2,UserRound,Users} from 'lucide-react';
 import {api} from './api.js';
 import type {Command,Family,Member,Person,Trip,TripView,User} from '../../../packages/domain/src/model.js';
 import {Button,Empty,Sheet,ThemePicker,WEIGHTS,fmt,uid,weightLabel,type Remove,type Save,getDisplay,type DisplaySettings,today} from './common.js';
 import {localDb,pendingFor} from './offline.js';
-import {useEffect} from 'react';
 
 const NEW_FAMILY='__new',ON_OWN='__solo';
 type PersonDraft={person?:Person;familyId:string};
@@ -113,7 +112,19 @@ function TripSheet({trip,save,busy,onClose,onDeleted,onMessage}:{trip:Trip;save:
  </Sheet>;
 }
 
-export function People({onDisplay,trip,view,user,onRename,onLogout,save,remove,onInvite,pending,selected,onRefresh,onTripDeleted,onMessage,busy,describeActivity}:{onDisplay:(next:DisplaySettings)=>void;trip:Trip;view:TripView;user:User|null|undefined;onRename:()=>void;onLogout:()=>void;save:Save;remove:Remove;onInvite:()=>void;pending:number;selected:string;onRefresh:()=>void;onTripDeleted:()=>void;onMessage:(m:string)=>void;busy:boolean;describeActivity:(s:string)=>string}){
+/** Admin only: whether anyone may sign up, or only people who are in a trip. */
+function SignupSetting({onChange}:{onChange?:(open:boolean)=>void}){
+ const [open,setOpen]=useState<boolean|null>(null),[error,setError]=useState('');
+ useEffect(()=>{api.adminSettings().then(s=>setOpen(s.signupOpen)).catch(()=>setError('Needs a connection.'));},[]);
+ const change=async(next:boolean)=>{setError('');try{const s=await api.setAdminSettings({signupOpen:next});setOpen(s.signupOpen);onChange?.(s.signupOpen);}catch(err){setError(err instanceof Error?err.message:'Could not save');}};
+ return <div className="settings-block"><span className="eyebrow">Sign-up (admin)</span>
+  <label className="check-label"><input type="checkbox" checked={!!open} disabled={open===null} onChange={e=>void change(e.target.checked)}/> Anyone can sign up with their email address</label>
+  <p className="helper">{open?'New people can create an account with an email code and start their own trips.':'Off: only you and people who are in a trip can sign in: someone added to a family with their email, or invited by an organizer.'}</p>
+  {error&&<p className="form-error" role="alert">{error}</p>}
+ </div>;
+}
+
+export function People({onSignupChange,onDisplay,trip,view,user,onRename,onLogout,save,remove,onInvite,pending,selected,onRefresh,onTripDeleted,onMessage,busy,describeActivity}:{onSignupChange?:(open:boolean)=>void;onDisplay:(next:DisplaySettings)=>void;trip:Trip;view:TripView;user:User|null|undefined;onRename:()=>void;onLogout:()=>void;save:Save;remove:Remove;onInvite:()=>void;pending:number;selected:string;onRefresh:()=>void;onTripDeleted:()=>void;onMessage:(m:string)=>void;busy:boolean;describeActivity:(s:string)=>string}){
  const [tripSheet,setTripSheet]=useState(false);
  const memberAction=async(work:()=>Promise<unknown>,done:string)=>{try{await work();onMessage(done);onRefresh();}catch(error){onMessage(error instanceof Error?error.message:'That did not work');}};
  const organizer=view.role==='organizer',members=view.members??[];
@@ -156,6 +167,7 @@ export function People({onDisplay,trip,view,user,onRename,onLogout,save,remove,o
       <label>Dates<select value={getDisplay().date} onChange={e=>onDisplay({...getDisplay(),date:e.target.value as DisplaySettings['date']})}><option value="dmy">DD.MM.YY (03.10.26)</option><option value="written">Written (Sat 3 Oct)</option><option value="iso">YYYY-MM-DD (2026-10-03)</option></select></label>
       <label>Times<select value={getDisplay().time} onChange={e=>onDisplay({...getDisplay(),time:e.target.value as DisplaySettings['time']})}><option value="24h">24-hour (20:30)</option><option value="12h">12-hour (8:30 pm)</option></select></label>
      </div></div></div>
+    {user?.admin&&<SignupSetting onChange={onSignupChange}/>}
     <AccessTokens/>
     <div className="settings-block account-block"><span className="eyebrow">Your account</span><div className="account-row"><span><strong>{user?.name}</strong> · {user?.email??'—'}</span><span className="account-actions"><button className="text-button" onClick={onRename}>Change name</button><button className="text-button" onClick={onLogout}>Sign out</button></span></div></div>
    </section>

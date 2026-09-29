@@ -20,7 +20,7 @@ const ENTITY_GUIDE=`Entities (fields; ids are strings, dates YYYY-MM-DD, times H
 - person {name, familyId, weight (share: 1 adult, 0.5 child, 0 baby), email?}
 - event {title, date, time?, kind: breakfast|lunch|dinner|restaurant|activity, address?, recipeUrl?, owner?, notes?, participants:[{id:personId, weight}]}
 - shopping {text, eventId|null, done:boolean}
-- gear {text, familyId|null, quantity, note?, packed:boolean, route:[transportId,…]}
+- gear {text, familyId|null, quantity, note?, packed:boolean, route:[transportId,…], visibility: everyone|family} (family = only that family sees it; only for your own family)
 - transport {name, kind: car|plane|train|bus|other, familyId|null, note?}
 - stay {name, address?, url? (booking link), from, to (check-out day), checkIn?, checkOut?, note?, guests:[{id:personId, weight}], schedule:[{id, familyId|null, personId|null, arriveDate?, arriveTime?, departDate?, departTime?}] (own arrival/departure per family or person; empty dates = the stay's), expenseId|null}
 - leg {transportId, from, to, departDate, departTime?, arriveDate, arriveTime?, people:[personId], note?, flightNo?}

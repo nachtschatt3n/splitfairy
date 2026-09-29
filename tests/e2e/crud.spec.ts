@@ -80,10 +80,10 @@ test('every entity can be created, changed and removed from the interface',async
  await sheet(page).getByLabel('How many').fill('2');await sheet(page).getByLabel('Who brings it').selectOption({label:'Costa'});await sheet(page).getByLabel('Note (optional)').fill('The blue one');
  await sheet(page).getByRole('button',{name:'Save changes'}).click();await closed(page);
  await expect(pack.locator('.shop-group',{hasText:'Costa'})).toContainText('2 × Beach tent');await expect(pack.locator('.shop-group',{hasText:'Costa'})).toContainText('The blue one');
- await pack.locator('.filter-chips').getByRole('button',{name:'Weber'}).click();
+ await pack.getByLabel('Show').selectOption({label:'Weber'});
  await expect(pack.locator('.shop-group')).toHaveCount(1);await expect(pack.locator('.shop-group')).toContainText('Grill');
- await pack.locator('.filter-chips').getByRole('button',{name:'Everything'}).click();
- await pack.locator('.shop-row',{hasText:'Grill'}).getByRole('checkbox').click();
+ await pack.getByLabel('Show').selectOption({label:'Everything'});
+ await pack.locator('.pack-row',{hasText:'Grill'}).getByRole('checkbox').click();
  await expect(page.getByText('1 of 2 packed')).toBeVisible();
  // Transport: a car with a suggested name, a flight, items travelling in them, grouping, removal.
  await pack.getByRole('button',{name:'Add car or flight'}).click();
@@ -105,7 +105,7 @@ test('every entity can be created, changed and removed from the interface',async
  await expect(pack.locator('.shop-group',{hasText:'No transport yet'})).toContainText('Beach tent');
  await pack.getByRole('button',{name:'By family'}).click();
  await page.getByRole('button',{name:'Edit Grill'}).click();await sheet(page).getByRole('button',{name:'Delete item'}).click();await closed(page);
- await expect(pack.locator('.shop-row',{hasText:'Grill'})).toHaveCount(0);
+ await expect(pack.locator('.pack-row',{hasText:'Grill'})).toHaveCount(0);
 
  // Expenses: add, open, edit, void, find in voided, restore.
  await openSection(page,'Spend');

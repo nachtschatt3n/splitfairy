@@ -26,7 +26,7 @@ A self-hosted, installable app for group vacations: plan the journey, stays, mea
 - **Getting there and where you sleep.** Add flights (with the flight number, shown with the airline's colours) and car drives with times and who travels, and stays with address, check-in and check-out, and who is staying. They show up on the day's timeline, with a map link and what each vehicle carries. A booking cost, with who paid, becomes an expense split among the people staying, and stays editable from the stay. On a wide screen, the whole trip is laid out at a glance.
 - **Photos of the places.** Anyone on the trip can add photos of a stay. They show on the day's timeline, open full size, and the first one becomes the trip's cover.
 - **Shopping list.** Shared, grouped by meal, ticked off as people buy things.
-- **Packing and equipment.** Who brings the tent, the grill, the travel cot, and in which car or on which flight does it travel? Every item belongs to a family or waits for someone to take it, can travel in one car or flight or several in a row ("Weber plane → Silva car"), and gets ticked off when it's packed. The list can be grouped by family or by transport.
+- **Packing and equipment.** Who brings the tent, the grill, the travel cot, and in which car or on which flight does it travel? Every item belongs to a family or waits for someone to take it, can travel in one car or flight or several in a row ("Weber plane → Silva car"), and gets ticked off when it's packed. The list can be grouped by family or by transport. Add items quickly: type and press Enter, again and again; who brings it, the car or flight, and whether only your family sees it stay set. Tap an item to rename it, or delete it right there. Personal items (underwear, meds) can be private to your family.
 - **Expenses.** Add what you paid in seconds, for a meal, an activity or everyone. Split it equally, by exact amounts, percentages, shares or adjustments, or equally per family; it also handles refunds and several payers. The Spend page shows the total, a breakdown by category, and every expense by day.
 - **Receipt scanning.** Take a photo. A private vision model (via [Ollama](https://ollama.com)) reads the items, and you check them next to the photo. Assign each item to a meal, an activity or everyone. Nothing counts until the items add up to the receipt total and a person confirms.
 - **Fair balances.** Costs are split by each person's share to the cent and rolled up per family. Settle up suggests the smallest number of payments. Splitfairy records repayments; it never moves money.
@@ -36,7 +36,7 @@ A self-hosted, installable app for group vacations: plan the journey, stays, mea
 - **AI assistants.** Create a personal access token and let Claude, Codex or OpenClaw plan and split through MCP (`/mcp`) or the REST API; a ready-made [skill](skills/splitfairy/SKILL.md) is included. See [AI assistants](docs/ai-assistants.md).
 - **Clean links.** Every trip, section and plan day has its own URL (`/trips/<id>/plan/2026-10-03`), and the browser's back and forward buttons work, closing sheets too.
 - **Works offline.** Edits and receipt photos are kept on the phone and sync when you're back online. Install it to the home screen like an app.
-- **Private by design.** Invitation-only sign-in with a six-digit email code, no passwords, no public signup. Everything runs in one container on your own server.
+- **Private by design.** Sign-in with a six-digit email code, no passwords. By default only people who are in a trip can sign in (added to a family with their email, or invited by an organizer); the admin can open sign-up for everyone. Everything runs in one container on your own server.
 
 <p align="center">
 <img src="docs/screenshots/desktop-plan.png" width="820" alt="The plan on a desktop: stays, travel and plans across the whole trip, and the day's timeline">
@@ -80,6 +80,7 @@ Put it behind HTTPS. The administrator (`ADMIN_EMAIL`) signs in first, creates t
 | `ADMIN_EMAIL` | The only address that can sign in before anyone is invited; creates trips. |
 | `AUTH_SECRET` | Random string, at least 32 characters. Signs sign-in codes. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Outgoing mail for sign-in codes and invitations. `SMTP_SECURE=false` means STARTTLS on 587, `true` means TLS on 465. |
+| `SIGNUP_OPEN` | `true` lets anyone sign up with an email code (default `false`: only people in a trip). The admin can change it later under People & settings. |
 | `PUBLIC_URL` | Public address used in reminder emails, e.g. `https://splitfairy.example.com`. Without it, the last address the app was reached at is used. |
 | `REMINDER_TZ` | Time zone for sending settle-up reminders in the daytime (default `Europe/Berlin`). |
 | `OLLAMA_URL`, `OLLAMA_MODEL` | Vision model for receipts. Without it, everything except receipt scanning works. |

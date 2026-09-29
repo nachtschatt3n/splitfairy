@@ -14,7 +14,8 @@ export const paymentSchema=z.object({id,from:id,to:id,amount:money.positive(),da
 /** A car, flight or other way things travel; optionally belongs to a family. */
 export const transportSchema=z.object({id,name:z.string().trim().min(1).max(80),kind:z.enum(['car','plane','train','bus','other']).default('car'),familyId:id.nullable().default(null),note:z.string().trim().max(300).default(''),version});
 /** Packing and equipment: who brings what. familyId null means nobody has taken it yet; transportId says how it travels. */
-export const gearSchema=z.object({id,text:z.string().trim().min(1).max(200),familyId:id.nullable().default(null),transportId:id.nullable().default(null),route:z.array(id).max(10).default([]),quantity:z.number().int().min(1).max(99).default(1),note:z.string().trim().max(300).default(''),packed:z.boolean().default(false),version});
+export const gearSchema=z.object({id,text:z.string().trim().min(1).max(200),familyId:id.nullable().default(null),transportId:id.nullable().default(null),route:z.array(id).max(10).default([]),quantity:z.number().int().min(1).max(99).default(1),note:z.string().trim().max(300).default(''),packed:z.boolean().default(false),
+ /** 'family': only that family sees it (e.g. personal things). */visibility:z.enum(['everyone','family']).default('everyone'),version}).refine(g=>g.visibility==='everyone'||!!g.familyId,{message:'A private item belongs to a family'});
 export const shoppingSchema=z.object({id,text:z.string().trim().min(1).max(200),eventId:id.nullable(),done:z.boolean(),version});
 /** How a split was entered, so it can be edited the same way. All modes are stored as weights and fixed amounts. */
 export const SPLIT_MODES=['equal','exact','percent','shares','adjust','families'] as const;

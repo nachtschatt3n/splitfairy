@@ -9,6 +9,14 @@ export class AccessError extends Error{statusCode=403;constructor(){super('Acces
 export class InputError extends Error{statusCode=400;constructor(message:string){super(message);}}
 export type Role='organizer'|'member';
 export const PHOTOS_PER_STAY=12;
+/** The families a signed-in user belongs to on a trip (through a person with their email). */
+export const familiesOf=(trip:Trip,email:string)=>new Set(trip.people.filter(p=>p.email&&p.email.toLowerCase()===email.toLowerCase()).map(p=>p.familyId));
+/** What a user may see of a trip: other families' private packing items are left out. */
+export function visibleTrip(trip:Trip,user:User):Trip{
+ if(!(trip.gear??[]).some(g=>g.visibility==='family'))return trip;
+ const mine=familiesOf(trip,user.email);
+ return {...trip,gear:(trip.gear??[]).filter(g=>g.visibility!=='family'||(g.familyId&&mine.has(g.familyId)))};
+}
 export const MAX_ACCESS_TOKENS=20;
 export const FILES_PER_STAY=10;
 const tokenHash=(token:string)=>createHash('sha256').update(token).digest('hex');
@@ -23,6 +31,7 @@ export class Store{
   CREATE TABLE IF NOT EXISTS invites(trip_id TEXT NOT NULL,email TEXT NOT NULL,role TEXT NOT NULL,PRIMARY KEY(trip_id,email));
   CREATE TABLE IF NOT EXISTS codes(email TEXT PRIMARY KEY,hash TEXT NOT NULL,expires INTEGER NOT NULL,attempts INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL,expires INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS settle_reminders(trip_id TEXT NOT NULL,family_id TEXT NOT NULL,last_sent TEXT NOT NULL,PRIMARY KEY(trip_id,family_id));
   CREATE TABLE IF NOT EXISTS access_tokens(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,name TEXT NOT NULL,token_hash TEXT UNIQUE NOT NULL,prefix TEXT NOT NULL,created_at TEXT NOT NULL,last_used_at TEXT);
   CREATE TABLE IF NOT EXISTS mutations(id TEXT PRIMARY KEY,trip_id TEXT NOT NULL,user_id TEXT NOT NULL,created INTEGER NOT NULL);
@@ -34,9 +43,21 @@ export class Store{
  renameUser(id:string,name:string){this.db.prepare('UPDATE users SET name=? WHERE id=?').run(name,id);}
  userByEmail(email:string):User|null{const row=this.db.prepare('SELECT * FROM users WHERE email=?').get(email.toLowerCase()) as any;return row?{id:row.id,email:row.email,name:row.name,admin:!!row.admin}:null;}
  userById(id:string):User|null{const row=this.db.prepare('SELECT * FROM users WHERE id=?').get(id) as any;return row?{id:row.id,email:row.email,name:row.name,admin:!!row.admin}:null;}
- canLogin(email:string,adminEmail:string){return email.toLowerCase()===adminEmail.toLowerCase() || !!this.db.prepare('SELECT 1 FROM users WHERE email=?').get(email.toLowerCase()) || !!this.db.prepare('SELECT 1 FROM invites WHERE email=?').get(email.toLowerCase());}
+ /**
+  * Who may get a sign-in code. With sign-up open: anyone. Otherwise only the admin and people who are in a
+  * trip right now: a person with this email in a family, a trip member, or a pending invite.
+  */
+ canLogin(email:string,adminEmail:string,signupOpen=false){
+  const e=email.toLowerCase();
+  if(e===adminEmail.toLowerCase()||signupOpen)return true;
+  return !!this.db.prepare('SELECT 1 FROM invites WHERE email=?').get(e)||!!this.db.prepare('SELECT 1 FROM memberships WHERE email=?').get(e)
+   ||!!this.db.prepare("SELECT 1 FROM trips, json_each(trips.data,'$.people') p WHERE lower(json_extract(p.value,'$.email'))=? LIMIT 1").get(e);
+ }
+ setting(key:string){return (this.db.prepare('SELECT value FROM settings WHERE key=?').get(key) as {value:string}|undefined)?.value??null;}
+ setSetting(key:string,value:string){this.db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key,value);}
  promoteInvites(email:string){this.db.prepare('INSERT OR IGNORE INTO memberships(trip_id,email,role) SELECT trip_id,email,role FROM invites WHERE email=?').run(email);this.db.prepare('DELETE FROM invites WHERE email=?').run(email);}
- createTrip(user:User,name:string,start:string,end:string,theme:Trip['theme']='classic'):Trip{if(!user.admin)throw new AccessError();if(!name.trim()||!/^\d{4}-\d{2}-\d{2}$/.test(start)||!/^\d{4}-\d{2}-\d{2}$/.test(end)||end<start) throw new InputError('Name and valid dates required');const trip={...freshTrip(randomUUID(),name.trim(),start,end),theme};this.db.prepare('INSERT INTO trips(id,data) VALUES(?,?)').run(trip.id,JSON.stringify(trip));this.db.prepare('INSERT INTO memberships(trip_id,email,role) VALUES(?,?,?)').run(trip.id,user.email.toLowerCase(),'organizer');return trip;}
+ /** Admins create trips; with sign-up open, anyone signed in may (openSignup). */
+ createTrip(user:User,name:string,start:string,end:string,theme:Trip['theme']='classic',openSignup=false):Trip{if(!user.admin&&!openSignup)throw new AccessError();if(!name.trim()||!/^\d{4}-\d{2}-\d{2}$/.test(start)||!/^\d{4}-\d{2}-\d{2}$/.test(end)||end<start) throw new InputError('Name and valid dates required');const trip={...freshTrip(randomUUID(),name.trim(),start,end),theme};this.db.prepare('INSERT INTO trips(id,data) VALUES(?,?)').run(trip.id,JSON.stringify(trip));this.db.prepare('INSERT INTO memberships(trip_id,email,role) VALUES(?,?,?)').run(trip.id,user.email.toLowerCase(),'organizer');return trip;}
  role(user:User,tripId:string):Role{const row=this.db.prepare('SELECT role FROM memberships WHERE trip_id=? AND email=?').get(tripId,user.email.toLowerCase()) as {role:Role}|undefined;if(!row)throw new AccessError();return row.role;}
  getTrip(user:User,tripId:string):Trip{this.role(user,tripId);const row=this.db.prepare('SELECT data FROM trips WHERE id=?').get(tripId) as {data:string}|undefined;if(!row)throw new AccessError();return JSON.parse(row.data);}
  listTrips(user:User):Trip[]{return (this.db.prepare('SELECT data FROM trips WHERE id IN (SELECT trip_id FROM memberships WHERE email=?)').all(user.email.toLowerCase()) as {data:string}[]).map(r=>JSON.parse(r.data));}
@@ -204,6 +225,12 @@ export class Store{
     const value=command.value as any;
     if(!value?.id || typeof value.id!=='string')throw new InputError('Item ID required');
     const index=list.findIndex(item=>item.id===value.id),old=index<0?null:list[index];
+    // Another family's private packing item does not exist for this user; private items can only be for your own family.
+    if(command.entity==='gear'){
+     const mine=familiesOf(trip,actor.email);
+     if(old&&old.visibility==='family'&&!mine.has(old.familyId))throw new InputError('Item not found');
+     if(command.action==='save'&&value.visibility==='family'&&!mine.has(value.familyId))throw new InputError('Only your own family’s items can be private');
+    }
     if((old?.version??0)!==command.expectedVersion)throw new ConflictError();
     if(command.action==='delete'){
      if(!old)throw new InputError('Item not found');
