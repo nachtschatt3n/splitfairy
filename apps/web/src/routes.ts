@@ -1,7 +1,7 @@
-/** Clean URLs: /trips, /trips/<id>, /trips/<id>/plan[/<yyyy-mm-dd>], /pack, /spend, /settle, /people. */
-export type Tab='today'|'plan'|'packing'|'expenses'|'balances'|'people';
+/** Clean URLs: /trips, /trips/<id>, /trips/<id>/plan[/<yyyy-mm-dd>], /pack, /shop, /spend, /settle, /people. */
+export type Tab='today'|'plan'|'packing'|'shopping'|'expenses'|'balances'|'people';
 export type Route={tripId:string|null;tab:Tab;day:string|null};
-const SLUGS:Record<Tab,string>={today:'',plan:'plan',packing:'pack',expenses:'spend',balances:'settle',people:'people'};
+const SLUGS:Record<Tab,string>={today:'',plan:'plan',packing:'pack',shopping:'shop',expenses:'spend',balances:'settle',people:'people'};
 const TABS=Object.fromEntries(Object.entries(SLUGS).map(([tab,slug])=>[slug,tab as Tab])) as Record<string,Tab>;
 
 /** Reads a path; `null` for "/" (no preference: the app opens the last trip or the list). */

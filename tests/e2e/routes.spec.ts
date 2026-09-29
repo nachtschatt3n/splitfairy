@@ -41,7 +41,7 @@ test('every section opens straight from its URL after a reload',async({page},tes
  await signInAsAdmin(page);
  await createTrip(page,unique(testInfo,'Deep links'),iso(0),iso(3));
  const base=new URL(page.url()).pathname;
- for(const [slug,heading] of [['people','Your people'],['spend','Every little thing'],['settle','All settled, together'],['pack','Who brings what'],['plan','The plan']] as const){
+ for(const [slug,heading] of [['people','Your people'],['spend','Every little thing'],['settle','All settled, together'],['pack','Who brings what'],['shop','What we need'],['plan','The plan']] as const){
   await page.goto(`${base}/${slug}`);await expect(page.getByRole('heading',{name:heading})).toBeVisible();
   await expect(page.getByText('Something went wrong')).toHaveCount(0);
  }

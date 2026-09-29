@@ -70,8 +70,8 @@ test('organizer plans a trip, splits a receipt, settles up and switches trips',a
  await dinner.getByLabel('Add to shopping for Sardine dinner').fill('Lemons');await dinner.getByLabel('Add to shopping for Sardine dinner').press('Enter');
  const lemons=dinner.locator('.shop-row',{hasText:'Lemons'});
  await expect(lemons).toBeVisible();await lemons.getByRole('checkbox').click();await expect(lemons.getByRole('checkbox')).toBeChecked();
- await expect(page.locator('.shop-group',{hasText:'Sardine dinner'})).toContainText('Lemons');
  await shot(page,testInfo,'plan');
+ await openSection(page,'Shop');await expect(page.locator('.shop-group',{hasText:'Sardine dinner'})).toContainText('Lemons');
 
  await openSection(page,'Spend');
  const quick=await openExpenseForm(page);

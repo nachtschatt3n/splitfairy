@@ -54,10 +54,13 @@ export async function createTrip(page:Page,name:string,start='2026-10-01',end='2
  await expect(page.getByText(`Here's what's happening in ${name}.`)).toBeVisible({timeout:15_000});
 }
 /** Section navigation works the same way a person would use it on each device. */
-export async function openSection(page:Page,section:'Today'|'Plan'|'Pack'|'Spend'|'Settle'|'People'){
- if(isPhone(page)){await page.getByRole('navigation',{name:'Trip sections'}).getByRole('button',{name:section}).click();return;}
- const desktop={Today:'Today',Plan:'The plan',Pack:'Packing list',Spend:'Expenses',Settle:'Balances',People:'People & settings'}[section];
- await page.locator('.sidebar .nav').getByRole('button',{name:desktop}).click();
+export async function openSection(page:Page,section:'Today'|'Plan'|'Pack'|'Shop'|'Spend'|'Settle'|'People'){
+ // Packing and shopping share the Lists tab.
+ const list=section==='Pack'?'Packing':section==='Shop'?'Shopping':null;
+ const tab=(list?'Lists':section) as 'Today'|'Plan'|'Lists'|'Spend'|'Settle'|'People';
+ if(isPhone(page))await page.getByRole('navigation',{name:'Trip sections'}).getByRole('button',{name:tab}).click();
+ else await page.locator('.sidebar .nav').getByRole('button',{name:{Today:'Today',Plan:'The plan',Lists:'Lists',Spend:'Expenses',Settle:'Balances',People:'People & settings'}[tab]}).click();
+ if(list)await page.getByRole('group',{name:'Lists'}).getByRole('button',{name:list}).click();
 }
 export async function switchTrip(page:Page,name:string){
  const chip=page.getByRole('button',{name:/Switch trip/}),card=page.locator('.trip-card',{hasText:name});

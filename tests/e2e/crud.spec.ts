@@ -58,6 +58,7 @@ test('every entity can be created, changed and removed from the interface',async
  // Shopping: add on a meal and generally, edit, move, mark bought, delete.
  const dinner=page.getByRole('article',{name:'Fish dinner'});
  await dinner.getByLabel('Add to shopping for Fish dinner').fill('Lemon');await dinner.getByLabel('Add to shopping for Fish dinner').press('Enter');
+ await openSection(page,'Shop');
  await page.getByLabel('Add to the list').fill('Sun cream');await page.getByRole('button',{name:'Add item'}).click();
  await expect(page.locator('.shop-group',{hasText:'General'})).toContainText('Sun cream');
  await page.locator('.shop-group',{hasText:'General'}).getByRole('button',{name:'Edit Sun cream'}).click();
@@ -65,6 +66,7 @@ test('every entity can be created, changed and removed from the interface',async
  const dinnerOption=await sheet(page).getByLabel('For').locator('option',{hasText:'Fish dinner'}).getAttribute('value');
  await sheet(page).getByLabel('For').selectOption(dinnerOption!);await sheet(page).getByLabel('Already bought').check();
  await sheet(page).getByRole('button',{name:'Save changes'}).click();await closed(page);
+ await openSection(page,'Plan');
  await expect(dinner).toContainText('Sun cream SPF 50');await expect(dinner.locator('.done',{hasText:'Sun cream SPF 50'})).toBeVisible();
  await dinner.getByRole('button',{name:'Edit Lemon'}).click();await sheet(page).getByRole('button',{name:'Delete item'}).click();await closed(page);
  await expect(dinner).not.toContainText('Lemon');

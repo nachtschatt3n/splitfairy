@@ -640,3 +640,31 @@ input[type=date]{min-width:150px}
 .magic-page .auth-content{max-width:520px}
 .buyer-tag{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;background:var(--soft);color:var(--link);font-size:12px;font-weight:700;white-space:nowrap}
 .shop-filter{justify-self:start;margin:4px 0}
+/* Lists: packing and shopping share one tab */
+.list-switch{display:flex;width:max-content;max-width:100%;margin:0 0 14px}
+.list-switch button{display:inline-flex;align-items:center;gap:7px;padding:0 18px}
+.list-switch small{min-width:20px;padding:1px 7px;border-radius:999px;background:var(--surface);color:var(--ink);font-size:12px;font-weight:700;text-align:center}
+.list-switch button.on small{background:var(--on-primary);color:var(--primary)}
+@media(max-width:740px){.list-switch{width:100%}.list-switch button{flex:1;justify-content:center;padding:0 10px}}
+.shopping .pack-head{margin-bottom:10px}
+.shopping .pack-head .qa-pill{flex:none}
+.shopping .shop-group h3 small{font-weight:600}
+.shop-context{display:block;margin-top:2px;color:var(--muted);font-size:12px;font-weight:600}
+.store-mode .shop-row{min-height:58px}
+.store-mode .shop-check{font-size:18px!important;min-height:56px}
+.store-mode .shop-check input{height:28px!important;width:28px!important}
+.store-mode .helper{margin:0 0 4px}
+.shop-summary .shop-summary-count{margin:0 0 10px;color:var(--muted)}
+.shop-summary .shop-summary-count strong{color:var(--ink);font-size:20px}
+.shop-peek{list-style:none;display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px;padding:0}
+.shop-peek li{padding:4px 10px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);font-size:13px;font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shop-peek li.more{color:var(--muted);background:transparent}
+.shop-summary .btn{width:100%}
+.stat.as-button{display:block;width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer}
+.stat.as-button:hover{border-color:var(--link)}
+.shopping .qa-options .qa-pill{flex:1 1 auto;max-width:100%}
+.shopping .qa-options .qa-pill select{flex:1;max-width:260px}
+.segmented button{min-width:52px}
+.shopping .pack-controls{margin-top:12px}
+@media(max-width:740px){.shopping .qa-options .qa-pill{padding:0 10px;gap:4px}}
+@media(max-width:740px){.shopping .qa-options{flex-wrap:nowrap}.shopping .qa-options .qa-pill{flex:1 1 0;min-width:0}.shopping .qa-options .qa-pill select{width:100%;min-width:0;max-width:none;padding:0}}
