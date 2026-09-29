@@ -1,6 +1,6 @@
 import {test,expect,type Page} from '@playwright/test';
 import sharp from 'sharp';
-import {createTrip,openSection,shot,signInAsAdmin,unique} from './helpers.js';
+import {addFamily,addPerson,createTrip,openSection,shot,signInAsAdmin,unique} from './helpers.js';
 const iso=(days:number)=>{const d=new Date(Date.now()+days*86400_000);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
 const sheet=(page:Page)=>page.getByRole('dialog').last();
 const picture=(color:string)=>sharp({create:{width:1200,height:800,channels:3,background:color}}).jpeg().toBuffer();
@@ -10,6 +10,7 @@ test('everyone can add photos of a place, open them, and they become the trip co
  page.on('dialog',d=>d.accept());
  await signInAsAdmin(page);
  const name=unique(testInfo,'Photos');await createTrip(page,name,iso(0),iso(4));
+ await openSection(page,'People');await addFamily(page,'Silva');await addPerson(page,'Ana','Silva');
  await openSection(page,'Plan');
  await page.getByRole('button',{name:'Add stay'}).click();
  await expect(sheet(page)).toContainText('You can add photos of the place once it');
@@ -50,6 +51,24 @@ test('everyone can add photos of a place, open them, and they become the trip co
  await sheet(page).getByRole('button',{name:'Close'}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
  await expect(dinner.getByRole('button',{name:'Photos of Cataplana (1)'})).toBeVisible();
  await shot(page,testInfo,'meal-photo');
+
+ // Stays have a booking link, notes, their own arrival times per family, and documents.
+ await day.getByRole('button',{name:'Edit Casa das Dunas'}).first().click();
+ await sheet(page).getByLabel('Booking link (optional)').fill('https://www.airbnb.com/rooms/12345');
+ await sheet(page).getByLabel('Notes (optional)').fill('Key box at the gate.\nWi-Fi: Dunas2026');
+ await sheet(page).getByRole('button',{name:'Add arrival and departure times'}).click();
+ const row=sheet(page).locator('.schedule-row').first();
+ await row.getByLabel('Who').selectOption({label:'Ana'});await row.getByLabel('at').first().fill('18:30');
+ await sheet(page).getByLabel('Attach files').setInputFiles({name:'Booking confirmation.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.4\n% test booking\n')});
+ await expect(sheet(page).locator('.file-list')).toContainText('Booking confirmation.pdf',{timeout:30_000});
+ const [download]=await Promise.all([page.waitForEvent('download'),sheet(page).getByRole('link',{name:/Booking confirmation\.pdf/}).click()]);
+ expect(download.suggestedFilename()).toBe('Booking confirmation.pdf');
+ await sheet(page).getByRole('button',{name:'Save changes'}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+ const checkin=day.getByRole('article',{name:'Check in · Casa das Dunas'});
+ await expect(checkin.getByRole('list',{name:'Arrivals'})).toContainText('Ana arrives at 18:30');
+ await expect(checkin.getByRole('link',{name:'Booking'})).toHaveAttribute('href','https://www.airbnb.com/rooms/12345');
+ await expect(checkin).toContainText('1 file');
+ await shot(page,testInfo,'stay-details');
 
  // The first photo is the trip's cover on Today and in the trip list.
  await openSection(page,'Today');

@@ -20,7 +20,8 @@
     "backup:dev": "tsx scripts/backup.ts",
     "smoke:ai": "tsx scripts/ai-smoke.ts",
     "test:e2e:real": "npm run build && playwright test --project=iphone-webkit --project=iphone-chromium --project=desktop-chromium",
-    "screenshots": "node scripts/screenshots.mjs"
+    "screenshots": "node scripts/screenshots.mjs",
+    "eval:ai": "tsx scripts/ai-eval.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.0",
@@ -28,6 +29,7 @@
     "@fastify/static": "^10.1.4",
     "@fontsource/dm-sans": "^5.3.0",
     "@fontsource/outfit": "^5.3.0",
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "dexie": "^4.0.0",
     "fastify": "^5.0.0",
     "lucide-react": "^1.48.0",

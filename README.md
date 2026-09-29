@@ -32,6 +32,8 @@ A self-hosted, installable app for group vacations: plan the journey, stays, mea
 - **Fair balances.** Costs are split by each person's share to the cent and rolled up per family. Settle up suggests the smallest number of payments. Splitfairy records repayments; it never moves money.
 - **Your date and time style.** Dates as 03.10.26 and 24-hour times by default; switch to written dates or 12-hour times in People & settings.
 - **A look for every trip.** Pick Coast, Alpine, City, Countryside or Classic when you create the trip; the whole app follows it, in light and dark mode.
+- **AI assistants.** Create a personal access token and let Claude, Codex or OpenClaw plan and split through MCP (`/mcp`) or the REST API; a ready-made [skill](skills/splitfairy/SKILL.md) is included. See [AI assistants](docs/ai-assistants.md).
+- **Clean links.** Every trip, section and plan day has its own URL (`/trips/<id>/plan/2026-10-03`), and the browser's back and forward buttons work, closing sheets too.
 - **Works offline.** Edits and receipt photos are kept on the phone and sync when you're back online. Install it to the home screen like an app.
 - **Private by design.** Invitation-only sign-in with a six-digit email code, no passwords, no public signup. Everything runs in one container on your own server.
 

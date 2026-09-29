@@ -11,6 +11,7 @@ import {balances,settle} from '../../../packages/domain/src/accounting.js';
 import {TRIP_THEMES,commandSchema,type Trip,type User,type Receipt} from '../../../packages/domain/src/model.js';
 import {processReceipt,claimReceipt,resetInterruptedReceipts} from './receipt.js';
 import {inviteEmail,signInEmail} from './mail.js';
+import {registerMcp} from './mcp.js';
 
 const sha=(input:string)=>createHash('sha256').update(input).digest('hex');
 const emailSchema=z.string().trim().pipe(z.email()).transform(v=>v.toLowerCase());
@@ -34,7 +35,18 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
   const origin=request.headers.origin;
   if(origin){try{if(new URL(origin).host!==request.headers.host){reply.status(403).send({error:'Cross-origin write denied'});}}catch{reply.status(403).send({error:'Invalid origin'});}}
  });
+ /** Who is calling: a personal access token (Authorization: Bearer sfp_…) or the app's session cookie. */
  function auth(request:any):User{
+  const header=request.headers?.authorization;
+  if(typeof header==='string'&&/^Bearer\s+/i.test(header)){
+   const user=config.store.userByAccessToken(header.replace(/^Bearer\s+/i,'').trim());
+   if(!user)throw Object.assign(new Error('Invalid or revoked access token'),{statusCode:401});
+   return user;
+  }
+  return sessionUser(request);
+ }
+ /** Only the signed-in app (never a token) may manage tokens, so a leaked token cannot mint more. */
+ function sessionUser(request:any):User{
   const token=request.cookies?.splitfairy_session;
   if(!token)throw Object.assign(new Error('Sign in required'),{statusCode:401});
   const row=config.store.db.prepare('SELECT user_id FROM sessions WHERE token_hash=? AND expires>?').get(sha(token),Date.now()) as {user_id:string}|undefined;
@@ -63,6 +75,12 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
    return rows.slice(0,5).map(r=>{const name=r.name||r.display_name.split(',')[0];const address=r.display_name.startsWith(`${name}, `)?r.display_name.slice(name.length+2):r.display_name;return {name,address};});
   }catch{reply.status(502);return {error:'Address lookup failed; type the address instead'};}
  });
+ app.get('/api/v1/me/tokens',async request=>config.store.listAccessTokens(sessionUser(request)));
+ app.post('/api/v1/me/tokens',{config:{rateLimit:{max:20,timeWindow:'1 hour'}}},async(request,reply)=>{
+  const user=sessionUser(request),{name}=z.object({name:z.string().trim().min(1).max(80)}).parse(request.body);
+  reply.status(201);return config.store.createAccessToken(user,name);
+ });
+ app.delete('/api/v1/me/tokens/:id',async request=>{config.store.revokeAccessToken(sessionUser(request),(request.params as {id:string}).id);return {ok:true};});
  app.get('/api/v1/me',async(request)=>{try{return auth(request);}catch{return null;}});
  app.post('/api/v1/auth/request',{config:{rateLimit:{max:5*(config.authRateLimitFactor??1),timeWindow:'15 minutes'}}},async(request)=>{
   const {email}=z.object({email:emailSchema}).parse(request.body);
@@ -106,6 +124,7 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
   const known=new Set(command.entity==='person'?config.store.members(user,id).map(m=>m.email):[]);
   const trip=config.store.mutate(user,id,command);
   if((command.entity==='stay'||command.entity==='event')&&command.action==='delete')await prunePhotoFiles(id,trip);
+  if(command.entity==='stay'&&command.action==='delete')await pruneFiles(id,trip);
   // A person saved with a new email is invited to sign in; the mail is best effort because the change is already saved.
   const person=command.entity==='person'&&command.action==='save'?trip.people.find(p=>p.id===(command.value as any)?.id):undefined;
   if(person?.email&&!known.has(person.email)){
@@ -173,9 +192,49 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
   const trip=config.store.removePhoto(user,tripId,photoId);await prunePhotoFiles(tripId,trip);
   return {trip,role:config.store.role(user,tripId)};
  });
+ // Documents on a stay (booking confirmations and the like). The type comes from the file's content, never its name.
+ const fileFolder=(tripId:string)=>join(config.dataDir,'files',tripId);
+ const sniff=(data:Buffer):string|null=>{
+  if(data.subarray(0,5).toString('latin1')==='%PDF-')return 'application/pdf';
+  if(data.subarray(0,8).equals(Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a])))return 'image/png';
+  if(data[0]===0xff&&data[1]===0xd8&&data[2]===0xff)return 'image/jpeg';
+  if(data.subarray(0,4).toString('latin1')==='RIFF'&&data.subarray(8,12).toString('latin1')==='WEBP')return 'image/webp';
+  if(!data.includes(0)){try{new TextDecoder('utf-8',{fatal:true}).decode(data);return 'text/plain; charset=utf-8';}catch{/* not text */}}
+  return null;
+ };
+ const pruneFiles=async(tripId:string,trip:Trip)=>{
+  const keep=new Set((trip.files??[]).map(f=>f.id));
+  const names=await readdir(fileFolder(tripId)).catch(()=>[] as string[]);
+  await Promise.all(names.filter(n=>!keep.has(n)).map(n=>rm(join(fileFolder(tripId),n),{force:true})));
+ };
+ app.post('/api/v1/trips/:tripId/files',async(request,reply)=>{
+  const user=auth(request),tripId=(request.params as any).tripId;
+  const body=z.object({stayId:z.string().min(1).max(80),name:z.string().min(1).max(200),data:z.string().max(14_000_000)}).parse(request.body);
+  const trip=config.store.getTrip(user,tripId);if(trip.archived)throw new InputError('Trip is archived');
+  if(!(trip.stays??[]).some(s=>s.id===body.stayId))throw new InputError('Stay not found');
+  const data=Buffer.from(body.data,'base64');if(!data.length||data.length>10_000_000)throw new InputError('Files can be up to 10 MB');
+  const mime=sniff(data);if(!mime)throw new InputError('Only PDF, image (PNG, JPEG, WebP) and text files');
+  const name=body.name.replace(/^.*[\\/]/,'').replace(/[\u0000-\u001f\u007f"]/g,'').trim().slice(0,120)||'file';
+  const id=randomUUID();await mkdir(fileFolder(tripId),{recursive:true});await writeFile(join(fileFolder(tripId),id),data,{mode:0o600});
+  try{const file=config.store.addFile(user,tripId,{id,stayId:body.stayId,name,mime,size:data.length});reply.status(201);return file;}
+  catch(error){await rm(join(fileFolder(tripId),id),{force:true});throw error;}
+ });
+ app.get('/api/v1/trips/:tripId/files/:fileId',async(request,reply)=>{
+  const user=auth(request),{tripId,fileId}=request.params as {tripId:string;fileId:string};
+  const file=(config.store.getTrip(user,tripId).files??[]).find(f=>f.id===fileId);if(!file)throw new AccessError();
+  const data=await readFile(join(fileFolder(tripId),file.id));
+  // Always a download, never rendered inside the app's origin.
+  reply.header('Content-Type',file.mime).header('Content-Disposition',`attachment; filename="${file.name.replace(/[^\x20-\x7e]/g,'_')}"; filename*=UTF-8''${encodeURIComponent(file.name)}`).header('Cache-Control','private, max-age=3600');
+  return reply.send(data);
+ });
+ app.delete('/api/v1/trips/:tripId/files/:fileId',async(request)=>{
+  const user=auth(request),{tripId,fileId}=request.params as {tripId:string;fileId:string};
+  const trip=config.store.removeFile(user,tripId,fileId);await pruneFiles(tripId,trip);
+  return {trip,role:config.store.role(user,tripId)};
+ });
  app.delete('/api/v1/trips/:tripId',async(request)=>{
   const user=auth(request),id=(request.params as any).tripId;config.store.deleteTrip(user,id);
-  await rm(join(config.dataDir,'receipts',id),{recursive:true,force:true});await rm(join(config.dataDir,'photos',id),{recursive:true,force:true});return {ok:true};
+  await rm(join(config.dataDir,'receipts',id),{recursive:true,force:true});await rm(join(config.dataDir,'photos',id),{recursive:true,force:true});await rm(join(config.dataDir,'files',id),{recursive:true,force:true});return {ok:true};
  });
  const memberParams=(request:any)=>({user:auth(request),id:request.params.tripId as string,email:emailSchema.parse(decodeURIComponent(request.params.email))});
  app.delete('/api/v1/trips/:tripId/members/:email',async(request)=>{const {user,id,email}=memberParams(request);config.store.removeMember(user,id,email);return {members:config.store.members(user,id)};});
@@ -191,5 +250,6 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
   const image=await readFile(join(config.dataDir,'receipts',tripId,`${receiptId}.jpg`));reply.header('Content-Type','image/jpeg').header('Cache-Control','private, max-age=3600');return reply.send(image);
  });
  if(config.startWorker!==false){resetInterruptedReceipts(config.store);let working=false;const timer=setInterval(async()=>{if(working)return;working=true;try{const job=claimReceipt(config.store);if(job)await processReceipt(config.store,config.dataDir,config.ollamaUrl??'http://192.168.30.111:11434',config.ollamaModel??'gemma4:26b-mlx',job);}catch(error){app.log.error(error);}finally{working=false;}},5000);timer.unref();app.addHook('onClose',async()=>clearInterval(timer));}
+ registerMcp(app);
  return app;
 }

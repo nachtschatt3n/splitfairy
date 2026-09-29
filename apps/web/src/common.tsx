@@ -1,4 +1,4 @@
-import {useId,type ReactNode} from 'react';
+import {useEffect,useId,useRef,type ReactNode} from 'react';
 import {Info,X} from 'lucide-react';
 import type {Command} from '../../../packages/domain/src/model.js';
 /** The traveller's local calendar day (UTC would be yesterday just after midnight in Europe). */
@@ -37,8 +37,32 @@ export function Button({children,onClick,kind='primary',type='button',disabled=f
 export function Notice({children}: {children:ReactNode}){return <div className="notice"><Info size={16}/>{children}</div>}
 export function Empty({icon,heading,body,action}: {icon:ReactNode;heading:string;body:string;action?:ReactNode}){return <div className="empty"><div className="empty-icon">{icon}</div><h3>{heading}</h3><p>{body}</p>{action}</div>}
 /** Dialog that becomes a bottom sheet on phones (see .modal in style.css). */
+/** Sheets that just closed and will step back unless a sheet re-mounts or takes over their entry. */
+const pendingBack=new Map<string,{cancelled:boolean}>();
+/**
+ * While a sheet or dialog is open it has its own history entry, so the browser's back button closes it
+ * instead of leaving the page. Closing it in the app removes the entry again. Safe with React's
+ * double-run effects in development: a remount cancels the pending "back".
+ */
+export function useBackToClose(onClose:()=>void){
+ const id=useId(),close=useRef(onClose);close.current=onClose;
+ useEffect(()=>{
+  const pending=pendingBack.get(id);
+  const closing=[...pendingBack.keys()].find(other=>other!==id&&history.state?.sheet===other);
+  if(pending!==undefined){pending.cancelled=true;pendingBack.delete(id);}
+  // A sheet that replaces one just closed (e.g. "Add new" → "Add stay") takes over its history entry.
+  else if(closing!==undefined){pendingBack.get(closing)!.cancelled=true;pendingBack.delete(closing);history.replaceState({...(history.state??{}),sheet:id},'');}
+  else if(history.state?.sheet!==id)history.pushState({...(history.state??{}),sheet:id},'');
+  const onPop=()=>{if(history.state?.sheet!==id)close.current();};
+  window.addEventListener('popstate',onPop);
+  // React re-mounts within the same commit, so a microtask is late enough to tell a close from a re-mount.
+  return()=>{window.removeEventListener('popstate',onPop);const job={cancelled:false};pendingBack.set(id,job);queueMicrotask(()=>{if(job.cancelled)return;pendingBack.delete(id);if(history.state?.sheet===id)history.back();});};
+ },[id]);
+}
+/** For dialogs that are not a Sheet: back closes them too. */
+export function BackToClose({onClose}:{onClose:()=>void}){useBackToClose(onClose);return null;}
 export function Sheet({title,eyebrow='Splitfairy',onClose,children}:{title:string;eyebrow?:string;onClose:()=>void;children:ReactNode}){
- const id=useId();
+ const id=useId();useBackToClose(onClose);
  return <div className="modal-backdrop" onClick={e=>{if(e.target===e.currentTarget)onClose();}}><div className="modal" role="dialog" aria-modal="true" aria-labelledby={id}>
   <div className="modal-head"><div><span className="eyebrow">{eyebrow}</span><h2 id={id}>{title}</h2></div><button type="button" className="icon-button" onClick={onClose} aria-label="Close"><X/></button></div>
   {children}

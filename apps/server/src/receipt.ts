@@ -1,5 +1,6 @@
 import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
+import sharp from 'sharp';
 import {z} from 'zod';
 import type {Trip} from '../../../packages/domain/src/model.js';
 import type {Store} from './store.js';
@@ -20,13 +21,41 @@ export function claimReceipt(store:Store):{tripId:string;receiptId:string}|null{
  for(const row of rows){const trip:Trip=JSON.parse(row.data);const receipt=trip.receipts.find(r=>r.status==='queued');if(receipt){receipt.status='processing';receipt.version++;store.db.prepare('UPDATE trips SET data=? WHERE id=?').run(JSON.stringify(trip),row.id);return {tripId:row.id,receiptId:receipt.id};}}
  return null;
 }
+const FORMAT={type:'object',properties:{merchant:{type:'string'},date:{type:'string'},total:{type:'number'},items:{type:'array',items:{type:'object',properties:{label:{type:'string'},amount:{type:'number'}},required:['label','amount']}}},required:['merchant','date','total','items']};
+const PROMPT=[
+ 'Transcribe this shopping receipt faithfully, line by line from top to bottom.',
+ 'Each item is one printed line: its label and the price printed at the right end of that same line. Never move a price to another line.',
+ 'The photo may be tilted: follow each printed line along its slant to find its price, which can then sit higher or lower than the label.',
+ 'Only purchased items, discounts and deposits are items. Do not list subtotal, total, payment, change or tax-summary lines as items.',
+ 'A deposit charge (Pfand, deposito) is a positive item; only a deposit return (Leergut, Pfandrückgabe) or a discount is negative.',
+ 'Return prices and the final total in euros as numbers. Give the purchase date as YYYY-MM-DD, or an empty string if it is not printed.',
+ 'Do not invent unreadable items. Return JSON only.'].join(' ');
+type Reading=z.infer<typeof extracted>;
+const cents=(n:number)=>Math.round(n*100);
+const gap=(r:Reading)=>Math.abs(r.items.reduce((sum,i)=>sum+cents(i.amount),0)-cents(r.total));
+
+/** Asks the vision model; a second message can show it its first answer and what does not add up. */
+async function ask(url:string,model:string,image:Buffer,fetcher:typeof fetch,previous?:Reading){
+ const messages:any[]=[{role:'user',content:PROMPT,images:[image.toString('base64')]}];
+ if(previous){
+  const sum=previous.items.reduce((n,i)=>n+cents(i.amount),0)/100;
+  messages.push({role:'assistant',content:JSON.stringify(previous)},{role:'user',content:`Your items add up to ${sum.toFixed(2)} but the total is ${previous.total.toFixed(2)}. Look at the receipt again line by line: pair every label with the price on its own line, check the sign of discounts and deposits, and leave out total and payment lines. Return the corrected JSON only.`});
+ }
+ const response=await fetcher(`${url.replace(/\/$/,'')}/api/chat`,{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(300_000),body:JSON.stringify({model,stream:false,think:false,options:{temperature:0},format:FORMAT,messages})});
+ if(!response.ok)throw new Error(`Vision service returned ${response.status}`);
+ const envelope=await response.json() as any;return extracted.parse(JSON.parse(envelope.message?.content??'{}'));
+}
+
+/** Greyscale, stretched contrast and a little sharpening help the model read phone photos; the stored photo is untouched. */
+async function forModel(image:Buffer){try{return await sharp(image).rotate().grayscale().normalize().sharpen({sigma:1}).jpeg({quality:90}).toBuffer();}catch{return image;}}
+
 export async function processReceipt(store:Store,dataDir:string,url:string,model:string,job:{tripId:string;receiptId:string},fetcher:typeof fetch=fetch){
  const row=store.db.prepare('SELECT data FROM trips WHERE id=?').get(job.tripId) as {data:string}|undefined;if(!row)return;
  try{
-  const image=await readFile(join(dataDir,'receipts',job.tripId,`${job.receiptId}.jpg`));
-  const response=await fetcher(`${url.replace(/\/$/,'')}/api/chat`,{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(300_000),body:JSON.stringify({model,stream:false,think:false,options:{temperature:0},format:{type:'object',properties:{merchant:{type:'string'},date:{type:'string'},total:{type:'number'},items:{type:'array',items:{type:'object',properties:{label:{type:'string'},amount:{type:'number'}},required:['label','amount']}}},required:['merchant','date','total','items']},messages:[{role:'user',content:'Transcribe this shopping receipt faithfully. Return item prices and the final total in euros as numbers. Give the purchase date as YYYY-MM-DD, or an empty string if it is not printed. Do not invent unreadable items. Discounts and deposit refunds are negative line items. Return JSON only.',images:[image.toString('base64')]}]})});
-  if(!response.ok)throw new Error(`Vision service returned ${response.status}`);
-  const envelope=await response.json() as any;const parsed=extracted.parse(JSON.parse(envelope.message?.content??'{}'));
+  const image=await forModel(await readFile(join(dataDir,'receipts',job.tripId,`${job.receiptId}.jpg`)));
+  let parsed=await ask(url,model,image,fetcher);
+  // Items that do not add up to the total usually mean a misread line: one self-check, kept only if it is closer.
+  if(gap(parsed)>0){try{const second=await ask(url,model,image,fetcher,parsed);if(gap(second)<gap(parsed))parsed=second;}catch{/* keep the first reading */}}
   const fresh=store.db.prepare('SELECT data FROM trips WHERE id=?').get(job.tripId) as {data:string}|undefined;if(!fresh)return;const trip:Trip=JSON.parse(fresh.data),receipt=trip.receipts.find(r=>r.id===job.receiptId);if(!receipt||receipt.status!=='processing')return;
   receipt.merchant=parsed.merchant;receipt.date=normalizeReceiptDate(parsed.date);receipt.total=Math.round(parsed.total*100);receipt.items=parsed.items.map(i=>({label:i.label,amount:Math.round(i.amount*100)}));receipt.status='review';receipt.error=null;receipt.version++;trip.version++;store.db.prepare('UPDATE trips SET data=? WHERE id=?').run(JSON.stringify(trip),trip.id);
  }catch(error){const latest=store.db.prepare('SELECT data FROM trips WHERE id=?').get(job.tripId) as {data:string}|undefined;if(!latest)return;const trip:Trip=JSON.parse(latest.data),receipt=trip.receipts.find(r=>r.id===job.receiptId);if(receipt&&receipt.status==='processing'){receipt.status='failed';receipt.error=error instanceof Error?error.message:'Extraction failed';receipt.version++;trip.version++;store.db.prepare('UPDATE trips SET data=? WHERE id=?').run(JSON.stringify(trip),trip.id);}}

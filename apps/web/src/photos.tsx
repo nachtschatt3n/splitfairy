@@ -8,7 +8,7 @@ import {Button,Sheet} from './common.js';
 /** What photos belong to: a stay, or a plan such as a meal. */
 export type Place={id:string;name:string;kind:'stay'|'event'};
 export const placeTarget=(place:Place)=>place.kind==='stay'?{stayId:place.id}:{eventId:place.id};
-export type PhotoActions={userId:string;organizer:boolean;add:(place:Place,files:File[])=>Promise<void>;remove:(photo:Photo)=>Promise<void>};
+export type PhotoActions={userId:string;organizer:boolean;add:(place:Place,files:File[])=>Promise<void>;remove:(photo:Photo)=>Promise<void>;/** Reload the trip after uploads that bypass the offline queue (e.g. stay files). */refresh:()=>Promise<void>};
 export const MAX_PHOTOS=12;
 export const photosOf=(trip:Trip,placeId:string)=>(trip.photos??[]).filter(p=>(p.stayId??p.eventId)===placeId);
 const canRemove=(actions:PhotoActions,photo:Photo)=>actions.organizer||photo.authorId===actions.userId;

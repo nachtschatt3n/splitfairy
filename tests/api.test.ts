@@ -249,3 +249,37 @@ describe('restaurant address lookup',()=>{
   server.close();
  });
 });
+describe('stay documents',()=>{
+ it('accepts PDFs, images and text by content, serves them as downloads, and cleans up with the stay',async()=>{
+  const {mkdtempSync,readdirSync}=await import('node:fs');const {tmpdir}=await import('node:os');const {join}=await import('node:path');
+  const dataDir=mkdtempSync(join(tmpdir(),'splitfairy-files-'));const store=new Store(new DatabaseSync(':memory:'));const mails:{to:string;body:string}[]=[];
+  const a=await createApp({store,adminEmail:'admin@example.com',secret:'a very long integration test secret',sendMail:async(to,_s,body)=>{mails.push({to,body});},dataDir,startWorker:false});
+  const signIn=async(email:string)=>{await a.inject({method:'POST',url:'/api/v1/auth/request',payload:{email}});const code=mails.filter(m=>m.to===email).at(-1)!.body.match(/\b\d{6}\b/)![0];return {host:'splitfairy.example',cookie:`splitfairy_session=${(await a.inject({method:'POST',url:'/api/v1/auth/verify',payload:{email,code,name:'X'}})).cookies.find(c=>c.name==='splitfairy_session')!.value}`};};
+  const admin=await signIn('admin@example.com');
+  const trip=(await a.inject({method:'POST',url:'/api/v1/trips',headers:admin,payload:{name:'Lisbon',start:'2026-10-01',end:'2026-10-05'}})).json();
+  let n=0;const cmd=(action:'save'|'delete',entity:string,value:any,expectedVersion=0)=>a.inject({method:'POST',url:`/api/v1/trips/${trip.id}/commands`,headers:admin,payload:{mutationId:`f${n++}`,entity,action,expectedVersion,value:{version:0,...value}}});
+  await cmd('save','family',{id:'f',name:'Silva',solo:false});await cmd('save','person',{id:'p',name:'Bea',familyId:'f',weight:1,email:'bea@example.com'});
+  const saved=await cmd('save','stay',{id:'house',name:'Casa',from:'2026-10-01',to:'2026-10-05',url:'https://www.airbnb.com/rooms/1',schedule:[{id:'s1',familyId:'f',arriveDate:'2026-10-02',arriveTime:'18:00'}]});
+  expect(saved.json().trip.stays[0]).toMatchObject({url:'https://www.airbnb.com/rooms/1',schedule:[{familyId:'f',personId:null,arriveDate:'2026-10-02',arriveTime:'18:00'}]});
+  expect((await cmd('save','stay',{id:'bad',name:'X',from:'2026-10-01',to:'2026-10-02',url:'javascript:alert(1)'})).statusCode).toBe(400);
+  expect((await cmd('save','stay',{id:'bad',name:'X',from:'2026-10-01',to:'2026-10-02',schedule:[{id:'s',familyId:'ghost'}]})).json().error).toMatch(/Unknown family/);
+  const bea=await signIn('bea@example.com');
+  const upload=(headers:any,name:string,data:Buffer)=>a.inject({method:'POST',url:`/api/v1/trips/${trip.id}/files`,headers,payload:{stayId:'house',name,data:data.toString('base64')}});
+  const pdf=await upload(bea,'../../Booking confirmation.pdf',Buffer.from('%PDF-1.4\n% booking\n'));
+  expect(pdf.statusCode).toBe(201);expect(pdf.json()).toMatchObject({name:'Booking confirmation.pdf',mime:'application/pdf'});
+  const notes=(await upload(admin,'wifi.txt',Buffer.from('Wi-Fi: Dunas2026\n'))).json();expect(notes.mime).toBe('text/plain; charset=utf-8');
+  // Content decides the type: an SVG or HTML page is refused even when named .pdf.
+  expect((await upload(bea,'x.pdf',Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>\u0000'))).statusCode).toBe(400);
+  expect((await upload(bea,'x.bin',Buffer.from([0,1,2,3,4,5]))).statusCode).toBe(400);
+  const got=await a.inject({method:'GET',url:`/api/v1/trips/${trip.id}/files/${pdf.json().id}`,headers:admin});
+  expect(got.headers['content-type']).toBe('application/pdf');expect(got.headers['content-disposition']).toMatch(/^attachment; filename="Booking confirmation.pdf"/);expect(got.body.startsWith('%PDF-')).toBe(true);
+  expect((await a.inject({method:'GET',url:`/api/v1/trips/${trip.id}/files/${pdf.json().id}`})).statusCode).toBe(401);
+  expect((await a.inject({method:'DELETE',url:`/api/v1/trips/${trip.id}/files/${notes.id}`,headers:bea})).statusCode).toBe(403);
+  expect((await a.inject({method:'DELETE',url:`/api/v1/trips/${trip.id}/files/${pdf.json().id}`,headers:bea})).json().trip.files).toHaveLength(1);
+  expect(readdirSync(join(dataDir,'files',trip.id))).toEqual([notes.id]);
+  // Removing the family drops its arrival row; removing the stay takes its files.
+  const stay=(await a.inject({method:'GET',url:`/api/v1/trips/${trip.id}`,headers:admin})).json().trip.stays[0];
+  expect((await cmd('delete','stay',{id:'house'},stay.version)).json().trip.files).toEqual([]);
+  expect(readdirSync(join(dataDir,'files',trip.id))).toEqual([]);
+ });
+});

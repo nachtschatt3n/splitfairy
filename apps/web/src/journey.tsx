@@ -1,11 +1,12 @@
 import {useState,type FormEvent} from 'react';
-import {ArrowRight,BedDouble,MapPin,Pencil} from 'lucide-react';
+import {ArrowRight,BedDouble,ExternalLink,MapPin,Paperclip,Pencil,Plus} from 'lucide-react';
 import type {Event,Leg,Stay,Transport,Trip} from '../../../packages/domain/src/model.js';
 import {Button,Sheet,cents,euro,fmt,fmtTime,uid,type Remove,type Save} from './common.js';
 import {TransportIcon} from './packing.js';
 import {AirlineBadge,parseFlight} from './airlines.js';
 import {AddPhotosButton,StayCover,StayPhotos,photosOf,type PhotoActions,type Place} from './photos.js';
 export const stayPlace=(stay:Stay):Place=>({id:stay.id,name:stay.name,kind:'stay'});
+import {StayFiles} from './stayfiles.js';
 import {SplitEditor,compileSplit,initialSplit,type SplitState} from './split.js';
 
 export const tripDays=(trip:Trip)=>!trip.start||!trip.end?[]:Array.from({length:Math.min(62,Math.max(1,Math.round((new Date(`${trip.end}T12:00:00`).getTime()-new Date(`${trip.start}T12:00:00`).getTime())/86400000)+1))},(_,i)=>{const d=new Date(`${trip.start}T12:00:00`);d.setDate(d.getDate()+i);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;});
@@ -16,11 +17,31 @@ export const legLoad=(trip:Trip,leg:Leg)=>(trip.gear??[]).filter(g=>(g.route?.le
 
 /** Who may change an existing cost: organizers, or whoever added it. */
 export type Who={id:string;organizer:boolean};
+type ScheduleRow=Stay['schedule'][number];
+/** Who arrives and leaves when, per family or per person; empty dates mean the stay's own check-in and check-out day. */
+function ScheduleEditor({trip,from,to,rows,onChange}:{trip:Trip;from:string;to:string;rows:ScheduleRow[];onChange:(rows:ScheduleRow[])=>void}){
+ const set=(i:number,patch:Partial<ScheduleRow>)=>onChange(rows.map((r,n)=>n===i?{...r,...patch}:r));
+ const whoValue=(r:ScheduleRow)=>r.personId?`p:${r.personId}`:r.familyId?`f:${r.familyId}`:'';
+ const setWho=(i:number,value:string)=>set(i,value.startsWith('p:')?{personId:value.slice(2),familyId:null}:{familyId:value.slice(2)||null,personId:null});
+ const next=trip.families.find(f=>!rows.some(r=>r.familyId===f.id));
+ return <fieldset className="schedule-editor"><legend>Arrivals and departures</legend>
+  {rows.map((r,i)=><div className="schedule-row" key={r.id}>
+   <label>Who<select value={whoValue(r)} onChange={e=>setWho(i,e.target.value)}><option value="">Choose…</option>
+    {trip.families.map(f=><optgroup key={f.id} label={f.name}><option value={`f:${f.id}`}>{f.name} (everyone)</option>{trip.people.filter(p=>p.familyId===f.id).map(p=><option key={p.id} value={`p:${p.id}`}>{p.name}</option>)}</optgroup>)}</select></label>
+   <div className="form-row"><label>Arrives<input type="date" value={r.arriveDate||from} min={from} max={to} onChange={e=>set(i,{arriveDate:e.target.value===from?'':e.target.value})}/></label><label>at<input type="time" value={r.arriveTime} onChange={e=>set(i,{arriveTime:e.target.value})}/></label></div>
+   <div className="form-row"><label>Leaves<input type="date" value={r.departDate||to} min={from} max={to} onChange={e=>set(i,{departDate:e.target.value===to?'':e.target.value})}/></label><label>at<input type="time" value={r.departTime} onChange={e=>set(i,{departTime:e.target.value})}/></label></div>
+   <button type="button" className="text-button" onClick={()=>onChange(rows.filter((_,n)=>n!==i))}>Remove</button>
+  </div>)}
+  <button type="button" className="text-button" onClick={()=>onChange([...rows,{id:uid(),familyId:next?.id??null,personId:null,arriveDate:'',arriveTime:'',departDate:'',departTime:''}])}><Plus size={15}/> {rows.length?'Add another':'Add arrival and departure times'}</button>
+  {!rows.length&&<p className="helper">For families or people who arrive or leave at their own time.</p>}
+ </fieldset>;
+}
+
 /** A stay with its dates, times, address, notes, who is staying, and an optional booking cost (kept as a Stay expense). */
 export function StaySheet({trip,stay,day,save,remove,busy,who,photos,onPhoto,onClose}:{trip:Trip;stay?:Stay;day:string;save:Save;remove:Remove;busy:boolean;who:Who;photos?:PhotoActions;onPhoto?:(index:number)=>void;onClose:()=>void}){
  const next=(d:string)=>{const x=new Date(`${d}T12:00:00`);if(Number.isNaN(x.getTime()))return d;x.setDate(x.getDate()+1);return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;};
  const [name,setName]=useState(stay?.name??''),[address,setAddress]=useState(stay?.address??''),[from,setFrom]=useState(stay?.from??day),[to,setTo]=useState(stay?.to??next(day));
- const [checkIn,setCheckIn]=useState(stay?.checkIn??''),[checkOut,setCheckOut]=useState(stay?.checkOut??''),[note,setNote]=useState(stay?.note??'');
+ const [checkIn,setCheckIn]=useState(stay?.checkIn??''),[checkOut,setCheckOut]=useState(stay?.checkOut??''),[note,setNote]=useState(stay?.note??''),[url,setUrl]=useState(stay?.url??''),[schedule,setSchedule]=useState<ScheduleRow[]>(stay?.schedule??[]);
  // Older stays have no guest list: they count as everyone.
  const [staying,setStaying]=useState<string[]>(stay?.guests?.length?stay.guests.map(g=>g.id):trip.people.map(p=>p.id));
  const linked=trip.expenses.find(e=>e.id===stay?.expenseId&&e.status==='posted');
@@ -42,6 +63,9 @@ export function StaySheet({trip,stay,day,save,remove,busy,who,photos,onPhoto,onC
   e.preventDefault();setError('');
   if(!name.trim()){setError('Give the stay a name.');return;}
   if(to<from){setError('Check-out must be on or after the first night.');return;}
+  if(url.trim()&&!/^https?:\/\/\S+\.\S+/.test(url.trim())){setError('Paste the full booking link, starting with https://');return;}
+  if(schedule.some(r=>!r.familyId&&!r.personId)){setError('Choose who each arrival or departure is for.');return;}
+  if(schedule.some(r=>r.arriveDate&&r.departDate&&r.departDate<r.arriveDate)){setError('A departure is before its arrival.');return;}
   let expenseId=linked?.id??null;
   if(simple&&mayEdit){
    if(cost.trim()){
@@ -58,7 +82,7 @@ export function StaySheet({trip,stay,day,save,remove,busy,who,photos,onPhoto,onC
     await save('expense',{...linked,status:'void'},linked);expenseId=null;
    }
   }
-  await save('stay',{id:stay?.id??uid(),name:name.trim(),address:address.trim(),from,to,checkIn,checkOut,note:note.trim(),guests,expenseId,version:stay?.version??0},stay);onClose();
+  await save('stay',{id:stay?.id??uid(),name:name.trim(),address:address.trim(),from,to,checkIn,checkOut,note:note.trim(),url:url.trim(),schedule,guests,expenseId,version:stay?.version??0},stay);onClose();
  };
  return <Sheet title={stay?`Edit ${stay.name}`:'Add a stay'} eyebrow="Where you sleep" onClose={onClose}>
   <form className="form-stack" onSubmit={submit}>
@@ -66,7 +90,10 @@ export function StaySheet({trip,stay,day,save,remove,busy,who,photos,onPhoto,onC
    <label>Address (optional)<input value={address} onChange={e=>setAddress(e.target.value)} placeholder="Rua das Dunas 12, Comporta"/></label>
    <div className="form-row"><label>First night<input type="date" value={from} min={trip.start} max={trip.end} onChange={e=>setFrom(e.target.value)} required/></label><label>Check-out day<input type="date" value={to} min={from} onChange={e=>setTo(e.target.value)} required/></label></div>
    <div className="form-row"><label>Check-in time<input type="time" value={checkIn} onChange={e=>setCheckIn(e.target.value)}/></label><label>Check-out time<input type="time" value={checkOut} onChange={e=>setCheckOut(e.target.value)}/></label></div>
-   <label>Notes (optional)<input value={note} onChange={e=>setNote(e.target.value)} placeholder="Key box at the gate, code in the booking email"/></label>
+   <label>Booking link (optional)<input type="url" inputMode="url" value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://www.airbnb.com/rooms/…"/></label>
+   <label>Notes (optional)<textarea rows={3} maxLength={4000} value={note} onChange={e=>setNote(e.target.value)} placeholder="Key box at the gate, code in the booking email. Wi-Fi: Dunas2026"/></label>
+   <ScheduleEditor trip={trip} from={from} to={to} rows={schedule} onChange={setSchedule}/>
+   {stay&&photos&&<StayFiles trip={trip} stay={stay} userId={photos.userId} organizer={photos.organizer} onChanged={photos.refresh}/>}
    {stay&&photos&&onPhoto?<StayPhotos trip={trip} place={stayPlace(stay)} actions={photos} onOpen={onPhoto}/>:!stay&&<p className="helper">You can add photos of the place once it's saved.</p>}
    <fieldset><legend>Who is staying?</legend>
     {trip.people.length?<>
@@ -123,7 +150,7 @@ export function LegSheet({trip,leg,day,save,remove,busy,onClose}:{trip:Trip;leg?
  </Sheet>;
 }
 
-type Entry={key:string;time:string;kind:'event'|'leg'|'arrive'|'checkin'|'checkout';event?:Event;leg?:Leg;stay?:Stay};
+type Entry={key:string;time:string;kind:'event'|'leg'|'arrive'|'checkin'|'checkout'|'guest-in'|'guest-out';event?:Event;leg?:Leg;stay?:Stay;row?:ScheduleRow};
 /** Everything on one day, untimed things first, then by time. */
 export function dayEntries(trip:Trip,day:string):{staying:Stay[];entries:Entry[]}{
  const entries:Entry[]=[];
@@ -135,6 +162,11 @@ export function dayEntries(trip:Trip,day:string):{staying:Stay[];entries:Entry[]
  for(const s of trip.stays??[]){
   if(s.from===day)entries.push({key:`i${s.id}`,time:s.checkIn,kind:'checkin',stay:s});
   if(s.to===day)entries.push({key:`o${s.id}`,time:s.checkOut,kind:'checkout',stay:s});
+  // Families or people arriving or leaving on another day than the stay's own check-in and check-out.
+  for(const r of s.schedule??[]){
+   if(r.arriveDate&&r.arriveDate!==s.from&&r.arriveDate===day)entries.push({key:`gi${r.id}`,time:r.arriveTime,kind:'guest-in',stay:s,row:r});
+   if(r.departDate&&r.departDate!==s.to&&r.departDate===day)entries.push({key:`go${r.id}`,time:r.departTime,kind:'guest-out',stay:s,row:r});
+  }
  }
  const staying=(trip.stays??[]).filter(s=>s.from<day&&day<s.to);
  const rank=(x:Entry)=>x.time?1:0;
@@ -156,6 +188,14 @@ export function LegCard({trip,leg,arriving,onEdit}:{trip:Trip;leg:Leg;arriving?:
  </article>;
 }
 
+/** "Uhl family" or "Mathias" for an arrival row. */
+export const scheduleWho=(trip:Trip,r:ScheduleRow)=>r.personId?trip.people.find(p=>p.id===r.personId)?.name??'Someone':trip.families.find(f=>f.id===r.familyId)?.name??'A family';
+/** A family or person arriving at, or leaving, a stay on a day of its own. */
+export function GuestCard({trip,entry,onEdit}:{trip:Trip;entry:Entry;onEdit:()=>void}){
+ const who=scheduleWho(trip,entry.row!),arriving=entry.kind==='guest-in',label=`${who} ${arriving?'arrives at':'leaves'} ${entry.stay!.name}`;
+ return <article className="tl-card stay guest" aria-label={label}><div className="event-head"><div><span className="event-type">{arriving?'Arriving':'Leaving'}</span><h3>{label}</h3></div>
+  <button type="button" className="icon-button subtle" aria-label={`Edit ${entry.stay!.name}`} onClick={onEdit}><Pencil size={16}/></button></div></article>;
+}
 export function StayCard({trip,stay,mode,onEdit,onPhoto,photos}:{trip:Trip;stay:Stay;mode:'checkin'|'checkout'|'staying';day:string;onEdit:()=>void;onPhoto?:(index:number)=>void;photos?:PhotoActions}){
  const cost=trip.expenses.find(e=>e.id===stay.expenseId&&e.status==='posted');
  const n=nights(stay);
@@ -164,6 +204,9 @@ export function StayCard({trip,stay,mode,onEdit,onPhoto,photos}:{trip:Trip;stay:
   {mode==='checkin'&&onPhoto&&<StayCover trip={trip} place={stayPlace(stay)} onOpen={onPhoto}/>}
   <div className="event-head">{mode==='staying'&&onPhoto&&<StayCover trip={trip} place={stayPlace(stay)} compact onOpen={onPhoto}/>}<div><span className="event-type">{mode==='checkout'?'Leaving':`${n} night${n===1?'':'s'}`}{stay.guests?.length&&mode!=='checkout'?` · ${stay.guests.length} staying`:''}{cost?` · ${euro(cost.total)}`:''}</span><h3>{title}</h3>
    <p>{mode==='checkin'&&stay.checkIn?`From ${fmtTime(stay.checkIn)}`:mode==='checkout'&&stay.checkOut?`By ${fmtTime(stay.checkOut)}`:`${fmt(stay.from)} – ${fmt(stay.to)}`}{stay.note&&mode!=='staying'?` · ${stay.note}`:''}</p>
+   {(()=>{const rows=(stay.schedule??[]).filter(r=>mode==='checkin'?!r.arriveDate||r.arriveDate===stay.from:mode==='checkout'?!r.departDate||r.departDate===stay.to:false).filter(r=>mode==='checkin'?r.arriveTime||r.arriveDate:r.departTime||r.departDate);
+    return rows.length>0&&<ul className="schedule-list" aria-label={mode==='checkin'?'Arrivals':'Departures'}>{rows.map(r=><li key={r.id}><strong>{scheduleWho(trip,r)}</strong> {mode==='checkin'?'arrives':'leaves'}{(mode==='checkin'?r.arriveTime:r.departTime)?` at ${fmtTime(mode==='checkin'?r.arriveTime:r.departTime)}`:''}</li>)}</ul>;})()}
+   {(stay.url||(trip.files??[]).some(f=>f.stayId===stay.id))&&mode!=='checkout'&&<p className="stay-links">{stay.url&&<a className="map-link" href={stay.url} target="_blank" rel="noreferrer"><ExternalLink size={14}/> Booking</a>}{(trip.files??[]).some(f=>f.stayId===stay.id)&&<button type="button" className="text-button" onClick={onEdit}><Paperclip size={14}/> {(trip.files??[]).filter(f=>f.stayId===stay.id).length} file{(trip.files??[]).filter(f=>f.stayId===stay.id).length===1?'':'s'}</button>}</p>}
    {stay.address&&mode!=='staying'&&<a className="map-link" href={mapsLink(stay.address)} target="_blank" rel="noreferrer"><MapPin size={14}/> {stay.address}</a>}</div>
    <button type="button" className="icon-button subtle" aria-label={`Edit ${stay.name}`} onClick={onEdit}><Pencil size={16}/></button></div>
   {mode!=='checkout'&&photos&&!photosOf(trip,stay.id).length&&<AddPhotosButton place={stayPlace(stay)} actions={photos}/>}

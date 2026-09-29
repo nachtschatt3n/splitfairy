@@ -23,7 +23,7 @@ async function seedTrip(page:Page,name:string){
  await save('payment',{id:'p1',from:'B',to:'A',amount:2000,date:iso(0)});
  await save('transport',{id:'car',name:'Silva car',kind:'car',familyId:'A',note:'Roof box'});await save('transport',{id:'fly',name:'Weber plane',kind:'plane',familyId:'B',note:''});
  await save('leg',{id:'fly-in',transportId:'fly',from:'Frankfurt (FRA)',to:'Faro (FAO)',departDate:iso(0),departTime:'07:10',arriveDate:iso(0),arriveTime:'09:35',people:['b1','b2'],note:''});
- await save('stay',{id:'house',name:'Casa das Dunas',address:'Rua das Dunas 12, Comporta',from:iso(-1),to:iso(6),checkIn:'16:00',checkOut:'10:00',note:''});
+ await save('stay',{id:'house',name:'Casa das Dunas',address:'Rua das Dunas 12, Comporta',from:iso(-1),to:iso(6),checkIn:'16:00',checkOut:'10:00',note:'',url:'https://www.airbnb.com/rooms/12345',schedule:[{id:'arr',familyId:'B',arriveDate:iso(0),arriveTime:'18:00'}]});
  for(const [i,text,familyId,packed,transportId] of [[1,'Beach tent','A',true,'car'],[2,'Travel cot','B',false,'fly'],[3,'Grill',null,false,null]] as const)await save('gear',{id:`g${i}`,text,familyId,transportId,quantity:1,note:'',packed});
  const photo=await sharp({create:{width:500,height:800,channels:3,background:'#fbfaf5'}}).jpeg().toBuffer();
  await api(`/trips/${trip.id}/receipts`,{image:photo.toString('base64')});
@@ -144,7 +144,9 @@ test('the phone menu fits the home-screen app safe area and never covers content
    await openSection(page,section);
    const vh=page.viewportSize()!.height;const box=(await nav.boundingBox())!;
    expect(Math.round(box.y+box.height),`${section}: menu sits on the bottom edge`).toBe(vh);
-   expect(box.height,`${section}: menu is 64px plus the ${inset}px safe area`).toBeGreaterThanOrEqual(64+inset-1);
+   // A phone on its side gets a slimmer bar (46px) to leave room for content.
+   const bar=vh<=500?46:64;
+   expect(box.height,`${section}: menu is ${bar}px plus the ${inset}px safe area`).toBeGreaterThanOrEqual(bar+inset-1);
    for(const b of await nav.getByRole('button').all()){const bb=(await b.boundingBox())!;expect(bb.y+bb.height,`${section}: menu buttons stay above the home indicator`).toBeLessThanOrEqual(vh-inset+1);expect(bb.height).toBeGreaterThanOrEqual(44);}
    await page.evaluate(()=>window.scrollTo(0,document.documentElement.scrollHeight));await page.waitForTimeout(100);
    const last=await page.evaluate(()=>{const kids=[...document.querySelectorAll('main.content > *')].filter(e=>e.getBoundingClientRect().height>0);return kids.at(-1)!.getBoundingClientRect().bottom;});

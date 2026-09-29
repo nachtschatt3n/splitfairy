@@ -1,3 +1,4 @@
+import {AccessTokens} from './tokens.js';
 import {useState,type FormEvent} from 'react';
 import {ArrowRight,Mail,Pencil,Plus,Settings2,UserRound,Users} from 'lucide-react';
 import {api} from './api.js';
@@ -151,6 +152,7 @@ export function People({onDisplay,trip,view,user,onRename,onLogout,save,remove,o
       <label>Dates<select value={getDisplay().date} onChange={e=>onDisplay({...getDisplay(),date:e.target.value as DisplaySettings['date']})}><option value="dmy">DD.MM.YY (03.10.26)</option><option value="written">Written (Sat 3 Oct)</option><option value="iso">YYYY-MM-DD (2026-10-03)</option></select></label>
       <label>Times<select value={getDisplay().time} onChange={e=>onDisplay({...getDisplay(),time:e.target.value as DisplaySettings['time']})}><option value="24h">24-hour (20:30)</option><option value="12h">12-hour (8:30 pm)</option></select></label>
      </div></div></div>
+    <AccessTokens/>
     <div className="settings-block account-block"><span className="eyebrow">Your account</span><div className="account-row"><span><strong>{user?.name}</strong> · {user?.email??'—'}</span><span className="account-actions"><button className="text-button" onClick={onRename}>Change name</button><button className="text-button" onClick={onLogout}>Sign out</button></span></div></div>
    </section>
    <section className="card">

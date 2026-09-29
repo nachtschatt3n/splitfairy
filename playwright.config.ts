@@ -14,6 +14,10 @@ export default defineConfig({
   // Layout-only checks at other desktop sizes and engines (the full flows run on the three projects above).
   {name:'laptop-chromium',...real,testMatch:/ux\.spec\.ts/,use:{...devices['Desktop Chrome'],...real.use,viewport:{width:1024,height:768}}},
   {name:'desktop-webkit',...real,testMatch:/ux\.spec\.ts/,use:{...devices['Desktop Safari'],...real.use,viewport:{width:1280,height:800}}},
+  // Tablets and a phone on its side (WebKit, as on the real devices): layout checks, plus the journey flow on iPad.
+  {name:'iphone-landscape',...real,testMatch:/ux\.spec\.ts/,use:{...devices['iPhone 15 landscape'],...real.use}},
+  {name:'ipad-portrait',...real,testMatch:/(ux|journey)\.spec\.ts/,use:{...devices['iPad Pro 11'],...real.use}},
+  {name:'ipad-landscape',...real,testMatch:/(ux|journey)\.spec\.ts/,use:{...devices['iPad Pro 11 landscape'],...real.use}},
   {name:'desktop-firefox',...real,testMatch:/ux\.spec\.ts/,use:{...devices['Desktop Firefox'],...real.use,viewport:{width:1440,height:900}}},
  ],
  webServer:[

@@ -54,7 +54,9 @@ test('travel, stays and routed packing come together on the day timeline',async(
  await expect(day.getByRole('article',{name:'Check in · Casa das Dunas'})).toContainText('5 nights');
  await page.locator('.day-strip button').nth(3).click();
  await expect(day.getByRole('article',{name:'Staying at Casa das Dunas'})).toBeVisible();
- if(!isPhone(page))await expect(page.getByRole('region',{name:'Whole trip'})).toContainText('Casa das Dunas');
+ // The whole-trip overview shows from 900px wide.
+ const wide=(page.viewportSize()?.width??0)>=900;
+ if(wide)await expect(page.getByRole('region',{name:'Whole trip'})).toContainText('Casa das Dunas');
  await shot(page,testInfo,'journey-day');
 
  // Booking cost became a shared Stay expense.
@@ -78,7 +80,7 @@ test('travel, stays and routed packing come together on the day timeline',async(
  await day.getByRole('button',{name:'Edit Casa Alfama'}).click();
  await sheet(page).getByLabel('Booking cost (optional)').fill('');await sheet(page).getByRole('button',{name:'Save changes'}).click();await closed(page);
  await expect(day.getByRole('article',{name:'Check in · Casa Alfama'})).not.toContainText('€');
- if(!isPhone(page)){
+ if(wide){
   // The stay bar reaches into its check-out day.
   const overview=page.getByRole('region',{name:'Whole trip'});
   const bar=await overview.locator('.ov-stay',{hasText:'Casa das Dunas'}).boundingBox(),out=await overview.getByRole('button',{name:`Open ${new Date(`${iso(8)}T12:00:00`).toLocaleDateString('en-GB',{weekday:'short'})} ${iso(8).slice(8)}.${iso(8).slice(5,7)}.${iso(8).slice(2,4)}`}).boundingBox();

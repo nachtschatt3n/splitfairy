@@ -32,7 +32,12 @@ export type Shopping=z.infer<typeof shoppingSchema>;
 export type Gear=Omit<z.infer<typeof gearSchema>,'transportId'|'route'>&{transportId?:string|null;route?:string[]};
 export type Transport=z.infer<typeof transportSchema>;
 /** A place to sleep: first night (from) up to the check-out day (to), optionally linked to its booking cost. */
-export const staySchema=z.object({id,name:z.string().trim().min(1).max(120),address:z.string().trim().max(300).default(''),from:z.iso.date(),to:z.iso.date(),checkIn:clock,checkOut:clock,note:z.string().trim().max(1000).default(''),guests:z.array(weightedSchema).max(100).default([]),expenseId:id.nullable().default(null),version}).refine(s=>s.to>=s.from,{message:'Check-out must be on or after the first night'});
+const optionalDate=z.union([z.literal(''),z.iso.date()]).default('');
+/** When a family (or one person) arrives at and leaves a stay, if it differs from the stay's own dates. */
+export const scheduleSchema=z.object({id,familyId:id.nullable().default(null),personId:id.nullable().default(null),arriveDate:optionalDate,arriveTime:clock,departDate:optionalDate,departTime:clock})
+ .refine(s=>!!s.familyId!==!!s.personId,{message:'Choose a family or a person'}).refine(s=>!s.arriveDate||!s.departDate||s.departDate>=s.arriveDate,{message:'Departure must be after arrival'});
+export const staySchema=z.object({id,name:z.string().trim().min(1).max(120),address:z.string().trim().max(300).default(''),from:z.iso.date(),to:z.iso.date(),checkIn:clock,checkOut:clock,note:z.string().trim().max(4000).default(''),url:z.union([z.literal(''),z.url({protocol:/^https?$/}).max(500)]).default(''),
+ schedule:z.array(scheduleSchema).max(50).default([]),guests:z.array(weightedSchema).max(100).default([]),expenseId:id.nullable().default(null),version}).refine(s=>s.to>=s.from,{message:'Check-out must be on or after the first night'});
 /** One leg of travel in a car or flight: where from and to, when, and who is on board. */
 export const legSchema=z.object({id,transportId:id,from:z.string().trim().min(1).max(120),to:z.string().trim().min(1).max(120),departDate:z.iso.date(),departTime:clock,arriveDate:z.iso.date(),arriveTime:clock,people:z.array(id).max(100).default([]),note:z.string().trim().max(1000).default(''),flightNo:z.string().trim().toUpperCase().regex(/^([A-Z0-9]{2}\s?\d{1,4}[A-Z]?)?$/,'Use a flight number like LH 1172').default(''),version}).refine(l=>`${l.arriveDate}${l.arriveTime||'99:99'}`>=`${l.departDate}${l.departTime||'00:00'}`,{message:'Arrival must be after departure'});
 export type Stay=z.infer<typeof staySchema>;
@@ -45,11 +50,13 @@ export type Payment={id:string;from:string;to:string;amount:number;date:string;a
 export type ReceiptStatus='queued'|'processing'|'review'|'failed'|'posted'|'dismissed';
 export type Receipt={id:string;status:ReceiptStatus;items:{label:string;amount:number}[];total:number|null;merchant:string;date:string;error:string|null;version:number;authorId:string;expenseId?:string|null};
 /** A picture of a place (a stay); the image lives on the server, next to the receipts. */
+/** A document attached to a stay, such as a booking confirmation. */
+export type StayFile={id:string;stayId:string;name:string;mime:string;size:number;authorId:string;author:string;at:string};
 /** A picture of a stay (stayId) or of a plan such as a meal (eventId). */
 export type Photo={id:string;stayId?:string;eventId?:string;authorId:string;author:string;at:string};
 export const TRIP_THEMES=['classic','coast','alpine','city','countryside'] as const;
 export type TripTheme=typeof TRIP_THEMES[number];
-export type Trip={id:string;name:string;start:string;end:string;version:number;archived:boolean;theme?:TripTheme;families:Family[];people:Person[];events:Event[];shopping:Shopping[];gear?:Gear[];transport?:Transport[];stays?:Stay[];legs?:Leg[];expenses:Expense[];payments:Payment[];receipts:Receipt[];photos?:Photo[];activity:{id:string;at:string;actor:string;description:string}[]};
+export type Trip={id:string;name:string;start:string;end:string;version:number;archived:boolean;theme?:TripTheme;families:Family[];people:Person[];events:Event[];shopping:Shopping[];gear?:Gear[];transport?:Transport[];stays?:Stay[];legs?:Leg[];expenses:Expense[];payments:Payment[];receipts:Receipt[];photos?:Photo[];files?:StayFile[];activity:{id:string;at:string;actor:string;description:string}[]};
 export const commandSchema=z.object({mutationId:id,entity:z.enum(['family','person','event','shopping','gear','transport','stay','leg','expense','payment','trip']),action:z.enum(['save','delete']),expectedVersion:z.number().int().nonnegative(),value:z.unknown()});
 export type Command=z.infer<typeof commandSchema>;
 export type User={id:string;email:string;name:string;admin:boolean};

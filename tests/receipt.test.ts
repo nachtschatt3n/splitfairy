@@ -28,3 +28,18 @@ it('normalizes printed receipt dates to ISO and drops impossible ones',async()=>
  expect(normalizeReceiptDate('31.02.2026')).toBe('');
  expect(normalizeReceiptDate('')).toBe('');
 });
+it('asks once more when the items do not add up, and keeps the reading that does',async()=>{
+ const sharp=(await import('sharp')).default;
+ const store=new Store(new DatabaseSync(':memory:'));
+ const user={id:'u',email:'a@example.com',name:'A',admin:true};store.addUser(user);
+ const trip=store.createTrip(user,'Munich','2026-10-01','2026-10-03');trip.receipts.push({id:'r',status:'queued',items:[],total:null,merchant:'',date:'',error:null,version:1,authorId:'u'});
+ store.db.prepare('UPDATE trips SET data=? WHERE id=?').run(JSON.stringify(trip),trip.id);
+ const dir=await mkdtemp(join(tmpdir(),'splitfairy-receipt-'));await mkdir(join(dir,'receipts',trip.id),{recursive:true});
+ await writeFile(join(dir,'receipts',trip.id,'r.jpg'),await sharp({create:{width:300,height:400,channels:3,background:'#fff'}}).jpeg().toBuffer());
+ const readings=[{merchant:'REWE',date:'2026-10-03',total:1.37,items:[{label:'Weissbier',amount:1.29},{label:'Pfand',amount:-0.08}]},{merchant:'REWE',date:'2026-10-03',total:1.37,items:[{label:'Weissbier',amount:1.29},{label:'Pfand',amount:0.08}]}];
+ const asked:any[]=[];
+ await processReceipt(store,dir,'http://ollama.local:11434','gemma4:26b-mlx',claimReceipt(store)!,async(_url,init)=>{const body=JSON.parse(String(init!.body));asked.push(body);return new Response(JSON.stringify({message:{content:JSON.stringify(readings[asked.length-1])}}));});
+ expect(asked).toHaveLength(2);
+ expect(asked[1].messages[2].content).toContain('add up to 1.21 but the total is 1.37');
+ expect(store.getTrip(user,trip.id).receipts[0].items).toEqual([{label:'Weissbier',amount:129},{label:'Pfand',amount:8}]);
+});

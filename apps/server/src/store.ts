@@ -1,13 +1,16 @@
 import {DatabaseSync} from 'node:sqlite';
-import {randomUUID} from 'node:crypto';
+import {createHash,randomBytes,randomUUID} from 'node:crypto';
 import {allocateExpense} from '../../../packages/domain/src/accounting.js';
-import {TRIP_THEMES,commandSchema,eventSchema,gearSchema,legSchema,staySchema,transportSchema,paymentSchema,expenseSchema,familySchema,personSchema,shoppingSchema,type Command,type Expense,type Photo,type Trip,type User} from '../../../packages/domain/src/model.js';
+import {TRIP_THEMES,commandSchema,eventSchema,gearSchema,legSchema,staySchema,transportSchema,paymentSchema,expenseSchema,familySchema,personSchema,shoppingSchema,type Command,type Expense,type Photo,type StayFile,type Trip,type User} from '../../../packages/domain/src/model.js';
 
 export class ConflictError extends Error{statusCode=409;constructor(message='This item changed on another device'){super(message);}}
 export class AccessError extends Error{statusCode=403;constructor(){super('Access denied');}}
 export class InputError extends Error{statusCode=400;constructor(message:string){super(message);}}
 export type Role='organizer'|'member';
 export const PHOTOS_PER_STAY=12;
+export const MAX_ACCESS_TOKENS=20;
+export const FILES_PER_STAY=10;
+const tokenHash=(token:string)=>createHash('sha256').update(token).digest('hex');
 export const freshTrip=(id:string,name:string,start:string,end:string):Trip=>({id,name,start,end,version:0,archived:false,families:[],people:[],events:[],shopping:[],gear:[],transport:[],stays:[],legs:[],expenses:[],payments:[],receipts:[],activity:[]});
 
 export class Store{
@@ -19,6 +22,7 @@ export class Store{
   CREATE TABLE IF NOT EXISTS invites(trip_id TEXT NOT NULL,email TEXT NOT NULL,role TEXT NOT NULL,PRIMARY KEY(trip_id,email));
   CREATE TABLE IF NOT EXISTS codes(email TEXT PRIMARY KEY,hash TEXT NOT NULL,expires INTEGER NOT NULL,attempts INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL,expires INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS access_tokens(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,name TEXT NOT NULL,token_hash TEXT UNIQUE NOT NULL,prefix TEXT NOT NULL,created_at TEXT NOT NULL,last_used_at TEXT);
   CREATE TABLE IF NOT EXISTS mutations(id TEXT PRIMARY KEY,trip_id TEXT NOT NULL,user_id TEXT NOT NULL,created INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS auth_throttle(email TEXT PRIMARY KEY,window_start INTEGER NOT NULL,requests INTEGER NOT NULL,failures INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS expense_revisions(trip_id TEXT NOT NULL,expense_id TEXT NOT NULL,version INTEGER NOT NULL,data TEXT NOT NULL,changed_at TEXT NOT NULL,changed_by TEXT NOT NULL,PRIMARY KEY(trip_id,expense_id,version));`);
@@ -111,19 +115,56 @@ export class Store{
    trip.photos=(trip.photos??[]).filter(p=>p.id!==photoId);return trip;
   },'delete photo');
  }
+ /** Attaches a document to a stay; anyone on the trip may. */
+ addFile(actor:User,tripId:string,file:{id:string;stayId:string;name:string;mime:string;size:number}):StayFile{
+  return this.editTrip(actor,tripId,trip=>{
+   if(!(trip.stays??[]).some(s=>s.id===file.stayId))throw new InputError('Stay not found');
+   if((trip.files??[]).filter(f=>f.stayId===file.stayId).length>=FILES_PER_STAY)throw new InputError(`Up to ${FILES_PER_STAY} files per stay`);
+   const saved:StayFile={...file,authorId:actor.id,author:actor.name,at:new Date().toISOString()};
+   trip.files=[...(trip.files??[]),saved];return saved;
+  },'add file');
+ }
+ removeFile(actor:User,tripId:string,fileId:string):Trip{
+  const role=this.role(actor,tripId);
+  return this.editTrip(actor,tripId,trip=>{
+   const file=(trip.files??[]).find(f=>f.id===fileId);if(!file)throw new InputError('File not found');
+   if(file.authorId!==actor.id&&role!=='organizer')throw new AccessError();
+   trip.files=(trip.files??[]).filter(f=>f.id!==fileId);return trip;
+  },'delete file');
+ }
  private editTrip<T>(actor:User,tripId:string,change:(trip:Trip)=>T,description:string):T{
   this.role(actor,tripId);
   this.db.exec('BEGIN IMMEDIATE');
   try{
    const row=this.db.prepare('SELECT data FROM trips WHERE id=?').get(tripId) as {data:string}|undefined;if(!row)throw new AccessError();const trip:Trip=JSON.parse(row.data);
    if(trip.archived)throw new InputError('Trip is archived');
-   const before=JSON.stringify(trip.photos??[]);const result=change(trip);
-   if(JSON.stringify(trip.photos??[])!==before){
+   const snapshot=()=>JSON.stringify([trip.photos??[],trip.files??[]]);const before=snapshot();const result=change(trip);
+   if(snapshot()!==before){
     trip.version++;trip.activity.unshift({id:randomUUID(),at:new Date().toISOString(),actor:actor.name,description});trip.activity=trip.activity.slice(0,300);
     this.db.prepare('UPDATE trips SET data=? WHERE id=?').run(JSON.stringify(trip),tripId);
    }
    this.db.exec('COMMIT');return result;
   }catch(error){this.db.exec('ROLLBACK');throw error;}
+ }
+ /** Personal access tokens: "sfp_" + 43 random characters, stored only as a SHA-256 hash; shown once. */
+ createAccessToken(user:User,name:string){
+  const count=(this.db.prepare('SELECT COUNT(*) n FROM access_tokens WHERE user_id=?').get(user.id) as {n:number}).n;
+  if(count>=MAX_ACCESS_TOKENS)throw new InputError(`You can have up to ${MAX_ACCESS_TOKENS} access tokens; revoke one first`);
+  const token=`sfp_${randomBytes(32).toString('base64url')}`,id=randomUUID(),created=new Date().toISOString();
+  this.db.prepare('INSERT INTO access_tokens(id,user_id,name,token_hash,prefix,created_at) VALUES(?,?,?,?,?,?)').run(id,user.id,name,tokenHash(token),token.slice(0,8),created);
+  return {id,name,token,prefix:token.slice(0,8),createdAt:created,lastUsedAt:null};
+ }
+ listAccessTokens(user:User){
+  return (this.db.prepare('SELECT id,name,prefix,created_at,last_used_at FROM access_tokens WHERE user_id=? ORDER BY created_at DESC').all(user.id) as {id:string;name:string;prefix:string;created_at:string;last_used_at:string|null}[]).map(r=>({id:r.id,name:r.name,prefix:r.prefix,createdAt:r.created_at,lastUsedAt:r.last_used_at}));
+ }
+ revokeAccessToken(user:User,id:string){if(!this.db.prepare('DELETE FROM access_tokens WHERE id=? AND user_id=?').run(id,user.id).changes)throw new InputError('Token not found');}
+ /** The user a token belongs to (null if unknown or revoked); notes when it was last used, at most once a minute. */
+ userByAccessToken(token:string):User|null{
+  if(!/^sfp_[A-Za-z0-9_-]{43}$/.test(token))return null;
+  const row=this.db.prepare('SELECT id,user_id,last_used_at FROM access_tokens WHERE token_hash=?').get(tokenHash(token)) as {id:string;user_id:string;last_used_at:string|null}|undefined;
+  if(!row)return null;
+  if(!row.last_used_at||Date.now()-Date.parse(row.last_used_at)>60_000)this.db.prepare('UPDATE access_tokens SET last_used_at=? WHERE id=?').run(new Date().toISOString(),row.id);
+  return this.userById(row.user_id)??null;
  }
  prune(now=Date.now()){
   this.db.prepare('DELETE FROM sessions WHERE expires<?').run(now);
@@ -170,6 +211,9 @@ export class Store{
      list.splice(index,1);
      if(command.entity==='event')for(const item of trip.shopping)if(item.eventId===value.id){item.eventId=null;item.version++;}
      if(command.entity==='stay')trip.photos=(trip.photos??[]).filter(p=>p.stayId!==value.id);
+     if(command.entity==='stay')trip.files=(trip.files??[]).filter(f=>f.stayId!==value.id);
+     // Arrival times of a removed family or person go with them.
+     if(command.entity==='family'||command.entity==='person')for(const st of trip.stays??[]){const kept=(st.schedule??[]).filter(e=>e.familyId!==value.id&&e.personId!==value.id);if(kept.length!==(st.schedule??[]).length){st.schedule=kept;st.version++;}}
      if(command.entity==='event')trip.photos=(trip.photos??[]).filter(p=>p.eventId!==value.id);
      // Things a removed family was bringing go back to "not decided yet".
      if(command.entity==='family'){for(const item of trip.gear??[])if(item.familyId===value.id){item.familyId=null;item.version++;}for(const t of trip.transport??[])if(t.familyId===value.id){t.familyId=null;t.version++;}}
@@ -186,7 +230,7 @@ export class Store{
        if(!parsed.route.length&&parsed.transportId)parsed.route=[parsed.transportId];
        for(const t of parsed.route)if(!(trip.transport??[]).some(x=>x.id===t))throw new InputError('Unknown transport');
        parsed.transportId=parsed.route[0]??null;break;}
-      case 'stay':parsed=staySchema.parse(value);for(const g of parsed.guests)if(!trip.people.some(x=>x.id===g.id))throw new InputError('Unknown guest');if(parsed.expenseId&&!trip.expenses.some(e=>e.id===parsed.expenseId))throw new InputError('Unknown booking cost');break;
+      case 'stay':parsed=staySchema.parse(value);for(const g of parsed.guests)if(!trip.people.some(x=>x.id===g.id))throw new InputError('Unknown guest');for(const e of parsed.schedule){if(e.familyId&&!trip.families.some(f=>f.id===e.familyId))throw new InputError('Unknown family in arrivals');if(e.personId&&!trip.people.some(p=>p.id===e.personId))throw new InputError('Unknown person in arrivals');}if(parsed.expenseId&&!trip.expenses.some(e=>e.id===parsed.expenseId))throw new InputError('Unknown booking cost');break;
       case 'leg':parsed=legSchema.parse(value);if(!(trip.transport??[]).some(t=>t.id===parsed.transportId))throw new InputError('Unknown car or flight');for(const p of parsed.people)if(!trip.people.some(x=>x.id===p))throw new InputError('Unknown traveller');break;
       case 'transport':parsed=transportSchema.parse(value);if(parsed.familyId&&!trip.families.some(f=>f.id===parsed.familyId))throw new InputError('Unknown family');break;
       case 'shopping':{parsed=shoppingSchema.parse(value);const ev=parsed.eventId?trip.events.find(e=>e.id===parsed.eventId):null;if(parsed.eventId&&!ev)throw new InputError('Unknown event');if(ev?.kind==='restaurant')throw new InputError('Restaurants have no shopping list');break;}

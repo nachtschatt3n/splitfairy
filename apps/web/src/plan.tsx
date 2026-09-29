@@ -1,6 +1,6 @@
 import {useCallback,useEffect,useRef,useState,type FormEvent} from 'react';
 import {ArrowRight,BedDouble,BookOpen,CalendarDays,MapPin,Pencil,Plus,ReceiptText,Search,ShoppingBasket,Sun,UtensilsCrossed,Wine} from 'lucide-react';
-import {LegCard,LegSheet,StayCard,StaySheet,TripOverview,dayEntries,stayPlace,tripDays,type Who} from './journey.js';
+import {GuestCard,LegCard,LegSheet,StayCard,StaySheet,TripOverview,dayEntries,stayPlace,tripDays,type Who} from './journey.js';
 import {PhotoViewer,StayCover,StayPhotos,photosOf,type PhotoActions,type Place} from './photos.js';
 import {TransportIcon} from './packing.js';
 import type {Event,Leg,Shopping,Stay,Trip} from '../../../packages/domain/src/model.js';
@@ -102,9 +102,13 @@ function QuickAdd({placeholder,label,onAdd,busy}:{placeholder:string;label:strin
 }
 
 export type PlanSheet='event'|'leg'|'stay';
-export function Plan({trip,save,remove,busy,photos,who,intent,onAddBill}:{trip:Trip;save:Save;remove:Remove;busy:boolean;photos:PhotoActions;who:Who;intent?:{sheet:PlanSheet;n:number}|null;onAddBill?:(eventId:string)=>void}){
+export function Plan({trip,save,remove,busy,photos,who,intent,onAddBill,routeDay,onDayChange}:{trip:Trip;save:Save;remove:Remove;busy:boolean;photos:PhotoActions;who:Who;intent?:{sheet:PlanSheet;n:number}|null;onAddBill?:(eventId:string)=>void;routeDay?:string|null;onDayChange?:(day:string)=>void}){
  // Open on today while the trip is running, otherwise on its first day.
- const [day,setDay]=useState(()=>trip.start&&today()>=trip.start&&today()<=trip.end?today():trip.start||today());
+ const defaultDay=()=>trip.start&&today()>=trip.start&&today()<=trip.end?today():trip.start||today();
+ const [day,setShownDay]=useState(()=>routeDay&&routeDay>=trip.start&&routeDay<=trip.end?routeDay:defaultDay());
+ // Picking a day puts it in the URL; back and forward bring the day from the URL.
+ const setDay=(d:string)=>{setShownDay(d);onDayChange?.(d);};
+ useEffect(()=>{setShownDay(routeDay&&routeDay>=trip.start&&routeDay<=trip.end?routeDay:defaultDay());},[routeDay]);
  const [sheet,setSheet]=useState<{event?:Event}|null>(null);
  // Keep the chosen day visible in the strip, also on narrow screens.
  useEffect(()=>{document.querySelector('.day-strip .selected')?.scrollIntoView({block:'nearest',inline:'nearest'});},[day]);
@@ -139,6 +143,7 @@ export function Plan({trip,save,remove,busy,photos,who,intent,onAddBill}:{trip:T
        :<div className="event-shopping">{items.map(item=><ShoppingItem key={item.id} item={item} save={save} onEdit={setItemSheet}/>)}
         <QuickAdd label={`Add to shopping for ${e.title}`} placeholder="Add an ingredient…" busy={busy} onAdd={text=>addItem(text,e.id)}/></div>}
       </article>;})()
+      :x.kind==='guest-in'||x.kind==='guest-out'?<GuestCard trip={trip} entry={x} onEdit={()=>setStaySheet({stay:x.stay})}/>
       :x.leg?<LegCard trip={trip} leg={x.leg} arriving={x.kind==='arrive'} onEdit={()=>setLegSheet({leg:x.leg})}/>
       :<StayCard trip={trip} stay={x.stay!} mode={x.kind as 'checkin'|'checkout'} day={day} onEdit={()=>setStaySheet({stay:x.stay})} onPhoto={index=>setViewer({place:stayPlace(x.stay!),index})} photos={photos}/>}
      </div>)}
