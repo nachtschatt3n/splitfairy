@@ -244,7 +244,9 @@ export class Store{
      if(command.entity==='person'&&(trip.legs??[]).some(l=>l.people.includes(value.id)))throw new InputError('Remove this person from travel first');
      if(command.entity==='person'&&(trip.stays??[]).some(x=>x.guests?.some(g=>g.id===value.id)))throw new InputError('Remove this person from stays first');
      if(command.entity==='transport'&&(trip.legs??[]).some(l=>l.transportId===value.id))throw new InputError('Travel legs still use this car or flight');
-     if(command.entity==='event'&&trip.expenses.some(e=>e.lines.some(l=>l.splits.some(s=>s.eventId===value.id))))throw new InputError('Event is linked to an expense');
+     if(command.entity==='event'&&trip.expenses.some(e=>e.status!=='void'&&e.lines.some(l=>l.splits.some(s=>s.eventId===value.id))))throw new InputError('Event is linked to an expense');
+     // Voided expenses do not hold a plan back; they keep their split as a general one.
+     if(command.entity==='event')for(const e of trip.expenses){let changed=false;for(const l of e.lines)for(const sp of l.splits)if(sp.eventId===value.id){sp.eventId=null;delete sp.eventVersion;changed=true;}if(changed)e.version++;}
      list.splice(index,1);
      if(command.entity==='event')for(const item of trip.shopping)if(item.eventId===value.id){item.eventId=null;item.version++;}
      if(command.entity==='stay')trip.photos=(trip.photos??[]).filter(p=>p.stayId!==value.id);

@@ -125,6 +125,19 @@ describe('planning',()=>{
   const after=store.mutate(actor,trip.id,{mutationId:'q3',entity:'event',action:'delete',expectedVersion:1,value:{id:'e1'}});
   expect(after.events).toHaveLength(0);expect(after.shopping[0]).toMatchObject({text:'Lemons',eventId:null});
  });
+ it('blocks deleting a plan with a live expense, but not once that expense is voided',()=>{
+  store.addUser(actor);const {id}=store.createTrip(actor,'Italy','2026-10-01','2026-10-09');
+  store.mutate(actor,id,cmd('family',{id:'F',name:'Uhl',version:0},0,'v1'));
+  store.mutate(actor,id,cmd('person',{id:'p',name:'Mathias',familyId:'F',weight:1,email:'',version:0},0,'v2'));
+  const ev=store.mutate(actor,id,cmd('event',{id:'e',title:'Dinner',date:'2026-10-02',kind:'dinner',owner:'',notes:'',participants:[{id:'p',weight:1}],version:0},0,'v3')).events[0];
+  const expense={id:'x',title:'Fish',date:'2026-10-02',category:'food',total:3000,payers:[{familyId:'F',amount:3000}],lines:[{id:'l',label:'Fish',amount:3000,splits:[{amount:3000,eventId:'e',eventVersion:ev.version,weights:[{id:'p',weight:1}]}]}],notes:'',receiptIds:[],status:'posted',version:0};
+  const posted=store.mutate(actor,id,cmd('expense',expense,0,'v4')).expenses[0];
+  expect(()=>store.mutate(actor,id,{mutationId:'v5',entity:'event',action:'delete',expectedVersion:ev.version,value:{id:'e'}})).toThrow(/linked to an expense/);
+  store.mutate(actor,id,cmd('expense',{...posted,status:'void'},posted.version,'v6'));
+  const after=store.mutate(actor,id,{mutationId:'v7',entity:'event',action:'delete',expectedVersion:ev.version,value:{id:'e'}});
+  expect(after.events).toHaveLength(0);
+  expect(after.expenses[0].lines[0].splits[0].eventId).toBeNull();
+ });
 });
 describe('packing list',()=>{
  it('stores who brings what, rejects unknown families, and frees items when a family is deleted',()=>{

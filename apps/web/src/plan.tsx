@@ -46,7 +46,7 @@ function EventSheet({trip,event,day,save,remove,busy,photos,onPhoto,onClose}:{tr
   await save('event',{id:event?.id??uid(),title:title.trim(),kind,date,time,owner:owner.trim(),notes:notes.trim(),address:kind==='restaurant'?address.trim():'',recipeUrl:MEALS.includes(kind)?recipeUrl.trim():'',participants,version:event?.version??0},event);
   onClose();
  };
- const linked=event?trip.expenses.filter(x=>x.lines.some(l=>l.splits.some(sp=>sp.eventId===event.id))).length:0;
+ const linked=event?trip.expenses.filter(x=>x.status!=='void'&&x.lines.some(l=>l.splits.some(sp=>sp.eventId===event.id))).length:0;
  const toggle=(id:string)=>setJoining(j=>j.includes(id)?j.filter(x=>x!==id):[...j,id]);
  return <Sheet title={event?`Edit ${event.title}`:'Plan a meal or activity'} eyebrow="The plan" onClose={onClose}>
   <form className="form-stack" onSubmit={submit}>
