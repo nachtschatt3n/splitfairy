@@ -1,6 +1,7 @@
 import {DatabaseSync} from 'node:sqlite';
 import {createHash,randomBytes,randomUUID} from 'node:crypto';
 import {allocateExpense} from '../../../packages/domain/src/accounting.js';
+import {settleStatus} from '../../../packages/domain/src/settle-status.js';
 import {TRIP_THEMES,commandSchema,eventSchema,gearSchema,legSchema,staySchema,transportSchema,paymentSchema,expenseSchema,familySchema,personSchema,shoppingSchema,type Command,type Expense,type Photo,type StayFile,type Trip,type User} from '../../../packages/domain/src/model.js';
 
 export class ConflictError extends Error{statusCode=409;constructor(message='This item changed on another device'){super(message);}}
@@ -22,6 +23,7 @@ export class Store{
   CREATE TABLE IF NOT EXISTS invites(trip_id TEXT NOT NULL,email TEXT NOT NULL,role TEXT NOT NULL,PRIMARY KEY(trip_id,email));
   CREATE TABLE IF NOT EXISTS codes(email TEXT PRIMARY KEY,hash TEXT NOT NULL,expires INTEGER NOT NULL,attempts INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL,expires INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS settle_reminders(trip_id TEXT NOT NULL,family_id TEXT NOT NULL,last_sent TEXT NOT NULL,PRIMARY KEY(trip_id,family_id));
   CREATE TABLE IF NOT EXISTS access_tokens(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,name TEXT NOT NULL,token_hash TEXT UNIQUE NOT NULL,prefix TEXT NOT NULL,created_at TEXT NOT NULL,last_used_at TEXT);
   CREATE TABLE IF NOT EXISTS mutations(id TEXT PRIMARY KEY,trip_id TEXT NOT NULL,user_id TEXT NOT NULL,created INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS auth_throttle(email TEXT PRIMARY KEY,window_start INTEGER NOT NULL,requests INTEGER NOT NULL,failures INTEGER NOT NULL);
@@ -185,7 +187,13 @@ export class Store{
     if(command.expectedVersion!==trip.version)throw new ConflictError();
     const v=command.value as Partial<Trip>;
     if(typeof v.name==='string'&&v.name.trim())trip.name=v.name.trim().slice(0,160);
+    if(v.archived===true&&!trip.archived){
+     // A trip is archived once it is done, and it is only done when everyone is square.
+     const status=settleStatus(trip,new Date().toISOString().slice(0,10));
+     if(status.open)throw new InputError(`Settle up first: ${status.transfers.length} repayment${status.transfers.length===1?' is':'s are'} still open`);
+    }
     if(typeof v.archived==='boolean')trip.archived=v.archived;
+    if(typeof (v as any).reminders==='boolean')trip.remindersOff=!(v as any).reminders;
     if(typeof v.theme==='string'){if(!(TRIP_THEMES as readonly string[]).includes(v.theme))throw new InputError('Unknown theme');trip.theme=v.theme;}
     const start=typeof v.start==='string'?v.start:trip.start,end=typeof v.end==='string'?v.end:trip.end;
     if(!/^\d{4}-\d{2}-\d{2}$/.test(start)||!/^\d{4}-\d{2}-\d{2}$/.test(end)||end<start)throw new InputError('The last day must be on or after the first day');

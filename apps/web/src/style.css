@@ -568,3 +568,23 @@ input[type=date]{min-width:150px}
 .file-list small{color:var(--muted)}
 .tl-card.stay.guest{border-style:dashed}
 .stay-links a.map-link,.stay-links .text-button{min-height:44px;margin-top:0}
+/* Overdue settling: urgent everywhere until everyone is square */
+.urgent-banner{display:flex;align-items:flex-start;gap:12px;width:100%;margin:0 0 18px;padding:14px 16px;border:1px solid #e3a58f;border-left:5px solid #c2410c;border-radius:14px;background:#fdece6;color:#5b1d0a;text-align:left;font:inherit}
+.urgent-banner svg{flex:none;color:#c2410c;margin-top:2px}
+.urgent-banner strong{display:block;font-size:16px;color:#7c2d12}
+.urgent-banner p{margin:4px 0 0;font-size:14px;line-height:1.45;color:#5b1d0a}
+.urgent-banner.as-button{cursor:pointer;align-items:center}
+.urgent-banner.as-button>div{flex:1}
+.overdue-badge{display:inline-block;margin-top:4px;padding:2px 8px;border-radius:999px;background:#fdece6;color:#9a3412;font-size:12px;font-weight:800;letter-spacing:.02em}
+.nav-link,.mobile-nav button{position:relative}
+.nav-alert{position:absolute;top:8px;right:8px;width:10px;height:10px;border-radius:50%;background:#dc2626;box-shadow:0 0 0 2px var(--surface)}
+.mobile-nav .nav-alert{top:8px;right:calc(50% - 18px)}
+.trip-card.urgent{border-color:#e3a58f;box-shadow:inset 4px 0 0 #c2410c}
+.trip-status.urgent{display:inline-flex;align-items:center;gap:4px;background:#fdece6;color:#9a3412;font-weight:800}
+@media(prefers-color-scheme:dark){
+ .urgent-banner{background:#3b1a10;border-color:#9a3412;color:#fde2d6}
+ .urgent-banner strong{color:#fed7c7}.urgent-banner p{color:#fde2d6}.urgent-banner svg{color:#fb923c}
+ .overdue-badge,.trip-status.urgent{background:#4a1d0f;color:#fdba98}
+ .trip-card.urgent{border-color:#9a3412;box-shadow:inset 4px 0 0 #fb923c}
+}
+.overdue-badge,.trip-status.urgent{white-space:nowrap}

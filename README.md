@@ -30,6 +30,7 @@ A self-hosted, installable app for group vacations: plan the journey, stays, mea
 - **Expenses.** Add what you paid in seconds, for a meal, an activity or everyone. Split it equally, by exact amounts, percentages, shares or adjustments, or equally per family; it also handles refunds and several payers. The Spend page shows the total, a breakdown by category, and every expense by day.
 - **Receipt scanning.** Take a photo. A private vision model (via [Ollama](https://ollama.com)) reads the items, and you check them next to the photo. Assign each item to a meal, an activity or everyone. Nothing counts until the items add up to the receipt total and a person confirms.
 - **Fair balances.** Costs are split by each person's share to the cent and rolled up per family. Settle up suggests the smallest number of payments. Splitfairy records repayments; it never moves money.
+- **Nobody forgets to pay back.** Once a trip is over, families who still owe get a friendly reminder email every week until everyone is square; overdue amounts are marked in the app, and a trip can only be archived when it is settled.
 - **Your date and time style.** Dates as 03.10.26 and 24-hour times by default; switch to written dates or 12-hour times in People & settings.
 - **A look for every trip.** Pick Coast, Alpine, City, Countryside or Classic when you create the trip; the whole app follows it, in light and dark mode.
 - **AI assistants.** Create a personal access token and let Claude, Codex or OpenClaw plan and split through MCP (`/mcp`) or the REST API; a ready-made [skill](skills/splitfairy/SKILL.md) is included. See [AI assistants](docs/ai-assistants.md).
@@ -79,6 +80,8 @@ Put it behind HTTPS. The administrator (`ADMIN_EMAIL`) signs in first, creates t
 | `ADMIN_EMAIL` | The only address that can sign in before anyone is invited; creates trips. |
 | `AUTH_SECRET` | Random string, at least 32 characters. Signs sign-in codes. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Outgoing mail for sign-in codes and invitations. `SMTP_SECURE=false` means STARTTLS on 587, `true` means TLS on 465. |
+| `PUBLIC_URL` | Public address used in reminder emails, e.g. `https://splitfairy.example.com`. Without it, the last address the app was reached at is used. |
+| `REMINDER_TZ` | Time zone for sending settle-up reminders in the daytime (default `Europe/Berlin`). |
 | `OLLAMA_URL`, `OLLAMA_MODEL` | Vision model for receipts. Without it, everything except receipt scanning works. |
 | `DATA_DIR` | Where SQLite and receipt photos live (`/data` in the image). |
 | `LOG_LEVEL` | `info` by default. Logs are JSON on stdout. |

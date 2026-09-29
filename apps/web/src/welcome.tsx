@@ -1,5 +1,5 @@
 import {useEffect,useState,type FormEvent} from 'react';
-import {ArrowRight,Plus,X} from 'lucide-react';
+import {AlertTriangle,ArrowRight,Plus,X} from 'lucide-react';
 import type {Trip,User} from '../../../packages/domain/src/model.js';
 import {api,ApiError,photoUrl} from './api.js';
 import {Button,Logo,LogoMark,Sheet,fmt,today} from './common.js';
@@ -81,22 +81,24 @@ export function NameSheet({user,onSaved,onClose}:{user:User;onSaved:(user:User)=
  </Sheet>;
 }
 
-type TripSummary=Pick<Trip,'id'|'name'|'start'|'end'|'archived'|'theme'>&{cover?:string|null};
+type TripSummary=Pick<Trip,'id'|'name'|'start'|'end'|'archived'|'theme'>&{cover?:string|null;settle?:{open:boolean;overdueDays:number}};
 const dayMs=86400_000,dayNumber=(iso:string)=>Math.round(new Date(`${iso}T12:00:00`).getTime()/dayMs);
 function status(t:TripSummary,now:string){
  const d=dayNumber(now),s=dayNumber(t.start),e=dayNumber(t.end);
  if(t.archived)return {group:'archived',label:'Archived'};
  if(d<s)return {group:'upcoming',label:s-d===1?'Tomorrow':`In ${s-d} days`};
+ // Money still owed after the trip: it stays at the top until everyone is square.
+ if(t.settle?.overdueDays)return {group:'overdue',label:`Overdue ${t.settle.overdueDays} day${t.settle.overdueDays===1?'':'s'} · settle up`};
  if(d>e)return {group:'past',label:'Ended'};
  return {group:'now',label:`Day ${d-s+1} of ${e-s+1}`};
 }
-const GROUPS:[string,string][]=[['now','Happening now'],['upcoming','Coming up'],['past','Past trips'],['archived','Archived']];
+const GROUPS:[string,string][]=[['overdue','Needs settling'],['now','Happening now'],['upcoming','Coming up'],['past','Past trips'],['archived','Archived']];
 
-function TripCard({trip,label,onOpen}:{trip:TripSummary;label:string;onOpen:()=>void}){
+function TripCard({trip,label,urgent=false,onOpen}:{trip:TripSummary;label:string;urgent?:boolean;onOpen:()=>void}){
  const start=new Date(`${trip.start}T12:00:00`);
- return <button className="trip-card" onClick={onOpen} data-trip-theme={trip.theme??'classic'}>
+ return <button className={urgent?'trip-card urgent':'trip-card'} onClick={onOpen} data-trip-theme={trip.theme??'classic'}>
   <span className={trip.cover?'date-block with-photo':'date-block'} aria-hidden="true" style={trip.cover?{backgroundImage:`url(${photoUrl(trip.id,trip.cover,true)})`}:undefined}><small>{start.toLocaleDateString('en-GB',{month:'short'})}</small><strong>{start.getDate()}</strong></span>
-  <span className="trip-card-text"><strong>{trip.name}</strong><small>{fmt(trip.start)} – {fmt(trip.end)}</small><span className="trip-status">{label}</span></span>
+  <span className="trip-card-text"><strong>{trip.name}</strong><small>{fmt(trip.start)} – {fmt(trip.end)}</small><span className={urgent?'trip-status urgent':'trip-status'}>{urgent&&<AlertTriangle size={13} aria-hidden="true"/>} {label}</span></span>
   <ArrowRight size={18} aria-hidden="true"/>
  </button>;
 }
@@ -111,7 +113,7 @@ export function TripList({user,trips,message,onDismiss,onOpen,onCreate,onLogout}
    <div className="trip-list-head"><div><span className="eyebrow">Your trips</span><h1>Hello, <em>{first}.</em></h1><p>Pick up where you left off.</p></div>
     {user?.admin&&<Button kind="secondary" onClick={onCreate}><Plus size={17}/> Create a vacation</Button>}</div>
    {GROUPS.map(([group,title])=>{const items=sorted(group);return items.length?<div key={group} className="trip-group"><h2 className={group==='archived'?'archived-heading':undefined}>{title}</h2>
-    <div className={`trip-grid${group==='archived'?' archived':''}`}>{items.map(x=><TripCard key={x.trip.id} trip={x.trip} label={x.label} onOpen={()=>onOpen(x.trip.id)}/>)}</div></div>:null;})}
+    <div className={`trip-grid${group==='archived'?' archived':''}`}>{items.map(x=><TripCard key={x.trip.id} trip={x.trip} label={x.label} urgent={x.group==='overdue'} onOpen={()=>onOpen(x.trip.id)}/>)}</div></div>:null;})}
   </>:<div className="landing">
    <span className="landing-mark"><LogoMark size={56}/></span>
    <div className="eyebrow">Your next chapter</div>

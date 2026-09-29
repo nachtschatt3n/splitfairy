@@ -1,9 +1,10 @@
 import {AccessTokens} from './tokens.js';
+import {settleStatus} from '../../../packages/domain/src/settle-status.js';
 import {useState,type FormEvent} from 'react';
 import {ArrowRight,Mail,Pencil,Plus,Settings2,UserRound,Users} from 'lucide-react';
 import {api} from './api.js';
 import type {Command,Family,Member,Person,Trip,TripView,User} from '../../../packages/domain/src/model.js';
-import {Button,Empty,Sheet,ThemePicker,WEIGHTS,fmt,uid,weightLabel,type Remove,type Save,getDisplay,type DisplaySettings} from './common.js';
+import {Button,Empty,Sheet,ThemePicker,WEIGHTS,fmt,uid,weightLabel,type Remove,type Save,getDisplay,type DisplaySettings,today} from './common.js';
 import {localDb,pendingFor} from './offline.js';
 import {useEffect} from 'react';
 
@@ -84,6 +85,7 @@ function FamilySheet({family,save,remove,busy,onClose,trip}:{family?:Family;save
 }
 
 function TripSheet({trip,save,busy,onClose,onDeleted,onMessage}:{trip:Trip;save:Save;busy:boolean;onClose:()=>void;onDeleted:()=>void;onMessage:(m:string)=>void}){
+ const openRepayments=settleStatus(trip,today()).transfers.length;
  const [name,setName]=useState(trip.name),[start,setStart]=useState(trip.start),[end,setEnd]=useState(trip.end),[theme,setTheme]=useState<string>(trip.theme??'classic'),[error,setError]=useState('');
  const outside=trip.events.filter(e=>e.date<start||e.date>end).length;
  const hasMoney=trip.expenses.length>0||trip.payments.length>0;
@@ -99,7 +101,9 @@ function TripSheet({trip,save,busy,onClose,onDeleted,onMessage}:{trip:Trip;save:
   <div className="settings-block">
    <h3>{trip.archived?'Archived':'Archive'}</h3>
    <p>{trip.archived?'This trip is read-only. Unarchive it to make changes again.':'When the trip is over and settled, archive it. It becomes read-only and stays in everyone’s history.'}</p>
-   <Button kind="secondary" disabled={busy} onClick={async()=>{await save('trip',{archived:!trip.archived},trip);onClose();}}>{trip.archived?'Unarchive trip':'Archive trip'}</Button>
+   {!trip.archived&&openRepayments>0?<p className="helper">Settle up first: {openRepayments} repayment{openRepayments===1?' is':'s are'} still open. A trip can be archived once everyone is square.</p>
+    :<Button kind="secondary" disabled={busy} onClick={async()=>{await save('trip',{archived:!trip.archived},trip);onClose();}}>{trip.archived?'Unarchive trip':'Archive trip'}</Button>}
+   <label className="check-label"><input type="checkbox" checked={!trip.remindersOff} disabled={busy} onChange={e=>void save('trip',{reminders:e.target.checked},trip)}/> Weekly settle-up reminders by email after the trip, until everyone is square</label>
   </div>
   <div className="settings-block">
    <h3>Delete trip</h3>

@@ -12,13 +12,15 @@ import {TRIP_THEMES,commandSchema,type Trip,type User,type Receipt} from '../../
 import {processReceipt,claimReceipt,resetInterruptedReceipts} from './receipt.js';
 import {inviteEmail,signInEmail} from './mail.js';
 import {registerMcp} from './mcp.js';
+import {sendSettleReminders} from './reminders.js';
+import {settleStatus} from '../../../packages/domain/src/settle-status.js';
 
 const sha=(input:string)=>createHash('sha256').update(input).digest('hex');
 const emailSchema=z.string().trim().pipe(z.email()).transform(v=>v.toLowerCase());
 const inviteSchema=z.object({email:emailSchema,role:z.enum(['organizer','member']).default('member')});
 const codeSchema=z.object({email:emailSchema,code:z.string().max(40).transform(v=>v.replace(/\D/g,'')).pipe(z.string().regex(/^\d{6}$/)),name:z.string().trim().max(80).optional()});
 export type Mail=(to:string,subject:string,text:string,html?:string)=>Promise<void>;
-export type Config={/** Nominatim-compatible search for restaurant addresses; empty turns lookup off. */placesUrl?:string;store:Store;adminEmail:string;secret:string;sendMail:Mail;dataDir:string;startWorker?:boolean;secureCookies?:boolean;ollamaUrl?:string;ollamaModel?:string;logLevel?:string;/** Multiplies the per-IP sign-in limits; only the browser test server raises it. */authRateLimitFactor?:number};
+export type Config={/** Public address for links in background emails (reminders); falls back to the last address the app was reached at. */publicUrl?:string;/** Time zone for sending reminders in the daytime. */timeZone?:string;/** Nominatim-compatible search for restaurant addresses; empty turns lookup off. */placesUrl?:string;store:Store;adminEmail:string;secret:string;sendMail:Mail;dataDir:string;startWorker?:boolean;secureCookies?:boolean;ollamaUrl?:string;ollamaModel?:string;logLevel?:string;/** Multiplies the per-IP sign-in limits; only the browser test server raises it. */authRateLimitFactor?:number};
 export function codeHash(secret:string,email:string,code:string){return createHmac('sha256',secret).update(`${email}:${code}`).digest('hex');}
 export async function createApp(config:Config):Promise<FastifyInstance>{
  const app=Fastify({logger:config.logLevel?{level:config.logLevel}:false,logController:new LogController({disableRequestLogging:true}),bodyLimit:16_000_000,trustProxy:true});
@@ -30,7 +32,9 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
   if(status>=500)request.log.error(error);
   reply.status(status).send({error:status>=500?'Internal server error':error instanceof Error?error.message:'Invalid request'});
  });
+ let seenOrigin:string|null=null;
  app.addHook('onRequest',async(request,reply)=>{
+  if(request.url.startsWith('/api/')&&request.headers.host)seenOrigin=`${request.headers['x-forwarded-proto']??request.protocol}://${request.headers['x-forwarded-host']??request.headers.host}`;
   if(!['POST','PUT','PATCH','DELETE'].includes(request.method))return;
   const origin=request.headers.origin;
   if(origin){try{if(new URL(origin).host!==request.headers.host){reply.status(403).send({error:'Cross-origin write denied'});}}catch{reply.status(403).send({error:'Invalid origin'});}}
@@ -114,7 +118,7 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
  });
  app.put('/api/v1/me',async(request)=>{const user=auth(request),{name}=z.object({name:z.string().trim().min(1).max(80)}).parse(request.body);config.store.renameUser(user.id,name);return config.store.userById(user.id);});
  app.post('/api/v1/auth/logout',async(request,reply)=>{const token=request.cookies.splitfairy_session;if(token)config.store.db.prepare('DELETE FROM sessions WHERE token_hash=?').run(sha(token));reply.clearCookie('splitfairy_session',{path:'/'});return {ok:true};});
- app.get('/api/v1/trips',async(request)=>config.store.listTrips(auth(request)).map(t=>({id:t.id,name:t.name,start:t.start,end:t.end,archived:t.archived,theme:t.theme??'classic',cover:t.photos?.[0]?.id??null})));
+ app.get('/api/v1/trips',async(request)=>config.store.listTrips(auth(request)).map(t=>{const status=settleStatus(t,new Date().toISOString().slice(0,10));return {id:t.id,name:t.name,start:t.start,end:t.end,archived:t.archived,theme:t.theme??'classic',cover:t.photos?.[0]?.id??null,settle:{open:status.open,overdueDays:status.overdueDays}};}));
  app.post('/api/v1/trips',async(request,reply)=>{const body=z.object({name:z.string().trim().min(1).max(160),start:z.iso.date(),end:z.iso.date(),theme:z.enum(TRIP_THEMES).default('classic')}).parse(request.body);const trip=config.store.createTrip(auth(request),body.name,body.start,body.end,body.theme);reply.status(201);return trip;});
  app.get('/api/v1/trips/:tripId',async(request)=>{const user=auth(request),id=(request.params as any).tripId;return {trip:config.store.getTrip(user,id),role:config.store.role(user,id),members:config.store.members(user,id)};});
  app.post('/api/v1/trips/:tripId/invites',async(request)=>{const user=auth(request),id=(request.params as any).tripId,body=inviteSchema.parse(request.body);config.store.addMember(user,id,body.email,body.role);const mail=inviteEmail({inviter:user.name,tripName:config.store.getTrip(user,id).name,url:siteUrl(request)});await config.sendMail(body.email,mail.subject,mail.text,mail.html);return {ok:true};});
@@ -251,5 +255,11 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
  });
  if(config.startWorker!==false){resetInterruptedReceipts(config.store);let working=false;const timer=setInterval(async()=>{if(working)return;working=true;try{const job=claimReceipt(config.store);if(job)await processReceipt(config.store,config.dataDir,config.ollamaUrl??'http://192.168.30.111:11434',config.ollamaModel??'gemma4:26b-mlx',job);}catch(error){app.log.error(error);}finally{working=false;}},5000);timer.unref();app.addHook('onClose',async()=>clearInterval(timer));}
  registerMcp(app);
+ // Weekly settle-up reminders after a trip ended: checked every hour (sent in the daytime, once a week per family).
+ if(config.startWorker!==false){
+  const remind=()=>sendSettleReminders(config.store,config.sendMail,config.publicUrl??seenOrigin,{timeZone:config.timeZone}).then(sent=>{for(const s of sent)app.log.info({trip:s.tripId,family:s.familyId,recipients:s.to.length},'settle reminder sent');}).catch(error=>app.log.error(error,'settle reminders failed'));
+  const first=setTimeout(remind,60_000),hourly=setInterval(remind,3_600_000);first.unref();hourly.unref();
+  app.addHook('onClose',async()=>{clearTimeout(first);clearInterval(hourly);});
+ }
  return app;
 }

@@ -52,3 +52,21 @@ export function inviteEmail({inviter,tripName,url,name}:{inviter:string;tripName
    p(`<span style="color:#56675f;">Button not working? Open <a href="${esc(url)}" style="color:#1f5f53;">${esc(url)}</a></span>`)}),
  };
 }
+
+/** Weekly nudge to a family that still owes money after a trip ended. Amounts in cents. */
+export function settleReminderEmail({name,tripName,family,owes,overdueDays,url}:{name?:string;tripName:string;family:string;owes:{to:string;amount:number}[];overdueDays:number;url:string}):MailMessage{
+ const euro=(c:number)=>new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR'}).format(c/100);
+ const total=owes.reduce((n,o)=>n+o.amount,0),days=`${overdueDays} day${overdueDays===1?'':'s'}`;
+ const lines=owes.map(o=>`${euro(o.amount)} to ${o.to}`);
+ return {
+  subject:`Reminder: ${family} still owes ${euro(total)} for ${tripName}`,
+  text:`${name?`Hi ${name},\n\n`:''}${tripName} ended ${days} ago and ${family} still owes ${euro(total)}:\n${lines.map(l=>`- ${l}`).join('\n')}\n\nOnce you have paid, record the repayment in Splitfairy so everyone is square: ${url}\n\nThis reminder comes once a week until the trip is settled.`,
+  html:layout({preheader:`${family} still owes ${euro(total)} for ${tripName}.`,title:`Settle up for ${tripName}`,body:
+   `<p style="margin:0 0 10px;"><span style="display:inline-block;padding:4px 10px;border-radius:999px;background:#fbe4dc;color:#8f3a1f;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;">Overdue ${esc(days)}</span></p>`+
+   h1(`${esc(family)} still owes ${esc(euro(total))}`)+
+   p(`${name?`Hi ${esc(name)}, `:''}<strong>${esc(tripName)}</strong> ended ${esc(days)} ago. To settle up:`)+
+   `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border:1px solid #e7e8df;border-radius:12px;">${owes.map((o,i)=>`<tr><td style="padding:12px 14px;font-size:15px;color:#243533;${i?'border-top:1px solid #f0eee6;':''}">Pay <strong>${esc(o.to)}</strong></td><td align="right" style="padding:12px 14px;font-size:15px;font-weight:700;color:#153f40;${i?'border-top:1px solid #f0eee6;':''}">${esc(euro(o.amount))}</td></tr>`).join('')}</table>`+
+   `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 22px;"><tr><td style="border-radius:12px;background:#164a44;"><a href="${esc(url)}" style="display:inline-block;padding:14px 26px;font-family:${FONT};font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:12px;">Record the repayment</a></td></tr></table>`+
+   p('<span style="color:#56675f;">This reminder comes once a week until the trip is settled. Organizers can pause it in the trip settings.</span>')}),
+ };
+}
