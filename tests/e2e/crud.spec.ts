@@ -154,6 +154,11 @@ test('every entity can be created, changed and removed from the interface',async
  await row.getByRole('button',{name:'Make member'}).click();await expect(row).toContainText('Member');
  await row.getByRole('button',{name:'Remove access'}).click();await expect(page.locator('.member-row',{hasText:guest})).toHaveCount(0);
 
+ // A trip can only be archived once everyone is square: settle up first.
+ await page.getByRole('button',{name:'Edit trip'}).click();await expect(sheet(page)).toContainText('Settle up first');await sheet(page).getByRole('button',{name:'Close'}).click();await closed(page);
+ await openSection(page,'Settle');
+ while(await page.getByRole('button',{name:/^Mark .* as paid$/}).count()){await page.getByRole('button',{name:/^Mark .* as paid$/}).first().click();await sheet(page).getByRole('button',{name:/Record|Save/}).first().click();await closed(page);}
+ await openSection(page,'People');
  // Archive makes the trip read-only and moves it to the archive; unarchive brings it back.
  await page.getByRole('button',{name:'Edit trip'}).click();await sheet(page).getByRole('button',{name:'Archive trip'}).click();await closed(page);
  await expect(page.getByText('This trip is archived and read-only.')).toBeVisible();

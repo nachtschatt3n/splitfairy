@@ -37,6 +37,15 @@ export function Button({children,onClick,kind='primary',type='button',disabled=f
 export function Notice({children}: {children:ReactNode}){return <div className="notice"><Info size={16}/>{children}</div>}
 export function Empty({icon,heading,body,action}: {icon:ReactNode;heading:string;body:string;action?:ReactNode}){return <div className="empty"><div className="empty-icon">{icon}</div><h3>{heading}</h3><p>{body}</p>{action}</div>}
 /** Dialog that becomes a bottom sheet on phones (see .modal in style.css). */
+/** While a closed sheet steps back in history, new URLs wait for it, so the step back cannot undo them. */
+let backInFlight=false;const afterBack:(()=>void)[]=[];
+function stepBack(){
+ backInFlight=true;
+ window.addEventListener('popstate',()=>{backInFlight=false;for(const run of afterBack.splice(0))run();},{once:true});
+ history.back();
+}
+/** Runs a history change now, or right after a sheet's step back has landed. */
+export function whenHistorySettled(run:()=>void){if(backInFlight)afterBack.push(run);else run();}
 /** Sheets that just closed and will step back unless a sheet re-mounts or takes over their entry. */
 const pendingBack=new Map<string,{cancelled:boolean}>();
 /**
@@ -56,7 +65,7 @@ export function useBackToClose(onClose:()=>void){
   const onPop=()=>{if(history.state?.sheet!==id)close.current();};
   window.addEventListener('popstate',onPop);
   // React re-mounts within the same commit, so a microtask is late enough to tell a close from a re-mount.
-  return()=>{window.removeEventListener('popstate',onPop);const job={cancelled:false};pendingBack.set(id,job);queueMicrotask(()=>{if(job.cancelled)return;pendingBack.delete(id);if(history.state?.sheet===id)history.back();});};
+  return()=>{window.removeEventListener('popstate',onPop);const job={cancelled:false};pendingBack.set(id,job);queueMicrotask(()=>{if(job.cancelled)return;pendingBack.delete(id);if(history.state?.sheet===id)stepBack();});};
  },[id]);
 }
 /** For dialogs that are not a Sheet: back closes them too. */

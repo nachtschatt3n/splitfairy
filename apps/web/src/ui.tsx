@@ -3,7 +3,7 @@ import {AlertTriangle,ArrowLeft,ArrowRight,BedDouble,Camera,Luggage,CalendarDays
 import {api,ApiError,photoUrl} from './api.js';
 import {cachedTrip,clearOffline,localDb,pendingFor,photoCount,queue,queuePhoto,SessionExpired,shrinkPhoto,syncTrip,takeRejectedPhotos,unsyncedCount} from './offline.js';
 import {ReceiptReview} from './receipt-review.js';
-import {Button,Empty,Logo,LogoMark,Notice,ThemePicker,cents,euro,fmt,money,today,uid,getDisplay,setDisplay,type DisplaySettings,BackToClose} from './common.js';
+import {Button,Empty,Logo,LogoMark,Notice,ThemePicker,cents,euro,fmt,money,today,uid,getDisplay,setDisplay,type DisplaySettings,BackToClose,whenHistorySettled} from './common.js';
 import {NameSheet,SignIn,TripList} from './welcome.js';
 import {Plan,joiningLabel,type PlanSheet} from './plan.js';
 import {placeTarget,type PhotoActions} from './photos.js';
@@ -30,9 +30,10 @@ export function App(){
  // The URL follows the open trip, section and plan day; back and forward restore them.
  const [planDay,setPlanDay]=useState<string|null>(()=>parseRoute(location.pathname)?.day??null);
  const firstRoute=useRef(true),fromHistory=useRef(false),selectedRef=useRef(selected);selectedRef.current=selected;
+ const routeRef=useRef({tab,planDay});routeRef.current={tab,planDay};
  useEffect(()=>{
   const path=routePath({tripId:selected,tab,day:tab==='plan'?planDay:null});
-  if(location.pathname!==path){if(firstRoute.current||fromHistory.current)history.replaceState(history.state,'',path);else history.pushState({route:true},'',path);}
+  if(location.pathname!==path){const replace=firstRoute.current||fromHistory.current;whenHistorySettled(()=>{if(location.pathname===path)return;if(replace)history.replaceState(history.state,'',path);else history.pushState({route:true},'',path);});}
   firstRoute.current=false;fromHistory.current=false;
  },[selected,tab,planDay]);
  const refresh=useCallback(async(id:string)=>{const cached=await cachedTrip(id);if(cached)setView({...cached,trip:overlay(cached.trip,(await pendingFor(id)).filter(e=>e.state==='pending').map(e=>e.command))});try{const next=await syncTrip(id);setView(next);setOffline(false);const dropped=takeRejectedPhotos();if(dropped)setMessage(`${dropped} receipt photo${dropped===1?' was':'s were'} not readable and ${dropped===1?'was':'were'} removed. Please take ${dropped===1?'it':'them'} again.`);}catch(error){if(error instanceof SessionExpired){setMessage(error.message);setUser(null);setSignedOut(true);}else setOffline(true);}const items=await pendingFor(id);setPending(items.length+await photoCount(id));setConflicts(items.filter(i=>i.state!=='pending').length);},[]);
@@ -50,6 +51,8 @@ export function App(){
  useEffect(()=>{
   const onPop=()=>{
    const route=parseRoute(location.pathname);if(!route)return;
+   // A step back that only closed a sheet leaves the route as it is.
+   if(route.tripId===selectedRef.current&&route.tab===routeRef.current.tab&&(route.day??null)===(routeRef.current.tab==='plan'?routeRef.current.planDay??null:null))return;
    fromHistory.current=true;setModal(null);setTab(route.tab);setPlanDay(route.day);
    if(route.tripId!==selectedRef.current){
     setSelected(route.tripId);
