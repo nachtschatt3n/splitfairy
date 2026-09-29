@@ -633,3 +633,8 @@ input[type=date]{min-width:150px}
  .choice-grid span{display:none}
  .choice-grid strong{font-size:14px;line-height:1.25}
 }
+.token-fresh{min-width:0}
+.token-fresh strong,.token-fresh .helper,.token-value code{overflow-wrap:anywhere;word-break:break-word;min-width:0}
+.token-value{min-width:0}
+.token-form select{border:1px solid var(--line);background:var(--surface-2);color:var(--ink);border-radius:10px;padding:10px 12px;min-height:44px;width:100%;font:inherit}
+.magic-page .auth-content{max-width:520px}

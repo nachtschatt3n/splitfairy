@@ -24,13 +24,14 @@ export const freshTrip=(id:string,name:string,start:string,end:string):Trip=>({i
 
 export class Store{
  constructor(public db:DatabaseSync){
-  db.exec(`PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL;
+  db.exec(`PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL;
   CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,email TEXT UNIQUE NOT NULL,name TEXT NOT NULL,admin INTEGER NOT NULL DEFAULT 0);
   CREATE TABLE IF NOT EXISTS trips(id TEXT PRIMARY KEY,data TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS memberships(trip_id TEXT NOT NULL,email TEXT NOT NULL,role TEXT NOT NULL,PRIMARY KEY(trip_id,email));
   CREATE TABLE IF NOT EXISTS invites(trip_id TEXT NOT NULL,email TEXT NOT NULL,role TEXT NOT NULL,PRIMARY KEY(trip_id,email));
   CREATE TABLE IF NOT EXISTS codes(email TEXT PRIMARY KEY,hash TEXT NOT NULL,expires INTEGER NOT NULL,attempts INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL,expires INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS magic_links(email TEXT PRIMARY KEY,token_hash TEXT UNIQUE NOT NULL,expires INTEGER NOT NULL,created_by TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS settle_reminders(trip_id TEXT NOT NULL,family_id TEXT NOT NULL,last_sent TEXT NOT NULL,PRIMARY KEY(trip_id,family_id));
   CREATE TABLE IF NOT EXISTS access_tokens(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,name TEXT NOT NULL,token_hash TEXT UNIQUE NOT NULL,prefix TEXT NOT NULL,created_at TEXT NOT NULL,last_used_at TEXT);
@@ -192,6 +193,7 @@ export class Store{
  prune(now=Date.now()){
   this.db.prepare('DELETE FROM sessions WHERE expires<?').run(now);
   this.db.prepare('DELETE FROM codes WHERE expires<?').run(now);
+  this.db.prepare('DELETE FROM magic_links WHERE expires<?').run(now);
   this.db.prepare('DELETE FROM auth_throttle WHERE window_start<?').run(now-3600_000);
   this.db.prepare('DELETE FROM mutations WHERE created<?').run(now-180*86400_000);
  }

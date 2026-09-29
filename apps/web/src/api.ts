@@ -15,6 +15,9 @@ export const fileUrl=(tripId:string,fileId:string)=>`/api/v1/trips/${tripId}/fil
 export const photoUrl=(tripId:string,photoId:string,thumb=false)=>`/api/v1/trips/${tripId}/photos/${photoId}${thumb?'?size=thumb':''}`;
 export const api={
  me:()=>request<User|null>('/me'),
+ createMagicLink:(email:string,valid:'1h'|'24h'|'7d')=>request<{url:string;email:string;expires:string}>('/admin/magic-links',{method:'POST',body:JSON.stringify({email,valid})}),
+ peekMagic:(token:string)=>request<{email:string}>('/auth/magic/peek',{method:'POST',body:JSON.stringify({token})}),
+ useMagic:(token:string)=>request<User&{isNew?:boolean}>('/auth/magic',{method:'POST',body:JSON.stringify({token})}),
  config:()=>request<{signupOpen:boolean}>('/config'),
  adminSettings:()=>request<{signupOpen:boolean}>('/admin/settings'),
  setAdminSettings:(settings:{signupOpen:boolean})=>request<{signupOpen:boolean}>('/admin/settings',{method:'PUT',body:JSON.stringify(settings)}),

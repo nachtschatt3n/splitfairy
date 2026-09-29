@@ -127,3 +127,22 @@ export function TripList({user,trips,message,onDismiss,onOpen,onCreate,onLogout,
   <div className="account-row"><span>Signed in as <strong>{user?.email}</strong></span><button className="text-button" onClick={onLogout}>Sign out</button></div>
  </section>;
 }
+
+/** "/login#<token>": an admin-made sign-in link. Asks first, so a link preview never uses it up. */
+export function MagicLogin({token,signedInAs,onSignedIn,onCancel}:{token:string;signedInAs?:string;onSignedIn:(user:User&{isNew?:boolean})=>Promise<void>;onCancel:()=>void}){
+ const [email,setEmail]=useState<string|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+ useEffect(()=>{api.peekMagic(token).then(r=>setEmail(r.email)).catch(err=>setError(err instanceof Error?err.message:'This sign-in link does not work.'));},[token]);
+ const go=async()=>{setBusy(true);setError('');try{await onSignedIn(await api.useMagic(token));}catch(err){setError(err instanceof Error?err.message:'This sign-in link does not work.');}finally{setBusy(false);}};
+ return <main className="auth-page magic-page">
+  <div className="auth-content">
+   <Logo/>
+   <h1>Sign-in link</h1>
+   {email?<>
+    <p className="auth-lead">Continue as <strong>{email}</strong>?{signedInAs&&signedInAs!==email?` You are signed in as ${signedInAs} on this device; this switches the account.`:''}</p>
+    <Button disabled={busy} onClick={()=>void go()}>Continue as {email} <ArrowRight size={17}/></Button>
+   </>:!error&&<p className="auth-lead" role="status">Checking the link…</p>}
+   {error&&<p className="form-error" role="alert">{error} Ask the person who sent it for a new one, or sign in with your email.</p>}
+   <button type="button" className="text-button" onClick={onCancel}>{email?'Not you? Sign in another way':'Sign in with your email instead'}</button>
+  </div>
+ </main>;
+}

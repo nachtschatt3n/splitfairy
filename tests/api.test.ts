@@ -337,3 +337,38 @@ describe('private packing items',()=>{
   expect((await cmd(admin,'save','gear',{id:'x',text:'Nobody',visibility:'family'})).statusCode).toBe(400);
  });
 });
+describe('admin sign-in links',()=>{
+ it('are made by the admin only, can be looked at without being used, and work exactly once',async()=>{
+  const store=new Store(new DatabaseSync(':memory:'));const mails:{to:string;body:string}[]=[];
+  const a=await createApp({store,adminEmail:'admin@example.com',secret:'a very long integration test secret',sendMail:async(to,_s,body)=>{mails.push({to,body});},dataDir:'/tmp/splitfairy-api-tests',startWorker:false,authRateLimitFactor:100,publicUrl:'https://trips.example'});
+  const signIn=async(email:string)=>{await a.inject({method:'POST',url:'/api/v1/auth/request',payload:{email}});const code=mails.filter(m=>m.to===email).at(-1)!.body.match(/\b\d{6}\b/)![0];return {host:'splitfairy.example',cookie:`splitfairy_session=${(await a.inject({method:'POST',url:'/api/v1/auth/verify',payload:{email,code,name:'X'}})).cookies.find(c=>c.name==='splitfairy_session')!.value}`};};
+  const admin=await signIn('admin@example.com');
+  const trip=(await a.inject({method:'POST',url:'/api/v1/trips',headers:admin,payload:{name:'Porto',start:'2026-10-01',end:'2026-10-05'}})).json();
+  const cmd=(entity:string,value:any)=>a.inject({method:'POST',url:`/api/v1/trips/${trip.id}/commands`,headers:admin,payload:{mutationId:`k${Math.random()}`.replace('.',''),entity,action:'save',expectedVersion:0,value:{version:0,...value}}});
+  await cmd('family',{id:'f',name:'Silva',solo:false});await cmd('person',{id:'p',name:'Bea',familyId:'f',weight:1,email:'bea@example.com'});
+  const make=(headers:any,email:string,valid='24h')=>a.inject({method:'POST',url:'/api/v1/admin/magic-links',headers,payload:{email,valid}});
+  // Someone who cannot sign in gets no link.
+  expect((await make(admin,'stranger@example.com')).json().error).toMatch(/cannot sign in/);
+  const first=(await make(admin,'bea@example.com')).json();
+  expect(first.url).toMatch(/^https:\/\/trips\.example\/login#[A-Za-z0-9_-]{43}$/);
+  const token=first.url.split('#')[1];
+  // A newer link replaces the older one.
+  const second=(await make(admin,'bea@example.com','1h')).json(),token2=second.url.split('#')[1];
+  expect((await a.inject({method:'POST',url:'/api/v1/auth/magic/peek',payload:{token}})).statusCode).toBe(401);
+  // Looking does not use it up; using it signs in (new account) once.
+  expect((await a.inject({method:'POST',url:'/api/v1/auth/magic/peek',payload:{token:token2}})).json()).toEqual({email:'bea@example.com'});
+  const used=await a.inject({method:'POST',url:'/api/v1/auth/magic',payload:{token:token2}});
+  expect(used.statusCode).toBe(200);expect(used.json()).toMatchObject({email:'bea@example.com',isNew:true});
+  const cookie=`splitfairy_session=${used.cookies.find(c=>c.name==='splitfairy_session')!.value}`;
+  expect((await a.inject({method:'GET',url:`/api/v1/trips/${trip.id}`,headers:{cookie}})).statusCode).toBe(200);
+  expect((await a.inject({method:'POST',url:'/api/v1/auth/magic',payload:{token:token2}})).statusCode).toBe(401);
+  // Only the admin, signed in to the app, can make links.
+  expect((await make({cookie,host:'splitfairy.example'},'bea@example.com')).statusCode).toBe(403);
+  const pat=(await a.inject({method:'POST',url:'/api/v1/me/tokens',headers:admin,payload:{name:'t'}})).json().token;
+  expect((await make({authorization:`Bearer ${pat}`},'bea@example.com')).statusCode).toBe(401);
+  // Expired links do not work.
+  const old=(await make(admin,'bea@example.com')).json().url.split('#')[1];
+  store.db.prepare('UPDATE magic_links SET expires=?').run(Date.now()-1);
+  expect((await a.inject({method:'POST',url:'/api/v1/auth/magic',payload:{token:old}})).statusCode).toBe(401);
+ });
+});

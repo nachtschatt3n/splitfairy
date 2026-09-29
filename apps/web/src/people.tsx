@@ -1,7 +1,7 @@
 import {AccessTokens} from './tokens.js';
 import {settleStatus} from '../../../packages/domain/src/settle-status.js';
 import {useEffect,useState,type FormEvent} from 'react';
-import {ArrowRight,Mail,Pencil,Plus,Settings2,UserRound,Users} from 'lucide-react';
+import {ArrowRight,Copy,Link2,Mail,Pencil,Plus,Settings2,UserRound,Users} from 'lucide-react';
 import {api} from './api.js';
 import type {Command,Family,Member,Person,Trip,TripView,User} from '../../../packages/domain/src/model.js';
 import {Button,Empty,Sheet,ThemePicker,WEIGHTS,fmt,uid,weightLabel,type Remove,type Save,getDisplay,type DisplaySettings,today} from './common.js';
@@ -112,6 +112,28 @@ function TripSheet({trip,save,busy,onClose,onDeleted,onMessage}:{trip:Trip;save:
  </Sheet>;
 }
 
+/** Admin only: a single-use sign-in link to copy into a chat or message. */
+function MagicLinkTool({trip}:{trip:Trip}){
+ const people=trip.people.filter(p=>p.email);
+ const [email,setEmail]=useState(people[0]?.email??''),[valid,setValid]=useState<'1h'|'24h'|'7d'>('24h');
+ const [link,setLink]=useState<{url:string;email:string;expires:string}|null>(null),[error,setError]=useState(''),[copied,setCopied]=useState(false);
+ const create=async(e:FormEvent)=>{e.preventDefault();setError('');setLink(null);try{setLink(await api.createMagicLink(email.trim(),valid));}catch(err){setError(err instanceof Error?err.message:'Could not create the link');}};
+ const copy=async()=>{if(!link)return;try{await navigator.clipboard.writeText(link.url);setCopied(true);setTimeout(()=>setCopied(false),2500);}catch{/* select it by hand */}};
+ return <div className="settings-block magic-block"><span className="eyebrow">Sign-in link (admin)</span>
+  <p>For someone whose sign-in email does not arrive: create a link and send it yourself. It signs them in once, then stops working.</p>
+  <form className="token-form" onSubmit={create}>
+   <label>For<input list="magic-people" type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@example.com" required/></label>
+   <datalist id="magic-people">{people.map(p=><option key={p.id} value={p.email}>{p.name}</option>)}</datalist>
+   <label>Valid for<select value={valid} onChange={e=>setValid(e.target.value as typeof valid)}><option value="1h">1 hour</option><option value="24h">24 hours</option><option value="7d">7 days</option></select></label>
+   <Button type="submit"><Link2 size={16}/> Create link</Button>
+  </form>
+  {link&&<div className="token-fresh" role="status"><strong>Sign-in link for {link.email}</strong>
+   <div className="token-value"><code>{link.url}</code><Button kind="secondary" onClick={()=>void copy()}><Copy size={15}/> {copied?'Copied':'Copy'}</Button></div>
+   <p className="helper">Works once, until {new Date(link.expires).toLocaleString('en-GB',{dateStyle:'medium',timeStyle:'short'})}. Anyone with the link can sign in as {link.email}, so send it only to them. A new link replaces this one.</p></div>}
+  {error&&<p className="form-error" role="alert">{error}</p>}
+ </div>;
+}
+
 /** Admin only: whether anyone may sign up, or only people who are in a trip. */
 function SignupSetting({onChange}:{onChange?:(open:boolean)=>void}){
  const [open,setOpen]=useState<boolean|null>(null),[error,setError]=useState('');
@@ -168,6 +190,7 @@ export function People({onSignupChange,onDisplay,trip,view,user,onRename,onLogou
       <label>Times<select value={getDisplay().time} onChange={e=>onDisplay({...getDisplay(),time:e.target.value as DisplaySettings['time']})}><option value="24h">24-hour (20:30)</option><option value="12h">12-hour (8:30 pm)</option></select></label>
      </div></div></div>
     {user?.admin&&<SignupSetting onChange={onSignupChange}/>}
+    {user?.admin&&<MagicLinkTool trip={trip}/>}
     <AccessTokens/>
     <div className="settings-block account-block"><span className="eyebrow">Your account</span><div className="account-row"><span><strong>{user?.name}</strong> · {user?.email??'—'}</span><span className="account-actions"><button className="text-button" onClick={onRename}>Change name</button><button className="text-button" onClick={onLogout}>Sign out</button></span></div></div>
    </section>

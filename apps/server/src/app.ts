@@ -107,6 +107,16 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
   }
   return {ok:true};
  });
+ /** Signs someone in: creates the account on first sign-in (named after the address until they choose), then a 30-day session. */
+ function startSession(email:string,reply:any,name?:string){
+  let user=config.store.userByEmail(email);const isNew=!user;
+  if(!user){const local=email.split('@')[0].replace(/[._-]+/g,' ').trim();user={id:randomUUID(),email,name:name||local.replace(/\b\w/g,c=>c.toUpperCase())||'Traveller',admin:email===config.adminEmail.toLowerCase()};config.store.addUser(user);}
+  config.store.promoteInvites(email);
+  const token=randomBytes(32).toString('base64url');
+  config.store.db.prepare('INSERT INTO sessions(token_hash,user_id,expires) VALUES(?,?,?)').run(sha(token),user.id,Date.now()+30*86400_000);
+  reply.setCookie('splitfairy_session',token,{httpOnly:true,sameSite:'strict',secure:config.secureCookies??false,path:'/',maxAge:30*86400});
+  return {...user,isNew};
+ }
  app.post('/api/v1/auth/verify',{config:{rateLimit:{max:10*(config.authRateLimitFactor??1),timeWindow:'15 minutes'}}},async(request,reply)=>{
   const input=codeSchema.parse(request.body);
   const row=config.store.db.prepare('SELECT hash,expires,attempts FROM codes WHERE email=?').get(input.email) as {hash:string;expires:number;attempts:number}|undefined;
@@ -115,14 +125,36 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
   const supplied=Buffer.from(codeHash(config.secret,input.email,input.code),'hex'),expected=Buffer.from(row.hash,'hex');
   if(expected.length!==supplied.length||!timingSafeEqual(expected,supplied)){config.store.authBudget(input.email,'failure');reply.status(401);return {error:'Invalid or expired code'};}
   config.store.db.prepare('DELETE FROM codes WHERE email=?').run(input.email);
-  let user=config.store.userByEmail(input.email);const isNew=!user;
-  // First sign-in: start with the name part of the address; the app then asks what to call them.
-  if(!user){const local=input.email.split('@')[0].replace(/[._-]+/g,' ').trim();user={id:randomUUID(),email:input.email,name:input.name||local.replace(/\b\w/g,c=>c.toUpperCase())||'Traveller',admin:input.email===config.adminEmail.toLowerCase()};config.store.addUser(user);}
-  config.store.promoteInvites(input.email);
-  const token=randomBytes(32).toString('base64url');
-  config.store.db.prepare('INSERT INTO sessions(token_hash,user_id,expires) VALUES(?,?,?)').run(sha(token),user.id,Date.now()+30*86400_000);
-  reply.setCookie('splitfairy_session',token,{httpOnly:true,sameSite:'strict',secure:config.secureCookies??false,path:'/',maxAge:30*86400});
-  return {...user,isNew};
+  return startSession(input.email,reply,input.name);
+ });
+ // Admin sign-in links: "/login#<token>". The token sits after the "#", so link previews in chat apps never
+ // send it to the server; the page asks first and only a POST uses the link up. One link per address, single use.
+ const MAGIC_TTL={'1h':3_600_000,'24h':86_400_000,'7d':7*86_400_000} as const;
+ app.post('/api/v1/admin/magic-links',{config:{rateLimit:{max:30,timeWindow:'1 hour'}}},async(request,reply)=>{
+  const admin=sessionUser(request);if(!admin.admin)throw new AccessError();
+  const body=z.object({email:emailSchema,valid:z.enum(['1h','24h','7d']).default('24h')}).parse(request.body);
+  if(!config.store.canLogin(body.email,config.adminEmail,signupOpen()))throw new InputError('This address cannot sign in: add the person to a trip with this email, or open sign-up');
+  const token=randomBytes(32).toString('base64url'),expires=Date.now()+MAGIC_TTL[body.valid];
+  config.store.db.prepare('INSERT INTO magic_links(email,token_hash,expires,created_by) VALUES(?,?,?,?) ON CONFLICT(email) DO UPDATE SET token_hash=excluded.token_hash,expires=excluded.expires,created_by=excluded.created_by').run(body.email,sha(token),expires,admin.id);
+  request.log.info({email:body.email,by:admin.email},'sign-in link created');
+  const origin=config.publicUrl??`${request.headers['x-forwarded-proto']??request.protocol}://${request.headers['x-forwarded-host']??request.headers.host}`;
+  reply.status(201);return {url:`${origin.replace(/\/$/,'')}/login#${token}`,email:body.email,expires:new Date(expires).toISOString()};
+ });
+ const magicRow=(token:string)=>config.store.db.prepare('SELECT email,expires FROM magic_links WHERE token_hash=?').get(sha(token)) as {email:string;expires:number}|undefined;
+ const magicToken=z.object({token:z.string().regex(/^[A-Za-z0-9_-]{43}$/)});
+ // Who the link is for, without using it up (the page shows "Continue as …").
+ app.post('/api/v1/auth/magic/peek',{config:{rateLimit:{max:30*(config.authRateLimitFactor??1),timeWindow:'15 minutes'}}},async(request,reply)=>{
+  const {token}=magicToken.parse(request.body),row=magicRow(token);
+  if(!row||row.expires<Date.now()){reply.status(401);return {error:'This sign-in link has expired or was already used'};}
+  return {email:row.email};
+ });
+ app.post('/api/v1/auth/magic',{config:{rateLimit:{max:30*(config.authRateLimitFactor??1),timeWindow:'15 minutes'}}},async(request,reply)=>{
+  const {token}=magicToken.parse(request.body),row=magicRow(token);
+  if(!row||row.expires<Date.now()){reply.status(401);return {error:'This sign-in link has expired or was already used'};}
+  config.store.db.prepare('DELETE FROM magic_links WHERE email=?').run(row.email);
+  // Access may have changed since the link was made.
+  if(!config.store.canLogin(row.email,config.adminEmail,signupOpen())){reply.status(401);return {error:'This address can no longer sign in'};}
+  return startSession(row.email,reply);
  });
  app.put('/api/v1/me',async(request)=>{const user=auth(request),{name}=z.object({name:z.string().trim().min(1).max(80)}).parse(request.body);config.store.renameUser(user.id,name);return config.store.userById(user.id);});
  app.post('/api/v1/auth/logout',async(request,reply)=>{const token=request.cookies.splitfairy_session;if(token)config.store.db.prepare('DELETE FROM sessions WHERE token_hash=?').run(sha(token));reply.clearCookie('splitfairy_session',{path:'/'});return {ok:true};});

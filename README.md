@@ -36,7 +36,7 @@ A self-hosted, installable app for group vacations: plan the journey, stays, mea
 - **AI assistants.** Create a personal access token and let Claude, Codex or OpenClaw plan and split through MCP (`/mcp`) or the REST API; a ready-made [skill](skills/splitfairy/SKILL.md) is included. See [AI assistants](docs/ai-assistants.md).
 - **Clean links.** Every trip, section and plan day has its own URL (`/trips/<id>/plan/2026-10-03`), and the browser's back and forward buttons work, closing sheets too.
 - **Works offline.** Edits and receipt photos are kept on the phone and sync when you're back online. Install it to the home screen like an app.
-- **Private by design.** Sign-in with a six-digit email code, no passwords. By default only people who are in a trip can sign in (added to a family with their email, or invited by an organizer); the admin can open sign-up for everyone. Everything runs in one container on your own server.
+- **Private by design.** Sign-in with a six-digit email code, no passwords. By default only people who are in a trip can sign in (added to a family with their email, or invited by an organizer); the admin can open sign-up for everyone. When a sign-in email does not arrive, the admin can create a single-use sign-in link and send it themselves. Everything runs in one container on your own server.
 
 <p align="center">
 <img src="docs/screenshots/desktop-plan.png" width="820" alt="The plan on a desktop: stays, travel and plans across the whole trip, and the day's timeline">
