@@ -1,8 +1,7 @@
 import {test,expect,type Page} from '@playwright/test';
 import sharp from 'sharp';
 import {ADMIN} from './env.js';
-import {addFamily,addPerson,createTrip,isPhone,mailedCode,mailsTo,nameIfAsked,openSection,planEvent,shot,signInAsAdmin,switchTrip,tripList,unique,withAdminLock,openExpenseForm} from './helpers.js';
-const iso=(days:number)=>{const d=new Date(Date.now()+days*86400_000);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
+import {addFamily,addPerson,createTrip,isPhone,mailedCode,mailsTo,nameIfAsked,openSection,planEvent,shot,signInAsAdmin,switchTrip,tripList,unique,withAdminLock,openExpenseForm,iso} from './helpers.js';
 async function receiptPhoto(){return sharp({create:{width:500,height:800,channels:3,background:'#fbfaf5'}}).composite([{input:Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="500" height="800"><text x="30" y="60" font-size="30">MERCADO</text><text x="30" y="700" font-size="30">TOTAL 23,10</text></svg>')}]).jpeg().toBuffer();}
 async function toTripList(page:Page){
  const chip=page.getByRole('button',{name:/Switch trip/});

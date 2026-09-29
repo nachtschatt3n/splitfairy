@@ -6,7 +6,7 @@ import {TransportIcon} from './packing.js';
 import type {Event,Leg,Shopping,Stay,Trip} from '../../../packages/domain/src/model.js';
 import {Button,Empty,Sheet,euro,fmt,fmtTime,today,uid,type Remove,type Save} from './common.js';
 import {api} from './api.js';
-import {ShoppingItem,ShoppingSheet,ShoppingSummary} from './shopping.js';
+import {MealShopping,ShoppingSheet,ShoppingSummary} from './shopping.js';
 
 const KINDS:[Event['kind'],string][]=[['breakfast','Breakfast'],['lunch','Lunch'],['dinner','Dinner'],['restaurant','Restaurant'],['activity','Activity']];
 const ORDER=KINDS.map(([k])=>k);
@@ -122,8 +122,7 @@ export function Plan({trip,save,remove,busy,photos,who,intent,onAddBill,routeDay
        <div className="event-head">{photosOf(trip,e.id).length>0&&<StayCover trip={trip} place={eventPlace(e)} compact onOpen={index=>setViewer({place:eventPlace(e),index})}/>}<div><span className="event-type">{e.kind}</span><h3>{e.title}</h3><p>{joiningLabel(e,trip)}{e.owner?` · ${e.owner} organizes`:''}{cost?` · ${euro(cost)} spent`:''}</p>{e.address&&<a className="map-link" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.address)}`} target="_blank" rel="noreferrer"><MapPin size={14}/> {e.address}</a>}{e.recipeUrl&&<a className="map-link" href={e.recipeUrl} target="_blank" rel="noreferrer"><BookOpen size={14}/> Recipe · {(()=>{try{return new URL(e.recipeUrl).hostname.replace(/^www\./,'');}catch{return 'link';}})()}</a>}{e.notes&&<p className="event-notes">{e.notes}</p>}</div>
         <button type="button" className="icon-button subtle" aria-label={`Edit ${e.title}`} onClick={()=>setSheet({event:e})}><Pencil size={16}/></button></div>
        {e.kind==='restaurant'?<div className="event-bill">{cost?<p>The bill: <strong>{euro(cost)}</strong></p>:<p className="helper">No bill yet.</p>}<Button kind="secondary" disabled={!e.participants.length} onClick={()=>onAddBill?.(e.id)}><ReceiptText size={16}/> {cost?'Add another bill':'Add the bill'}</Button>{!e.participants.length&&<p className="helper">Choose who is joining first.</p>}</div>
-       :<div className="event-shopping">{items.map(item=><ShoppingItem key={item.id} trip={trip} myFamily={myFamily} item={item} save={save} onEdit={setItemSheet}/>)}
-        <QuickAdd label={`Add to shopping for ${e.title}`} placeholder="Add an ingredient…" busy={busy} onAdd={text=>addItem(text,e.id)}/></div>}
+       :<MealShopping trip={trip} title={e.title} items={items} myFamily={myFamily} save={save} onEdit={setItemSheet} addField={<QuickAdd label={`Add to shopping for ${e.title}`} placeholder="Add an ingredient…" busy={busy} onAdd={text=>addItem(text,e.id)}/>}/>}
       </article>;})()
       :x.kind==='guest-in'||x.kind==='guest-out'?<GuestCard trip={trip} entry={x} onEdit={()=>setStaySheet({stay:x.stay})}/>
       :x.leg?<LegCard trip={trip} leg={x.leg} arriving={x.kind==='arrive'} onEdit={()=>setLegSheet({leg:x.leg})}/>

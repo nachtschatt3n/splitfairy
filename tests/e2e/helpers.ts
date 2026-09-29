@@ -117,3 +117,6 @@ export async function openExpenseForm(page:Page){
  await page.getByRole('region',{name:'Trip spending'}).getByRole('button',{name:'Add expense'}).click();
  const form=page.locator('#quick-expense');await expect(form).toBeVisible();return form;
 }
+
+/** A date `days` from today as YYYY-MM-DD, on the browser's clock (Europe/Berlin), so tests near midnight UTC agree with the app. */
+export const iso=(days:number)=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(Date.now()+days*86400_000));

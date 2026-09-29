@@ -1,5 +1,5 @@
-import {useRef,useState,type FormEvent} from 'react';
-import {ArrowRight,CalendarDays,Pencil,Plus,ShoppingBasket,ShoppingCart,Users} from 'lucide-react';
+import {useRef,useState,type FormEvent,type ReactNode} from 'react';
+import {ArrowRight,CalendarDays,ChevronDown,Pencil,Plus,ShoppingBasket,ShoppingCart,Users} from 'lucide-react';
 import type {Shopping,Trip} from '../../../packages/domain/src/model.js';
 import {Button,Empty,Sheet,fmt,uid,type Remove,type Save} from './common.js';
 
@@ -29,8 +29,8 @@ function BuyerSelect({trip,value,onChange,compact=false}:{trip:Trip;value:string
  return compact?<label className="qa-pill"><Users size={14} aria-hidden="true"/>{select}</label>:<label>Who buys it{select}</label>;
 }
 
-export function ShoppingItem({trip,item,myFamily,save,onEdit,context}:{trip:Trip;item:Shopping;myFamily?:string|null;save:Save;onEdit:(item:Shopping)=>void;context?:string}){
- const buyer=trip.families.find(f=>f.id===item.buyerId)?.name;
+export function ShoppingItem({trip,item,myFamily,save,onEdit,context,hideBuyer=false}:{trip:Trip;item:Shopping;myFamily?:string|null;save:Save;onEdit:(item:Shopping)=>void;context?:string;hideBuyer?:boolean}){
+ const buyer=hideBuyer?undefined:trip.families.find(f=>f.id===item.buyerId)?.name;
  return <div className="shop-row">
   <label className="shop-check"><input type="checkbox" checked={item.done} onChange={()=>void save('shopping',{...item,done:!item.done},item)}/><span className={item.done?'done':''}>{item.text}{buyer&&<small className="buyer-tag">{buyer} buys</small>}{context&&<small className="shop-context">{context}</small>}</span></label>
   {!item.buyerId&&!item.done&&myFamily&&<button type="button" className="text-button claim" onClick={()=>void save('shopping',{...item,buyerId:myFamily},item)}>We'll buy it</button>}
@@ -103,4 +103,26 @@ export function ShoppingSummary({trip,myFamily,onOpen}:{trip:Trip;myFamily:strin
   {next.length>0&&<ul className="shop-peek">{next.map(i=><li key={i.id}>{i.text}</li>)}{open.length>next.length&&<li className="more">+{open.length-next.length} more</li>}</ul>}
   <Button kind="secondary" onClick={onOpen}>Open the shopping list <ArrowRight size={16}/></Button>
  </section>;
+}
+
+/** Ingredients on a meal card: short meals show everything; longer ones fold into one line that opens on tap. */
+export function MealShopping({trip,title,items,myFamily,save,onEdit,addField}:{trip:Trip;title:string;items:Shopping[];myFamily?:string|null;save:Save;onEdit:(item:Shopping)=>void;addField:ReactNode}){
+ // Starts folded only when it is already long; a list that grows while adding stays open.
+ const [open,setOpen]=useState(()=>items.length<=3);
+ const toBuy=items.filter(i=>!i.done);
+ // One buyer for all of them: say it once instead of on every row.
+ const buyers=[...new Set(items.map(i=>i.buyerId??''))],shared=buyers.length===1&&buyers[0]?trip.families.find(f=>f.id===buyers[0])?.name:undefined;
+ const rows=items.map(item=><ShoppingItem key={item.id} trip={trip} myFamily={myFamily} item={item} save={save} onEdit={onEdit} hideBuyer={!!shared}/>);
+ if(items.length<=3)return <div className="event-shopping">{shared&&items.length>1&&<p className="meal-shop-buyer">{shared} buys these</p>}{rows}{addField}</div>;
+ const summary=[`${items.length} ingredients`,toBuy.length?`${toBuy.length} to buy`:'all bought',shared?`${shared} buys all`:''].filter(Boolean).join(' · ');
+ const preview=(toBuy.length?toBuy:items).slice(0,3).map(i=>i.text).join(', ');
+ const more=(toBuy.length?toBuy:items).length-3;
+ return <div className="event-shopping">
+  <button type="button" className="meal-shop-toggle" aria-expanded={open} aria-label={`${open?'Hide':'Show'} shopping for ${title}: ${summary}`} onClick={()=>setOpen(o=>!o)}>
+   <ShoppingBasket size={17} aria-hidden="true"/>
+   <span><strong>{summary}</strong>{!open&&<small>{preview}{more>0?` +${more}`:''}</small>}</span>
+   <ChevronDown size={18} aria-hidden="true" className={open?'flip':''}/>
+  </button>
+  {open&&<>{rows}{addField}</>}
+ </div>;
 }

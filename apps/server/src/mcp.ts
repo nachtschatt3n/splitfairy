@@ -1,4 +1,5 @@
 import {randomUUID} from 'node:crypto';
+import {localDay} from './day.js';
 import type {FastifyInstance} from 'fastify';
 import {McpServer} from '@modelcontextprotocol/sdk/server/mcp.js';
 import {StreamableHTTPServerTransport} from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -100,7 +101,7 @@ function tools(server:McpServer,api:Api,baseUrl:string){
    else if(mode==='percent'){const sum=values.reduce((n,v)=>n+v.value,0);if(Math.abs(sum-100)>.001)throw new Error(`Percentages add up to ${sum}, not 100`);weights=values.map(v=>({id:v.person.id,weight:v.value}));}
    else if(mode==='exact'){personFixed=values.map(v=>({personId:v.person.id,amount:Math.round(v.value*100)*sign}));if(personFixed.reduce((n,f)=>n+Math.abs(f.amount),0)!==abs)throw new Error('Exact amounts must add up to the total');}
    else if(mode==='adjust'){weights=t.people.map(p=>({id:p.id,weight:1}));personFixed=values.map(v=>({personId:v.person.id,amount:Math.round(v.value*100)*sign}));}
-   const id=randomUUID(),date=input.date??new Date().toISOString().slice(0,10);
+   const id=randomUUID(),date=input.date??localDay();
    const next=await command(input.trip_id,'expense','save',0,{id,title:input.title,date,category:input.category,total,payers:[{familyId:payer.id,amount:total}],
     lines:[{id:randomUUID(),label:input.title,amount:total,splits:[{amount:total,eventId,eventVersion,weights,fixed,personFixed,...(mode?{mode}:{})}]}],notes:input.notes??'',receiptIds:[],status:'posted',version:0});
    const saved=next.trip.expenses.find((e:any)=>e.id===id);

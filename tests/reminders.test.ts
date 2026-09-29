@@ -1,4 +1,4 @@
-import {it,expect} from 'vitest';
+import {describe,it,expect} from 'vitest';
 import {DatabaseSync} from 'node:sqlite';
 import {Store} from '../apps/server/src/store.js';
 import {sendSettleReminders} from '../apps/server/src/reminders.js';
@@ -47,4 +47,13 @@ it('emails families that still owe, weekly after the trip, in the daytime, until
  store.mutate(actor,id,cmd('payment',{id:'p',from:'M',to:'U',amount:5000,date:'2026-10-13'}));
  expect(await sendSettleReminders(store,send,'https://trips.example',at('2026-10-20T08:00:00Z'))).toEqual([]);
  t=store.getTrip(actor,id);expect(store.mutate(actor,id,cmd('trip',{archived:true},t.version)).archived).toBe(true);
+});
+
+import {localDay} from '../apps/server/src/day.js';
+describe('local day',()=>{
+ it('uses the group time zone, not UTC, around midnight',()=>{
+  const lateUtc=new Date('2026-09-29T22:30:00Z');
+  expect(localDay('Europe/Berlin',lateUtc)).toBe('2026-09-30');
+  expect(localDay('UTC',lateUtc)).toBe('2026-09-29');
+ });
 });

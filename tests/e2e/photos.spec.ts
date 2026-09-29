@@ -1,7 +1,6 @@
 import {test,expect,type Page} from '@playwright/test';
 import sharp from 'sharp';
-import {addFamily,addPerson,createTrip,openSection,shot,signInAsAdmin,unique} from './helpers.js';
-const iso=(days:number)=>{const d=new Date(Date.now()+days*86400_000);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
+import {addFamily,addPerson,createTrip,openSection,shot,signInAsAdmin,unique,iso} from './helpers.js';
 const sheet=(page:Page)=>page.getByRole('dialog').last();
 const picture=(color:string)=>sharp({create:{width:1200,height:800,channels:3,background:color}}).jpeg().toBuffer();
 

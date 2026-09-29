@@ -1,6 +1,5 @@
 import {test,expect} from '@playwright/test';
-import {createTrip,openSection,signInAsAdmin,unique} from './helpers.js';
-const iso=(days:number)=>{const d=new Date(Date.now()+days*86400_000);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
+import {createTrip,openSection,signInAsAdmin,unique,iso} from './helpers.js';
 
 test('clean URLs follow the trip, section and day, and back and forward restore them',async({page},testInfo)=>{
  test.setTimeout(120_000);

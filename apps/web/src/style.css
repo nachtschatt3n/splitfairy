@@ -675,3 +675,12 @@ input[type=date]{min-width:150px}
 .icon-button.delete{color:#a3402b}
 .helper.flash{color:#a3402b!important;font-weight:700}
 @media(prefers-color-scheme:dark){.btn-delete,.icon-button.delete,.helper.flash{color:#f8b7a2!important}.btn-delete:hover{background:#3a2420}}
+/* A meal's ingredients, folded into one line */
+.meal-shop-toggle{display:flex;align-items:center;gap:10px;width:100%;min-height:52px;padding:8px 4px;border:0;background:transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.meal-shop-toggle>span{flex:1;min-width:0;display:grid;gap:2px}
+.meal-shop-toggle strong{font-size:14px}
+.meal-shop-toggle small{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meal-shop-toggle svg{flex:none;color:var(--link);transition:transform .15s}
+.meal-shop-toggle svg.flip{transform:rotate(180deg)}
+.meal-shop-buyer{margin:6px 0 0;color:var(--muted);font-size:13px;font-weight:600}
+.map-link{max-width:100%;overflow-wrap:anywhere}

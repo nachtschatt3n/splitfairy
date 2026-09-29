@@ -1,7 +1,6 @@
 import {test,expect,type Page} from '@playwright/test';
 import {ADMIN} from './env.js';
-import {addFamily,addPerson,createTrip,mailsTo,openSection,planEvent,signInAsAdmin,switchTrip,tripList,unique,openExpenseForm} from './helpers.js';
-const iso=(days:number)=>{const d=new Date(Date.now()+days*86400_000);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
+import {addFamily,addPerson,createTrip,mailsTo,openSection,planEvent,signInAsAdmin,switchTrip,tripList,unique,openExpenseForm,iso} from './helpers.js';
 const sheet=(page:Page)=>page.getByRole('dialog');
 const closed=(page:Page)=>expect(page.getByRole('dialog')).toHaveCount(0);
 async function toTripList(page:Page){const chip=page.getByRole('button',{name:/Switch trip/});if(await chip.isVisible())await chip.click();await expect(tripList(page)).toBeVisible();}

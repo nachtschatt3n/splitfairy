@@ -14,6 +14,7 @@ import {inviteEmail,signInEmail} from './mail.js';
 import {registerMcp} from './mcp.js';
 import {sendSettleReminders} from './reminders.js';
 import {settleStatus} from '../../../packages/domain/src/settle-status.js';
+import {localDay} from './day.js';
 
 const sha=(input:string)=>createHash('sha256').update(input).digest('hex');
 const emailSchema=z.string().trim().pipe(z.email()).transform(v=>v.toLowerCase());
@@ -158,7 +159,7 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
  });
  app.put('/api/v1/me',async(request)=>{const user=auth(request),{name}=z.object({name:z.string().trim().min(1).max(80)}).parse(request.body);config.store.renameUser(user.id,name);return config.store.userById(user.id);});
  app.post('/api/v1/auth/logout',async(request,reply)=>{const token=request.cookies.splitfairy_session;if(token)config.store.db.prepare('DELETE FROM sessions WHERE token_hash=?').run(sha(token));reply.clearCookie('splitfairy_session',{path:'/'});return {ok:true};});
- app.get('/api/v1/trips',async(request)=>config.store.listTrips(auth(request)).map(t=>{const status=settleStatus(t,new Date().toISOString().slice(0,10));return {id:t.id,name:t.name,start:t.start,end:t.end,archived:t.archived,theme:t.theme??'classic',cover:t.photos?.[0]?.id??null,settle:{open:status.open,overdueDays:status.overdueDays}};}));
+ app.get('/api/v1/trips',async(request)=>config.store.listTrips(auth(request)).map(t=>{const status=settleStatus(t,localDay(config.timeZone));return {id:t.id,name:t.name,start:t.start,end:t.end,archived:t.archived,theme:t.theme??'classic',cover:t.photos?.[0]?.id??null,settle:{open:status.open,overdueDays:status.overdueDays}};}));
  app.post('/api/v1/trips',async(request,reply)=>{const body=z.object({name:z.string().trim().min(1).max(160),start:z.iso.date(),end:z.iso.date(),theme:z.enum(TRIP_THEMES).default('classic')}).parse(request.body);const trip=config.store.createTrip(auth(request),body.name,body.start,body.end,body.theme,signupOpen());reply.status(201);return trip;});
  app.get('/api/v1/trips/:tripId',async(request)=>{const user=auth(request),id=(request.params as any).tripId;return {trip:visibleTrip(config.store.getTrip(user,id),user),role:config.store.role(user,id),members:config.store.members(user,id)};});
  app.post('/api/v1/trips/:tripId/invites',async(request)=>{const user=auth(request),id=(request.params as any).tripId,body=inviteSchema.parse(request.body);config.store.addMember(user,id,body.email,body.role);const mail=inviteEmail({inviter:user.name,tripName:config.store.getTrip(user,id).name,url:siteUrl(request)});await config.sendMail(body.email,mail.subject,mail.text,mail.html);return {ok:true};});

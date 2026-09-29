@@ -1,6 +1,5 @@
 import {test,expect,type Page} from '@playwright/test';
-import {addFamily,addPerson,createTrip,isPhone,openExpenseForm,openSection,shot,signInAsAdmin,unique} from './helpers.js';
-const iso=(days:number)=>{const d=new Date(Date.now()+days*86400_000);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
+import {addFamily,addPerson,createTrip,isPhone,openExpenseForm,openSection,shot,signInAsAdmin,unique,iso} from './helpers.js';
 const sheet=(page:Page)=>page.getByRole('dialog');
 
 test('money still owed after a trip is overdue everywhere, blocks archiving, and clears once repaid',async({page},testInfo)=>{

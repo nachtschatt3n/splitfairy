@@ -2,8 +2,7 @@ import {test,expect,type Page,type TestInfo} from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import sharp from 'sharp';
 import {ADMIN} from './env.js';
-import {isPhone,openSection,shot,signInAsAdmin,switchTrip,tripList,unique,openExpenseForm} from './helpers.js';
-const iso=(days:number)=>{const d=new Date(Date.now()+days*86400_000);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
+import {isPhone,openSection,shot,signInAsAdmin,switchTrip,tripList,unique,openExpenseForm,iso} from './helpers.js';
 
 /** Builds a realistic trip through the public API, as the signed-in organizer. */
 async function seedTrip(page:Page,name:string){

@@ -2,6 +2,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {createHash,randomBytes,randomUUID} from 'node:crypto';
 import {allocateExpense} from '../../../packages/domain/src/accounting.js';
 import {settleStatus} from '../../../packages/domain/src/settle-status.js';
+import {localDay} from './day.js';
 import {TRIP_THEMES,commandSchema,eventSchema,gearSchema,legSchema,staySchema,transportSchema,paymentSchema,expenseSchema,familySchema,personSchema,shoppingSchema,type Command,type Expense,type Photo,type StayFile,type Trip,type User} from '../../../packages/domain/src/model.js';
 
 export class ConflictError extends Error{statusCode=409;constructor(message='This item changed on another device'){super(message);}}
@@ -212,7 +213,7 @@ export class Store{
     if(typeof v.name==='string'&&v.name.trim())trip.name=v.name.trim().slice(0,160);
     if(v.archived===true&&!trip.archived){
      // A trip is archived once it is done, and it is only done when everyone is square.
-     const status=settleStatus(trip,new Date().toISOString().slice(0,10));
+     const status=settleStatus(trip,localDay());
      if(status.open)throw new InputError(`Settle up first: ${status.transfers.length} repayment${status.transfers.length===1?' is':'s are'} still open`);
     }
     if(typeof v.archived==='boolean')trip.archived=v.archived;
