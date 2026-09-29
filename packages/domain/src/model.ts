@@ -16,7 +16,8 @@ export const transportSchema=z.object({id,name:z.string().trim().min(1).max(80),
 /** Packing and equipment: who brings what. familyId null means nobody has taken it yet; transportId says how it travels. */
 export const gearSchema=z.object({id,text:z.string().trim().min(1).max(200),familyId:id.nullable().default(null),transportId:id.nullable().default(null),route:z.array(id).max(10).default([]),quantity:z.number().int().min(1).max(99).default(1),note:z.string().trim().max(300).default(''),packed:z.boolean().default(false),
  /** 'family': only that family sees it (e.g. personal things). */visibility:z.enum(['everyone','family']).default('everyone'),version}).refine(g=>g.visibility==='everyone'||!!g.familyId,{message:'A private item belongs to a family'});
-export const shoppingSchema=z.object({id,text:z.string().trim().min(1).max(200),eventId:id.nullable(),done:z.boolean(),version});
+/** buyerId: the family that buys it; null means anyone can. */
+export const shoppingSchema=z.object({id,text:z.string().trim().min(1).max(200),eventId:id.nullable(),buyerId:id.nullable().default(null),done:z.boolean(),version});
 /** How a split was entered, so it can be edited the same way. All modes are stored as weights and fixed amounts. */
 export const SPLIT_MODES=['equal','exact','percent','shares','adjust','families'] as const;
 export type SplitMode=typeof SPLIT_MODES[number];

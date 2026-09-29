@@ -179,6 +179,15 @@ describe('journey: stays, travel legs and routes',()=>{
   expect(l.legs![0].flightNo).toBe('LH1172');
   expect(()=>store.mutate(actor,id,cmd('leg',{id:'g',transportId:'plane',from:'FRA',to:'LIS',departDate:'2026-10-01',arriveDate:'2026-10-01',flightNo:'not a flight',version:0},0,'k4'))).toThrow(/flight number/);
  });
+ it('records which family buys a shopping item, and frees it when the family goes',()=>{
+  const id=base();
+  store.mutate(actor,id,cmd('family',{id:'M',name:'Moncrief',version:0},0,'b0'));
+  expect(store.mutate(actor,id,cmd('shopping',{id:'s',text:'Lemons',eventId:null,buyerId:'M',done:false,version:0},0,'b1')).shopping[0].buyerId).toBe('M');
+  expect(store.mutate(actor,id,cmd('shopping',{id:'e',text:'Bread',eventId:null,done:false,version:0},0,'b2')).shopping[1].buyerId).toBeNull();
+  expect(()=>store.mutate(actor,id,cmd('shopping',{id:'x',text:'Oops',eventId:null,buyerId:'ghost',done:false,version:0},0,'b3'))).toThrow(/Unknown family/);
+  const t=store.getTrip(actor,id);const fam=t.families.find(f=>f.id==='M')!;
+  expect(store.mutate(actor,id,{mutationId:'b4',entity:'family',action:'delete',expectedVersion:fam.version,value:{id:'M'}}).shopping[0].buyerId).toBeNull();
+ });
  it('stores restaurants with an address and keeps shopping items off them',()=>{
   const id=base();
   const t=store.mutate(actor,id,cmd('event',{id:'r',title:'Tasca do Chico',date:'2026-10-02',kind:'restaurant',address:'Rua do Diário de Notícias 39, Lisboa',participants:[{id:'m',weight:1}],version:0},0,'r1'));

@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useRef,useState,type FormEvent} from 'react';
-import {ArrowRight,BedDouble,BookOpen,CalendarDays,MapPin,Pencil,Plus,ReceiptText,Search,ShoppingBasket,Sun,UtensilsCrossed,Wine} from 'lucide-react';
+import {Users,ArrowRight,BedDouble,BookOpen,CalendarDays,MapPin,Pencil,Plus,ReceiptText,Search,ShoppingBasket,Sun,UtensilsCrossed,Wine} from 'lucide-react';
 import {GuestCard,LegCard,LegSheet,StayCard,StaySheet,TripOverview,dayEntries,stayPlace,tripDays,type Who} from './journey.js';
 import {PhotoViewer,StayCover,StayPhotos,photosOf,type PhotoActions,type Place} from './photos.js';
 import {TransportIcon} from './packing.js';
@@ -72,13 +72,14 @@ function EventSheet({trip,event,day,save,remove,busy,photos,onPhoto,onClose}:{tr
 }
 
 function ShoppingSheet({trip,item,save,remove,busy,onClose}:{trip:Trip;item:Shopping;save:Save;remove:Remove;busy:boolean;onClose:()=>void}){
- const [text,setText]=useState(item.text),[eventId,setEventId]=useState(item.eventId??''),[done,setDone]=useState(item.done);
+ const [text,setText]=useState(item.text),[eventId,setEventId]=useState(item.eventId??''),[buyerId,setBuyerId]=useState(item.buyerId??''),[done,setDone]=useState(item.done);
  // Restaurants have no shopping list.
  const events=trip.events.filter(e=>e.kind!=='restaurant').sort((a,b)=>a.date.localeCompare(b.date));
  return <Sheet title="Shopping item" eyebrow="The shared list" onClose={onClose}>
-  <form className="form-stack" onSubmit={async e=>{e.preventDefault();if(!text.trim())return;await save('shopping',{...item,text:text.trim(),eventId:eventId||null,done},item);onClose();}}>
+  <form className="form-stack" onSubmit={async e=>{e.preventDefault();if(!text.trim())return;await save('shopping',{...item,text:text.trim(),eventId:eventId||null,buyerId:buyerId||null,done},item);onClose();}}>
    <label>Item<input value={text} onChange={e=>setText(e.target.value)} autoFocus required/></label>
    <label>For<select value={eventId} onChange={e=>setEventId(e.target.value)}><option value="">General shopping</option>{events.map(e=><option key={e.id} value={e.id}>{e.title} · {fmt(e.date)}</option>)}</select></label>
+   <BuyerSelect trip={trip} value={buyerId} onChange={setBuyerId}/>
    <label className="check-label"><input type="checkbox" checked={done} onChange={e=>setDone(e.target.checked)}/> Already bought</label>
    <Button type="submit" disabled={busy}>Save changes <ArrowRight size={17}/></Button>
    <Button kind="ghost" disabled={busy} onClick={async()=>{await remove('shopping',item);onClose();}}>Delete item</Button>
@@ -86,9 +87,17 @@ function ShoppingSheet({trip,item,save,remove,busy,onClose}:{trip:Trip;item:Shop
  </Sheet>;
 }
 
-function ShoppingItem({item,save,onEdit}:{item:Shopping;save:Save;onEdit:(item:Shopping)=>void}){
+/** Who buys it: a family, or everyone (anyone can pick it up). */
+function BuyerSelect({trip,value,onChange,compact=false}:{trip:Trip;value:string;onChange:(v:string)=>void;compact?:boolean}){
+ const select=<select aria-label="Who buys it" value={value} onChange={e=>onChange(e.target.value)}><option value="">Everyone</option>{trip.families.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select>;
+ return compact?<label className="qa-pill"><Users size={14} aria-hidden="true"/>{select}</label>:<label>Who buys it{select}</label>;
+}
+
+function ShoppingItem({trip,item,myFamily,save,onEdit}:{trip:Trip;item:Shopping;myFamily?:string|null;save:Save;onEdit:(item:Shopping)=>void}){
+ const buyer=trip.families.find(f=>f.id===item.buyerId)?.name;
  return <div className="shop-row">
-  <label className="shop-check"><input type="checkbox" checked={item.done} onChange={()=>void save('shopping',{...item,done:!item.done},item)}/><span className={item.done?'done':''}>{item.text}</span></label>
+  <label className="shop-check"><input type="checkbox" checked={item.done} onChange={()=>void save('shopping',{...item,done:!item.done},item)}/><span className={item.done?'done':''}>{item.text}{buyer&&<small className="buyer-tag">{buyer} buys</small>}</span></label>
+  {!item.buyerId&&!item.done&&myFamily&&<button type="button" className="text-button claim" onClick={()=>void save('shopping',{...item,buyerId:myFamily},item)}>We'll buy it</button>}
   <button type="button" className="icon-button subtle" aria-label={`Edit ${item.text}`} onClick={()=>onEdit(item)}><Pencil size={16}/></button>
  </div>;
 }
@@ -102,7 +111,7 @@ function QuickAdd({placeholder,label,onAdd,busy}:{placeholder:string;label:strin
 }
 
 export type PlanSheet='event'|'leg'|'stay';
-export function Plan({trip,save,remove,busy,photos,who,intent,onAddBill,routeDay,onDayChange}:{trip:Trip;save:Save;remove:Remove;busy:boolean;photos:PhotoActions;who:Who;intent?:{sheet:PlanSheet;n:number}|null;onAddBill?:(eventId:string)=>void;routeDay?:string|null;onDayChange?:(day:string)=>void}){
+export function Plan({trip,save,remove,busy,photos,who,intent,onAddBill,routeDay,onDayChange,myFamily}:{trip:Trip;save:Save;remove:Remove;busy:boolean;photos:PhotoActions;who:Who;intent?:{sheet:PlanSheet;n:number}|null;onAddBill?:(eventId:string)=>void;routeDay?:string|null;onDayChange?:(day:string)=>void;myFamily?:string|null}){
  // Open on today while the trip is running, otherwise on its first day.
  const defaultDay=()=>trip.start&&today()>=trip.start&&today()<=trip.end?today():trip.start||today();
  const [day,setShownDay]=useState(()=>routeDay&&routeDay>=trip.start&&routeDay<=trip.end?routeDay:defaultDay());
@@ -112,6 +121,7 @@ export function Plan({trip,save,remove,busy,photos,who,intent,onAddBill,routeDay
  const [sheet,setSheet]=useState<{event?:Event}|null>(null);
  // Keep the chosen day visible in the strip, also on narrow screens.
  useEffect(()=>{document.querySelector('.day-strip .selected')?.scrollIntoView({block:'nearest',inline:'nearest'});},[day]);
+ const [buyer,setBuyer]=useState(''),[show,setShow]=useState('all');
  const [target,setTarget]=useState(''),[itemSheet,setItemSheet]=useState<Shopping|null>(null);
  const days=tripDays(trip);
  const {staying,entries}=dayEntries(trip,day);
@@ -122,7 +132,7 @@ export function Plan({trip,save,remove,busy,photos,who,intent,onAddBill,routeDay
  useEffect(()=>{if(!intent||intent.n===seenIntent.current)return;seenIntent.current=intent.n;if(intent.sheet==='event')setSheet({});else if(intent.sheet==='leg')setLegSheet({});else setStaySheet({});},[intent?.n]);
  const allEvents=[...trip.events].filter(e=>e.kind!=='restaurant').sort((a,b)=>a.date.localeCompare(b.date)||ORDER.indexOf(a.kind)-ORDER.indexOf(b.kind));
  const spent=(id:string)=>trip.expenses.filter(x=>x.status==='posted').flatMap(x=>x.lines.flatMap(l=>l.splits.filter(s=>s.eventId===id).map(s=>s.amount))).reduce((a,b)=>a+b,0);
- const addItem=(text:string,eventId:string|null)=>save('shopping',{id:uid(),text,eventId,done:false,version:0});
+ const addItem=(text:string,eventId:string|null,buyerId:string|null=null)=>save('shopping',{id:uid(),text,eventId,buyerId,done:false,version:0});
  const byDone=(a:Shopping,b:Shopping)=>Number(a.done)-Number(b.done);
  const groups=[{id:null as string|null,title:'General',items:trip.shopping.filter(s=>!s.eventId)},...allEvents.map(e=>({id:e.id as string|null,title:`${e.title} · ${fmt(e.date)}`,items:trip.shopping.filter(s=>s.eventId===e.id)}))].filter(g=>g.items.length);
  return <>
@@ -140,7 +150,7 @@ export function Plan({trip,save,remove,busy,photos,who,intent,onAddBill,routeDay
        <div className="event-head">{photosOf(trip,e.id).length>0&&<StayCover trip={trip} place={eventPlace(e)} compact onOpen={index=>setViewer({place:eventPlace(e),index})}/>}<div><span className="event-type">{e.kind}</span><h3>{e.title}</h3><p>{joiningLabel(e,trip)}{e.owner?` · ${e.owner} organizes`:''}{cost?` · ${euro(cost)} spent`:''}</p>{e.address&&<a className="map-link" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.address)}`} target="_blank" rel="noreferrer"><MapPin size={14}/> {e.address}</a>}{e.recipeUrl&&<a className="map-link" href={e.recipeUrl} target="_blank" rel="noreferrer"><BookOpen size={14}/> Recipe · {(()=>{try{return new URL(e.recipeUrl).hostname.replace(/^www\./,'');}catch{return 'link';}})()}</a>}{e.notes&&<p className="event-notes">{e.notes}</p>}</div>
         <button type="button" className="icon-button subtle" aria-label={`Edit ${e.title}`} onClick={()=>setSheet({event:e})}><Pencil size={16}/></button></div>
        {e.kind==='restaurant'?<div className="event-bill">{cost?<p>The bill: <strong>{euro(cost)}</strong></p>:<p className="helper">No bill yet.</p>}<Button kind="secondary" disabled={!e.participants.length} onClick={()=>onAddBill?.(e.id)}><ReceiptText size={16}/> {cost?'Add another bill':'Add the bill'}</Button>{!e.participants.length&&<p className="helper">Choose who is joining first.</p>}</div>
-       :<div className="event-shopping">{items.map(item=><ShoppingItem key={item.id} item={item} save={save} onEdit={setItemSheet}/>)}
+       :<div className="event-shopping">{items.map(item=><ShoppingItem key={item.id} trip={trip} myFamily={myFamily} item={item} save={save} onEdit={setItemSheet}/>)}
         <QuickAdd label={`Add to shopping for ${e.title}`} placeholder="Add an ingredient…" busy={busy} onAdd={text=>addItem(text,e.id)}/></div>}
       </article>;})()
       :x.kind==='guest-in'||x.kind==='guest-out'?<GuestCard trip={trip} entry={x} onEdit={()=>setStaySheet({stay:x.stay})}/>
@@ -153,12 +163,14 @@ export function Plan({trip,save,remove,busy,photos,who,intent,onAddBill,routeDay
    </section>
    <section className="card" aria-label="Shopping list">
     <div className="card-head"><div><span className="eyebrow">The shared list</span><h2>Shopping</h2></div><ShoppingBasket size={23} aria-hidden="true"/></div>
-    <form className="shop-add" onSubmit={async e=>{e.preventDefault();const input=(e.currentTarget.elements.namedItem('item') as HTMLInputElement);const value=input.value.trim();if(!value)return;input.value='';await addItem(value,target||null);}}>
+    <form className="shop-add" onSubmit={async e=>{e.preventDefault();const input=(e.currentTarget.elements.namedItem('item') as HTMLInputElement);const value=input.value.trim();if(!value)return;input.value='';await addItem(value,target||null,buyer||null);}}>
      <label>Add to the list<input name="item" placeholder="Eggs, bread, sunscreen…"/></label>
      <label>For<select value={target} onChange={e=>setTarget(e.target.value)}><option value="">General shopping</option>{allEvents.map(e=><option key={e.id} value={e.id}>{e.title} · {fmt(e.date)}</option>)}</select></label>
+     <BuyerSelect trip={trip} value={buyer} onChange={setBuyer}/>
      <Button type="submit" kind="secondary" disabled={busy}><Plus size={16}/> Add item</Button>
     </form>
-    {groups.map(g=><div className="shop-group" key={g.id??'general'}><h3>{g.title}</h3>{[...g.items].sort(byDone).map(item=><ShoppingItem key={item.id} item={item} save={save} onEdit={setItemSheet}/>)}</div>)}
+    {trip.shopping.length>0&&trip.families.length>0&&<label className="qa-pill shop-filter"><span className="sr-only">Show</span><select aria-label="Show" value={show} onChange={e=>setShow(e.target.value)}><option value="all">Everything</option><option value="open">Anyone can buy</option>{trip.families.map(f=><option key={f.id} value={f.id}>{f.name} buys</option>)}</select></label>}
+    {groups.map(g=>({...g,items:g.items.filter(i=>show==='all'||(show==='open'?!i.buyerId:i.buyerId===show))})).filter(g=>g.items.length).map(g=><div className="shop-group" key={g.id??'general'}><h3>{g.title}</h3>{[...g.items].sort(byDone).map(item=><ShoppingItem key={item.id} trip={trip} myFamily={myFamily} item={item} save={save} onEdit={setItemSheet}/>)}</div>)}
     {!trip.shopping.length&&<Empty icon={<ShoppingBasket/>} heading="Your list is clear" body="Add supplies here, or ingredients straight on a meal."/>}
    </section>
   </div>

@@ -638,3 +638,5 @@ input[type=date]{min-width:150px}
 .token-value{min-width:0}
 .token-form select{border:1px solid var(--line);background:var(--surface-2);color:var(--ink);border-radius:10px;padding:10px 12px;min-height:44px;width:100%;font:inherit}
 .magic-page .auth-content{max-width:520px}
+.buyer-tag{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;background:var(--soft);color:var(--link);font-size:12px;font-weight:700;white-space:nowrap}
+.shop-filter{justify-self:start;margin:4px 0}
