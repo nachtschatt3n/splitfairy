@@ -130,8 +130,8 @@ test('every entity can be created, changed and removed from the interface',async
  await expect(page.getByRole('button',{name:'Open Fish market Funchal'})).not.toHaveClass(/voided/);
  // A plan with an expense on it explains why it cannot be deleted.
  await openSection(page,'Plan');
- await page.getByRole('button',{name:'Edit Fish dinner'}).click();await expect(sheet(page)).toContainText('cannot be deleted');await expect(sheet(page).getByRole('button',{name:'Delete'})).toHaveCount(0);await sheet(page).getByRole('button',{name:'Close'}).click();
- await page.getByRole('button',{name:'Edit Levada hike'}).click();await sheet(page).getByRole('button',{name:'Delete'}).click();await closed(page);
+ await page.getByRole('button',{name:'Edit Fish dinner'}).click();await expect(sheet(page)).toContainText('cannot be deleted');await expect(sheet(page).getByRole('button',{name:'Delete dinner'})).toHaveCount(0);await sheet(page).getByRole('button',{name:'Close'}).click();
+ await page.getByRole('button',{name:'Edit Levada hike'}).click();await sheet(page).getByRole('button',{name:'Delete activity'}).click();await closed(page);
  await expect(page.getByRole('article',{name:'Levada hike'})).toHaveCount(0);
 
  // Repayments: mark a suggestion paid, edit it, delete it.

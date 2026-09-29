@@ -18,7 +18,7 @@ export function ShoppingSheet({trip,item,save,remove,busy,onClose}:{trip:Trip;it
    <BuyerSelect trip={trip} value={buyerId} onChange={setBuyerId}/>
    <label className="check-label"><input type="checkbox" checked={done} onChange={e=>setDone(e.target.checked)}/> Already bought</label>
    <Button type="submit" disabled={busy}>Save changes <ArrowRight size={17}/></Button>
-   <Button kind="ghost" disabled={busy} onClick={async()=>{await remove('shopping',item);onClose();}}>Delete item</Button>
+   <Button kind="delete" disabled={busy} onClick={async()=>{await remove('shopping',item);onClose();}}>Delete item</Button>
   </form>
  </Sheet>;
 }

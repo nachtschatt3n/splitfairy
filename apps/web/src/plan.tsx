@@ -47,8 +47,12 @@ function EventSheet({trip,event,day,save,remove,busy,photos,onPhoto,onClose}:{tr
   onClose();
  };
  const linked=event?trip.expenses.filter(x=>x.status!=='void'&&x.lines.some(l=>l.splits.some(sp=>sp.eventId===event.id))).length:0;
+ const blockedWhy=`${linked} expense${linked===1?' is':'s are'} split on this plan, so it cannot be deleted. Void or edit ${linked===1?'it':'them'} first.`;
+ // From the header too: when expenses hold it back, show why instead of deleting.
+ const del=async()=>{if(!event)return;if(linked){const why=document.getElementById('plan-delete-why');why?.scrollIntoView({block:'center',behavior:'smooth'});why?.classList.add('flash');return;}
+  if(!window.confirm(`Delete ${event.title}? Its shopping items stay on the general list.`))return;await remove('event',event);onClose();};
  const toggle=(id:string)=>setJoining(j=>j.includes(id)?j.filter(x=>x!==id):[...j,id]);
- return <Sheet title={event?`Edit ${event.title}`:'Plan a meal or activity'} eyebrow="The plan" onClose={onClose}>
+ return <Sheet title={event?`Edit ${event.title}`:'Plan a meal or activity'} eyebrow="The plan" onClose={onClose} onDelete={event?()=>void del():undefined} deleteLabel={event?`Delete ${event.title}`:undefined}>
   <form className="form-stack" onSubmit={submit}>
    <label>{kind==='restaurant'?'Which restaurant?':'What is it?'}<input value={title} onChange={e=>setTitle(e.target.value)} placeholder={kind==='restaurant'?'Tasca do Chico':'Grilled sardines'} autoFocus required/></label>
    <div className="form-row"><label>Type<select value={kind} onChange={e=>setKind(e.target.value as Event['kind'])}>{KINDS.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select></label>
@@ -67,7 +71,7 @@ function EventSheet({trip,event,day,save,remove,busy,photos,onPhoto,onClose}:{tr
    {!joining.length&&trip.people.length>0&&<p className="helper">Nobody joining yet: costs for this can be split once someone joins.</p>}
    {error&&<p className="form-error" role="alert">{error}</p>}
    <Button type="submit" disabled={busy}>{event?'Save changes':'Add to plan'} <ArrowRight size={17}/></Button>
-   {event&&(linked?<p className="helper">{linked} expense{linked===1?' is':'s are'} split on this plan, so it cannot be deleted. Void or edit {linked===1?'it':'them'} first.</p>:<Button kind="ghost" disabled={busy} onClick={async()=>{if(!window.confirm(`Delete ${event.title}? Its shopping items stay on the general list.`))return;await remove('event',event);onClose();}}>Delete</Button>)}
+   {event&&(linked?<p className="helper" id="plan-delete-why">{blockedWhy}</p>:<Button kind="delete" disabled={busy} onClick={()=>void del()}>Delete {KINDS.find(([k])=>k===event.kind)?.[1].toLowerCase()??'plan'}</Button>)}
   </form>
  </Sheet>;
 }

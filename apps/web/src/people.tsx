@@ -65,7 +65,7 @@ function PersonSheet({trip,draft,save,remove,busy,onClose}:{trip:Trip;draft:Pers
    <p className="helper">{editing?.email&&editing.email===email.trim()?'This person can sign in with this address.':'With an email they get an invitation to sign in and add expenses. Leave it empty for children.'}</p>
    {error&&<p className="form-error" role="alert">{error}</p>}
    <Button type="submit" disabled={busy}>{editing?'Save changes':'Add person'} <ArrowRight size={17}/></Button>
-   {editing&&(inExpenses?<p className="helper">{editing.name} is part of {inExpenses} expense{inExpenses===1?'':'s'}, so they stay on the trip. Void or edit {inExpenses===1?'it':'those'} to remove them.</p>:<Button kind="ghost" onClick={()=>void del()} disabled={busy}>Remove from trip</Button>)}
+   {editing&&(inExpenses?<p className="helper">{editing.name} is part of {inExpenses} expense{inExpenses===1?'':'s'}, so they stay on the trip. Void or edit {inExpenses===1?'it':'those'} to remove them.</p>:<Button kind="delete" onClick={()=>void del()} disabled={busy}>Remove from trip</Button>)}
   </form>
  </Sheet>;
 }
@@ -78,7 +78,7 @@ function FamilySheet({family,save,remove,busy,onClose,trip}:{family?:Family;save
    <label>Family name<input value={name} onChange={e=>setName(e.target.value)} placeholder="The Millers" autoFocus required/></label>
    <p className="helper">Add the people after creating the family. Costs are settled per family.</p>
    <Button type="submit" disabled={busy}>{family?'Save':'Add family'} <ArrowRight size={17}/></Button>
-   {family&&(empty?<Button kind="ghost" onClick={async()=>{if(!window.confirm(`Delete ${family.name}?`))return;await remove('family',family);onClose();}} disabled={busy}>Delete family</Button>:<p className="helper">To delete this family, move or remove its people first.</p>)}
+   {family&&(empty?<Button kind="delete" onClick={async()=>{if(!window.confirm(`Delete ${family.name}?`))return;await remove('family',family);onClose();}} disabled={busy}>Delete family</Button>:<p className="helper">To delete this family, move or remove its people first.</p>)}
   </form>
  </Sheet>;
 }
@@ -107,7 +107,7 @@ function TripSheet({trip,save,busy,onClose,onDeleted,onMessage}:{trip:Trip;save:
   <div className="settings-block">
    <h3>Delete trip</h3>
    {hasMoney?<p>Trips with expenses or repayments can only be archived, so nobody loses the record of who paid what.</p>
-    :<><p>Removes the trip, its plans and shopping list for everyone. This cannot be undone.</p><Button kind="ghost" disabled={busy} onClick={async()=>{if(!window.confirm(`Delete ${trip.name} for everyone? This cannot be undone.`))return;try{await api.deleteTrip(trip.id);onDeleted();}catch(error){onMessage(error instanceof Error?error.message:'Could not delete the trip');}}}>Delete trip</Button></>}
+    :<><p>Removes the trip, its plans and shopping list for everyone. This cannot be undone.</p><Button kind="delete" disabled={busy} onClick={async()=>{if(!window.confirm(`Delete ${trip.name} for everyone? This cannot be undone.`))return;try{await api.deleteTrip(trip.id);onDeleted();}catch(error){onMessage(error instanceof Error?error.message:'Could not delete the trip');}}}>Delete trip</Button></>}
   </div>
  </Sheet>;
 }

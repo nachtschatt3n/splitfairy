@@ -668,3 +668,10 @@ input[type=date]{min-width:150px}
 .shopping .pack-controls{margin-top:12px}
 @media(max-width:740px){.shopping .qa-options .qa-pill{padding:0 10px;gap:4px}}
 @media(max-width:740px){.shopping .qa-options{flex-wrap:nowrap}.shopping .qa-options .qa-pill{flex:1 1 0;min-width:0}.shopping .qa-options .qa-pill select{width:100%;min-width:0;max-width:none;padding:0}}
+/* Deleting: a clear, red action at the bottom of a sheet, and a trash button in its header */
+.btn-delete{background:transparent;color:#a3402b;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.btn-delete:hover{background:#f7e4de}
+.modal-actions{display:flex;gap:8px;align-items:flex-start;flex:none}
+.icon-button.delete{color:#a3402b}
+.helper.flash{color:#a3402b!important;font-weight:700}
+@media(prefers-color-scheme:dark){.btn-delete,.icon-button.delete,.helper.flash{color:#f8b7a2!important}.btn-delete:hover{background:#3a2420}}

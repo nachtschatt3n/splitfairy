@@ -13,7 +13,7 @@ test('a dinner can be deleted, also after its expense is voided',async({page},te
  const pizza=page.getByRole('article',{name:'Pizza night'});
  await pizza.getByLabel('Add to shopping for Pizza night').fill('Flour');await pizza.getByLabel('Add to shopping for Pizza night').press('Enter');
  await pizza.getByRole('button',{name:'Edit Pizza night'}).click();
- await page.getByRole('dialog').getByRole('button',{name:'Delete'}).click();
+ await page.getByRole('dialog').getByRole('button',{name:'Delete dinner'}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);
  await expect(pizza).toHaveCount(0);
  // A dinner with an expense split on it: blocked, then allowed once the expense is voided.
@@ -35,7 +35,7 @@ test('a dinner can be deleted, also after its expense is voided',async({page},te
  await expect(page.getByRole('dialog')).toHaveCount(0);
  await openSection(page,'Plan');
  await page.getByRole('button',{name:'Edit Fish dinner'}).click();
- await expect(page.getByRole('dialog').getByRole('button',{name:'Delete'})).toBeVisible();
- await page.getByRole('dialog').getByRole('button',{name:'Delete'}).click();
+ await expect(page.getByRole('dialog').getByRole('button',{name:'Delete dinner'})).toBeVisible();
+ await page.getByRole('dialog').getByRole('button',{name:'Delete dinner'}).click();
  await expect(page.getByRole('article',{name:'Fish dinner'})).toHaveCount(0);
 });

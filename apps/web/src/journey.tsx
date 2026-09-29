@@ -84,7 +84,8 @@ export function StaySheet({trip,stay,day,save,remove,busy,who,photos,onPhoto,onC
   }
   await save('stay',{id:stay?.id??uid(),name:name.trim(),address:address.trim(),from,to,checkIn,checkOut,note:note.trim(),url:url.trim(),schedule,guests,expenseId,version:stay?.version??0},stay);onClose();
  };
- return <Sheet title={stay?`Edit ${stay.name}`:'Add a stay'} eyebrow="Where you sleep" onClose={onClose}>
+ const del=async()=>{if(!stay||!window.confirm(`Remove ${stay.name}?${linked?' Its booking cost stays in Spend.':''}`))return;await remove('stay',stay);onClose();};
+ return <Sheet title={stay?`Edit ${stay.name}`:'Add a stay'} eyebrow="Where you sleep" onClose={onClose} onDelete={stay?()=>void del():undefined} deleteLabel={stay?`Remove ${stay.name}`:undefined}>
   <form className="form-stack" onSubmit={submit}>
    <label>Name<input value={name} onChange={e=>setName(e.target.value)} placeholder="Casa das Dunas" autoFocus required/></label>
    <label>Address (optional)<input value={address} onChange={e=>setAddress(e.target.value)} placeholder="Rua das Dunas 12, Comporta"/></label>
@@ -109,7 +110,7 @@ export function StaySheet({trip,stay,day,save,remove,busy,who,photos,onPhoto,onC
    </>:linked&&<p className="helper">Booking cost: <strong>{euro(linked.total)}</strong>, recorded as “{linked.title}”. {mayEdit?'It was changed in Spend, so edit it there.':'Only the organizer or whoever added it can change it, in Spend.'}</p>}
    {error&&<p className="form-error" role="alert">{error}</p>}
    <Button type="submit" disabled={busy}>{stay?'Save changes':'Add stay'} <ArrowRight size={17}/></Button>
-   {stay&&<Button kind="ghost" disabled={busy} onClick={async()=>{if(!window.confirm(`Remove ${stay.name}?${linked?' Its booking cost stays in Spend.':''}`))return;await remove('stay',stay);onClose();}}>Remove stay</Button>}
+   {stay&&<Button kind="delete" disabled={busy} onClick={()=>void del()}>Remove stay</Button>}
   </form>
  </Sheet>;
 }
@@ -133,7 +134,8 @@ export function LegSheet({trip,leg,day,save,remove,busy,onClose}:{trip:Trip;leg?
   if(id==='__new'){if(!newName.trim()){setError('Name the car or flight, for example “Uhl car”.');return;}id=uid();await save('transport',{id,name:newName.trim(),kind:newKind,familyId:null,note:'',version:0});}
   await save('leg',{id:leg?.id??uid(),transportId:id,from:from.trim(),to:to.trim(),departDate,departTime,arriveDate,arriveTime,people,note:note.trim(),flightNo:isPlane&&flightNo.trim()?parseFlight(flightNo)?.number??flightNo.trim():'',version:leg?.version??0},leg);onClose();
  };
- return <Sheet title={leg?'Edit travel':'Add travel'} eyebrow="On the way" onClose={onClose}>
+ const del=async()=>{if(!leg||!window.confirm(`Remove the travel ${leg.from} → ${leg.to}?`))return;await remove('leg',leg);onClose();};
+ return <Sheet title={leg?'Edit travel':'Add travel'} eyebrow="On the way" onClose={onClose} onDelete={leg?()=>void del():undefined} deleteLabel={leg?'Remove this travel':undefined}>
   <form className="form-stack" onSubmit={submit}>
    <label>Car or flight<select value={transportId} onChange={e=>setTransportId(e.target.value)}>{transport.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}<option value="__new">A new car or flight…</option></select></label>
    {transportId==='__new'&&<div className="form-row"><label>Name<input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="Uhl car"/></label><label>Type<select value={newKind} onChange={e=>setNewKind(e.target.value as Transport['kind'])}>{KINDS.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select></label></div>}
@@ -145,7 +147,7 @@ export function LegSheet({trip,leg,day,save,remove,busy,onClose}:{trip:Trip;leg?
    <label>Notes (optional)<input value={note} onChange={e=>setNote(e.target.value)} placeholder={isPlane?'Seats 12A–D, 2 checked bags':'Stop for lunch in Évora'}/></label>
    {error&&<p className="form-error" role="alert">{error}</p>}
    <Button type="submit" disabled={busy}>{leg?'Save changes':'Add travel'} <ArrowRight size={17}/></Button>
-   {leg&&<Button kind="ghost" disabled={busy} onClick={async()=>{await remove('leg',leg);onClose();}}>Remove travel</Button>}
+   {leg&&<Button kind="delete" disabled={busy} onClick={()=>void del()}>Remove travel</Button>}
   </form>
  </Sheet>;
 }

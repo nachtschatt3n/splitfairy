@@ -1,5 +1,5 @@
 import {useEffect,useId,useRef,type ReactNode} from 'react';
-import {Info,X} from 'lucide-react';
+import {Info,Trash2,X} from 'lucide-react';
 import type {Command} from '../../../packages/domain/src/model.js';
 /** The traveller's local calendar day (UTC would be yesterday just after midnight in Europe). */
 export const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
@@ -33,7 +33,7 @@ export type Remove=(entity:Command['entity'],old:{id:string;version:number})=>Pr
 /** The split sparkle: two identical halves of a four-point star. Drawn in currentColor so it follows the theme. */
 export function LogoMark({size=24}:{size?:number}){return <svg viewBox="0 0 256 256" width={size} height={size} aria-hidden="true" className="logo-mark"><path fill="currentColor" d="M117 5Q129 49 157 77L77 157Q49 129 5 117Q93 93 117 5ZM179 99Q207 127 251 139Q163 163 139 251Q127 207 99 179Z"/></svg>;}
 export function Logo(){return <span className="brand"><span className="brand-mark"><LogoMark/></span><span>split<span className="brand-light">fairy</span></span></span>}
-export function Button({children,onClick,kind='primary',type='button',disabled=false,label}: {children:ReactNode;onClick?:()=>void;kind?:'primary'|'secondary'|'ghost'|'danger';type?:'button'|'submit';disabled?:boolean;label?:string}){return <button className={`btn btn-${kind}`} onClick={onClick} type={type} disabled={disabled} aria-label={label}>{children}</button>}
+export function Button({children,onClick,kind='primary',type='button',disabled=false,label}: {children:ReactNode;onClick?:()=>void;kind?:'primary'|'secondary'|'ghost'|'danger'|'delete';type?:'button'|'submit';disabled?:boolean;label?:string}){return <button className={`btn btn-${kind}`} onClick={onClick} type={type} disabled={disabled} aria-label={label}>{kind==='delete'&&<Trash2 size={16} aria-hidden="true"/>}{children}</button>}
 export function Notice({children}: {children:ReactNode}){return <div className="notice"><Info size={16}/>{children}</div>}
 export function Empty({icon,heading,body,action}: {icon:ReactNode;heading:string;body:string;action?:ReactNode}){return <div className="empty"><div className="empty-icon">{icon}</div><h3>{heading}</h3><p>{body}</p>{action}</div>}
 /** Dialog that becomes a bottom sheet on phones (see .modal in style.css). */
@@ -70,10 +70,11 @@ export function useBackToClose(onClose:()=>void){
 }
 /** For dialogs that are not a Sheet: back closes them too. */
 export function BackToClose({onClose}:{onClose:()=>void}){useBackToClose(onClose);return null;}
-export function Sheet({title,eyebrow='Splitfairy',onClose,children}:{title:string;eyebrow?:string;onClose:()=>void;children:ReactNode}){
+/** `onDelete` puts a delete button in the header, so it is reachable without scrolling a long form. */
+export function Sheet({title,eyebrow='Splitfairy',onClose,children,onDelete,deleteLabel='Delete'}:{title:string;eyebrow?:string;onClose:()=>void;children:ReactNode;onDelete?:()=>void;deleteLabel?:string}){
  const id=useId();useBackToClose(onClose);
  return <div className="modal-backdrop" onClick={e=>{if(e.target===e.currentTarget)onClose();}}><div className="modal" role="dialog" aria-modal="true" aria-labelledby={id}>
-  <div className="modal-head"><div><span className="eyebrow">{eyebrow}</span><h2 id={id}>{title}</h2></div><button type="button" className="icon-button" onClick={onClose} aria-label="Close"><X/></button></div>
+  <div className="modal-head"><div><span className="eyebrow">{eyebrow}</span><h2 id={id}>{title}</h2></div><div className="modal-actions">{onDelete&&<button type="button" className="icon-button delete" onClick={onDelete} aria-label={deleteLabel} title={deleteLabel}><Trash2 size={20}/></button>}<button type="button" className="icon-button" onClick={onClose} aria-label="Close"><X/></button></div></div>
   {children}
  </div></div>;
 }

@@ -24,7 +24,7 @@ function TransportSheet({trip,transport,save,remove,busy,onClose}:{trip:Trip;tra
    <label>Name<input value={name} onChange={e=>{setName(e.target.value);setTyped(true);}} placeholder="Uhl car" required/></label>
    <label>Note (optional)<input value={note} onChange={e=>setNote(e.target.value)} placeholder={kind==='plane'?'2 checked bags, 23 kg each':'Roof box, 5 seats'}/></label>
    <Button type="submit" disabled={busy}>{transport?'Save changes':'Add'} <ArrowRight size={17}/></Button>
-   {transport&&<Button kind="ghost" disabled={busy} onClick={async()=>{if(loads&&!window.confirm(`${loads} item${loads===1?'':'s'} travel in ${transport.name}. Remove it anyway? The items stay on the list.`))return;await remove('transport',transport);onClose();}}>Remove</Button>}
+   {transport&&<Button kind="delete" disabled={busy} onClick={async()=>{if(loads&&!window.confirm(`${loads} item${loads===1?'':'s'} travel in ${transport.name}. Remove it anyway? The items stay on the list.`))return;await remove('transport',transport);onClose();}}>Remove</Button>}
   </form>
  </Sheet>;
 }
@@ -42,7 +42,7 @@ function GearSheet({trip,item,myFamily,save,remove,busy,onClose}:{trip:Trip;item
    {myFamily&&familyId===myFamily&&<label className="check-label"><input type="checkbox" checked={privateItem} onChange={e=>setPrivateItem(e.target.checked)}/> Only visible to {familyName(trip,myFamily)}</label>}
    <label className="check-label"><input type="checkbox" checked={packed} onChange={e=>setPacked(e.target.checked)}/> Packed</label>
    <Button type="submit" disabled={busy}>Save changes <ArrowRight size={17}/></Button>
-   <Button kind="ghost" disabled={busy} onClick={async()=>{await remove('gear',item);onClose();}}>Delete item</Button>
+   <Button kind="delete" disabled={busy} onClick={async()=>{await remove('gear',item);onClose();}}>Delete item</Button>
   </form>
  </Sheet>;
 }

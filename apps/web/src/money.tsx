@@ -79,7 +79,7 @@ export function RepaymentSheet({trip,payment,preset,save,remove,busy,onClose}:{t
    <div className="form-row"><label>Amount in EUR<input inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="25.00" required/></label><label>Date<input type="date" value={date} onChange={e=>setDate(e.target.value)} required/></label></div>
    {error&&<p className="form-error" role="alert">{error}</p>}
    <Button type="submit" disabled={busy}>{payment?'Save changes':'Record payment'} <ArrowRight size={17}/></Button>
-   {payment&&<Button kind="ghost" disabled={busy} onClick={async()=>{if(!window.confirm('Delete this repayment? The balances go back to before it was paid.'))return;await remove('payment',payment);onClose();}}>Delete repayment</Button>}
+   {payment&&<Button kind="delete" disabled={busy} onClick={async()=>{if(!window.confirm('Delete this repayment? The balances go back to before it was paid.'))return;await remove('payment',payment);onClose();}}>Delete repayment</Button>}
   </form>
  </Sheet>;
 }
