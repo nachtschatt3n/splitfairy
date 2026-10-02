@@ -28,7 +28,8 @@ export const fmtTime=(hhmm:string|undefined)=>{
 export const uid=()=>crypto.randomUUID();
 export const cents=(s:string)=>Math.round(Number(s.replace(',','.'))*100);
 export const money=(n:number)=>String((n/100).toFixed(2));
-export type Save=(entity:Command['entity'],value:any,old?:{version:number})=>Promise<void>;
+/** `quiet` skips the "Saved." note, for small taps like ticking an item. */
+export type Save=(entity:Command['entity'],value:any,old?:{version:number},opts?:{quiet?:boolean})=>Promise<void>;
 export type Remove=(entity:Command['entity'],old:{id:string;version:number})=>Promise<void>;
 /** The split sparkle: two identical halves of a four-point star. Drawn in currentColor so it follows the theme. */
 export function LogoMark({size=24}:{size?:number}){return <svg viewBox="0 0 256 256" width={size} height={size} aria-hidden="true" className="logo-mark"><path fill="currentColor" d="M117 5Q129 49 157 77L77 157Q49 129 5 117Q93 93 117 5ZM179 99Q207 127 251 139Q163 163 139 251Q127 207 99 179Z"/></svg>;}

@@ -67,8 +67,8 @@ export function App(){
  },[refresh]);
  // A change is done once it is on this device: show it at once and let the server sync run in the background.
  const showLocal=async(id:string)=>{const cached=await cachedTrip(id);if(cached)setView({...cached,trip:overlay(cached.trip,(await pendingFor(id)).filter(e=>e.state==='pending').map(e=>e.command))});const items=await pendingFor(id);setPending(items.length+await photoCount(id));};
- const run=async(command:Command)=>{if(!selected)return;const id=selected;setBusy(true);setMessage('');try{await queue(id,command);await showLocal(id);setMessage(offline?'Saved on this device. It will sync when you reconnect.':'Saved.');setModal(null);setRefreshKey(x=>x+1);}catch(error){setMessage(error instanceof Error?error.message:'Could not save');}finally{setBusy(false);}void refresh(id);};
- const save=(entity:Command['entity'],value:any,existing?:{version:number})=>run({mutationId:uid(),entity,action:'save',expectedVersion:existing?.version??0,value});
+ const run=async(command:Command,quiet=false)=>{if(!selected)return;const id=selected;setBusy(true);if(!quiet)setMessage('');try{await queue(id,command);await showLocal(id);if(!quiet||offline)setMessage(offline?'Saved on this device. It will sync when you reconnect.':'Saved.');setModal(null);setRefreshKey(x=>x+1);}catch(error){setMessage(error instanceof Error?error.message:'Could not save');}finally{setBusy(false);}void refresh(id);};
+ const save=(entity:Command['entity'],value:any,existing?:{version:number},opts?:{quiet?:boolean})=>run({mutationId:uid(),entity,action:'save',expectedVersion:existing?.version??0,value},opts?.quiet);
  const remove=(entity:Command['entity'],existing:{id:string;version:number})=>run({mutationId:uid(),entity,action:'delete',expectedVersion:existing.version,value:{id:existing.id}});
  // Place photos go straight to the server (they are not queued offline like receipts).
  const photoActions:PhotoActions={userId:user?.id??'',organizer:view?.role==='organizer',

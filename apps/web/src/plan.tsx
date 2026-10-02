@@ -7,6 +7,7 @@ import type {Event,Leg,Shopping,Stay,Trip} from '../../../packages/domain/src/mo
 import {Button,Empty,Sheet,euro,fmt,fmtTime,today,uid,type Remove,type Save} from './common.js';
 import {api} from './api.js';
 import {MealShopping,ShoppingSheet,ShoppingSummary} from './shopping.js';
+import {TickProvider} from './tick.js';
 
 const KINDS:[Event['kind'],string][]=[['breakfast','Breakfast'],['lunch','Lunch'],['dinner','Dinner'],['restaurant','Restaurant'],['activity','Activity']];
 const ORDER=KINDS.map(([k])=>k);
@@ -107,7 +108,7 @@ export function Plan({trip,save,remove,busy,photos,who,intent,onAddBill,routeDay
  const spent=(id:string)=>trip.expenses.filter(x=>x.status==='posted').flatMap(x=>x.lines.flatMap(l=>l.splits.filter(s=>s.eventId===id).map(s=>s.amount))).reduce((a,b)=>a+b,0);
  const addItem=(text:string,eventId:string|null)=>save('shopping',{id:uid(),text,eventId,buyerId:null,done:false,version:0});
 
- return <>
+ return <TickProvider>
   <TripOverview trip={trip} day={day} onDay={setDay}/>
   <div className="day-strip" role="tablist" aria-label="Trip days">{days.map(d=><button key={d} role="tab" aria-selected={day===d} onClick={()=>setDay(d)} className={day===d?'selected':''}><span>{new Date(`${d}T12:00:00`).toLocaleDateString('en-GB',{weekday:'short'})}</span><strong>{d.slice(-2)}</strong>{(trip.events.some(e=>e.date===d)||(trip.legs??[]).some(l=>l.departDate===d))&&<i className="day-dot" aria-hidden="true"/>}</button>)}</div>
   <div className="two-column plan-grid">
@@ -139,5 +140,5 @@ export function Plan({trip,save,remove,busy,photos,who,intent,onAddBill,routeDay
   {viewer&&<PhotoViewer key={`${viewer.place.id}-${viewer.index}`} trip={trip} place={viewer.place} start={viewer.index} actions={photos} onClose={closeViewer}/>}
   {sheet&&<EventSheet trip={trip} event={sheet.event} day={day} save={save} remove={remove} busy={busy} photos={photos} onPhoto={index=>sheet.event&&setViewer({place:eventPlace(sheet.event),index})} onClose={()=>setSheet(null)}/>}
   {itemSheet&&<ShoppingSheet key={itemSheet.id} trip={trip} item={trip.shopping.find(s=>s.id===itemSheet.id)??itemSheet} save={save} remove={remove} busy={busy} onClose={()=>setItemSheet(null)}/>}
- </>;
+ </TickProvider>;
 }

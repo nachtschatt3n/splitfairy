@@ -2,6 +2,7 @@ import {useRef,useState,type FormEvent,type ReactNode} from 'react';
 import {ArrowRight,CalendarDays,ChevronDown,Pencil,Plus,ShoppingBasket,ShoppingCart,Users} from 'lucide-react';
 import type {Shopping,Trip} from '../../../packages/domain/src/model.js';
 import {Button,Empty,Sheet,fmt,uid,type Remove,type Save} from './common.js';
+import {TickProvider,useTick,withDone} from './tick.js';
 
 /** Meals and activities that can have a shopping list (restaurants have none), in date order. */
 export const shoppable=(trip:Trip)=>trip.events.filter(e=>e.kind!=='restaurant').sort((a,b)=>a.date.localeCompare(b.date));
@@ -31,9 +32,10 @@ function BuyerSelect({trip,value,onChange,compact=false}:{trip:Trip;value:string
 
 export function ShoppingItem({trip,item,myFamily,save,onEdit,context,hideBuyer=false}:{trip:Trip;item:Shopping;myFamily?:string|null;save:Save;onEdit:(item:Shopping)=>void;context?:string;hideBuyer?:boolean}){
  const buyer=hideBuyer?undefined:trip.families.find(f=>f.id===item.buyerId)?.name;
- return <div className="shop-row">
-  <label className="shop-check"><input type="checkbox" checked={item.done} onChange={()=>void save('shopping',{...item,done:!item.done},item)}/><span className={item.done?'done':''}>{item.text}{buyer&&<small className="buyer-tag">{buyer} buys</small>}{context&&<small className="shop-context">{context}</small>}</span></label>
-  {!item.buyerId&&!item.done&&myFamily&&<button type="button" className="text-button claim" onClick={()=>void save('shopping',{...item,buyerId:myFamily},item)}>We'll buy it</button>}
+ const t=useTick(item.id,item.done,(_,done)=>save('shopping',{...item,done},item,{quiet:true}));
+ return <div className={t.flashing?'shop-row just-ticked':'shop-row'} style={t.style}>
+  <label className="shop-check"><input type="checkbox" checked={t.checked} onChange={t.toggle}/><span className={t.checked?'done':''}>{item.text}{buyer&&<small className="buyer-tag">{buyer} buys</small>}{context&&<small className="shop-context">{context}</small>}</span></label>
+  {!item.buyerId&&!t.checked&&myFamily&&<button type="button" className="text-button claim" onClick={()=>void save('shopping',{...item,buyerId:myFamily},item)}>We'll buy it</button>}
   <button type="button" className="icon-button subtle" aria-label={`Edit ${item.text}`} onClick={()=>onEdit(item)}><Pencil size={16}/></button>
  </div>;
 }
@@ -66,7 +68,7 @@ export function ShoppingList({trip,myFamily,save,remove,busy}:{trip:Trip;myFamil
   {id:'basket',title:'In the basket',items:items.filter(i=>i.done&&forUs(i))},
  ].filter(g=>g.items.length);
  const row=(item:Shopping,context?:string)=><ShoppingItem key={item.id} trip={trip} myFamily={myFamily} item={item} save={save} onEdit={setEditing} context={context}/>;
- return <>
+ return <TickProvider>
   <section className={storeMode?'card shopping store-mode':'card shopping'} aria-label="Shopping list">
    <div className="pack-head"><div><h2 className="sr-only">Shopping</h2>{items.length>0&&<small>{open.length} to buy{ours?` · ${ours} for ${mine?.name??'you'}`:''}{items.length-open.length?` · ${items.length-open.length} bought`:''}</small>}</div>
     {items.length>0&&<button type="button" className={storeMode?'qa-pill on':'qa-pill'} aria-pressed={storeMode} onClick={()=>setStoreMode(m=>!m)}><ShoppingCart size={15} aria-hidden="true"/> {storeMode?'Done shopping':'Shopping trip'}</button>}</div>
@@ -84,13 +86,13 @@ export function ShoppingList({trip,myFamily,save,remove,busy}:{trip:Trip;myFamil
     {!open.some(forUs)&&<Empty icon={<ShoppingCart/>} heading="Everything is in the basket" body="Nothing left for you on the list."/>}
    </>:<>
     {items.length>0&&trip.families.length>0&&<div className="pack-controls"><div className="segmented" role="group" aria-label="Show">{([['all','All'],['open','Anyone can buy'],...(mine?[['ours',`${mine.name} buys`]]:[])] as [Show,string][]).map(([k,l])=><button key={k} type="button" className={show===k?'on':''} aria-pressed={show===k} onClick={()=>setShow(k)}>{l}</button>)}</div></div>}
-    {groups.map(g=><div className="shop-group" key={g.id??'general'}><h3>{g.title} <small>{g.items.filter(i=>i.done).length}/{g.items.length}</small></h3>{g.items.map(i=>row(i))}</div>)}
+    {groups.map(g=><div className="shop-group" key={g.id??'general'}><h3>{g.title} <small>{g.items.filter(i=>i.done).length}/{g.items.length}</small></h3>{withDone(g.items,i=>i.done,'Bought',i=>row(i))}</div>)}
     {items.length>0&&!groups.length&&<p className="helper">Nothing here with this filter.</p>}
     {!items.length&&<Empty icon={<ShoppingBasket/>} heading="Your list is clear" body="Type an item above and press Enter; keep typing to add the next. Ingredients can also go straight on a meal in the plan."/>}
    </>}
   </section>
   {editing&&<ShoppingSheet key={editing.id} trip={trip} item={items.find(s=>s.id===editing.id)??editing} save={save} remove={remove} busy={busy} onClose={()=>setEditing(null)}/>}
- </>;
+ </TickProvider>;
 }
 
 /** A small card that points to the list: how much is open and what is for us. */
@@ -112,7 +114,7 @@ export function MealShopping({trip,title,items,myFamily,save,onEdit,addField}:{t
  const toBuy=items.filter(i=>!i.done);
  // One buyer for all of them: say it once instead of on every row.
  const buyers=[...new Set(items.map(i=>i.buyerId??''))],shared=buyers.length===1&&buyers[0]?trip.families.find(f=>f.id===buyers[0])?.name:undefined;
- const rows=items.map(item=><ShoppingItem key={item.id} trip={trip} myFamily={myFamily} item={item} save={save} onEdit={onEdit} hideBuyer={!!shared}/>);
+ const rows=withDone(items,i=>i.done,'Bought',item=><ShoppingItem key={item.id} trip={trip} myFamily={myFamily} item={item} save={save} onEdit={onEdit} hideBuyer={!!shared}/>);
  if(items.length<=3)return <div className="event-shopping">{shared&&items.length>1&&<p className="meal-shop-buyer">{shared} buys these</p>}{rows}{addField}</div>;
  const summary=[`${items.length} ingredients`,toBuy.length?`${toBuy.length} to buy`:'all bought',shared?`${shared} buys all`:''].filter(Boolean).join(' · ');
  const preview=(toBuy.length?toBuy:items).slice(0,3).map(i=>i.text).join(', ');

@@ -684,3 +684,14 @@ input[type=date]{min-width:150px}
 .meal-shop-toggle svg.flip{transform:rotate(180deg)}
 .meal-shop-buyer{margin:6px 0 0;color:var(--muted);font-size:13px;font-weight:600}
 .map-link{max-width:100%;overflow-wrap:anywhere}
+/* Ticking an item: a quick flash in the app's blue, a pause, then the row glides to the ticked ones */
+.just-ticked{animation:tick-flash .75s cubic-bezier(.2,0,0,1);border-radius:10px}
+@keyframes tick-flash{0%{background:rgba(61,139,253,.32)}100%{background:rgba(61,139,253,0)}}
+.shop-check input,.pack-check input{transition:transform .12s ease-out}
+.shop-check input:active,.pack-check input:active{transform:scale(.88)}
+::view-transition-group(*){animation-duration:.34s;animation-timing-function:cubic-bezier(.2,0,0,1)}
+::view-transition-old(root),::view-transition-new(root){animation:none}
+.done-divider{display:flex;align-items:center;gap:10px;margin:10px 0 2px;color:var(--muted);font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.done-divider::before,.done-divider::after{content:"";flex:1;height:1px;background:var(--line)}
+.done-divider::before{flex:0 0 12px}
+@media(prefers-reduced-motion:reduce){.just-ticked{animation:none}::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none!important}}
