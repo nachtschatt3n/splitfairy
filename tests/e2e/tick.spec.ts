@@ -40,4 +40,11 @@ test('a ticked item flashes, waits a moment, then moves below the open ones; a s
  await expect.poll(names,{timeout:5000}).toEqual(['Bread','Milk','Olives','Eggs']);
  await page.reload();
  await expect(list.locator('.done-divider')).toContainText('Bought · 1');
+ // A dialog opened during the pause stays open when the tick is saved.
+ await rows.filter({hasText:'Olives'}).getByRole('checkbox').click();
+ await page.getByRole('button',{name:'Add new'}).click();
+ await expect(page.getByRole('dialog')).toBeVisible();
+ await expect.poll(async()=>(await (await page.request.get(`/api/v1/trips/${decodeURIComponent(new URL(page.url()).pathname.split('/')[2])}`)).json()).trip.shopping.find((i:any)=>i.text==='Olives').done,{timeout:5000}).toBe(true);
+ await page.waitForTimeout(400);
+ await expect(page.getByRole('dialog')).toBeVisible();
 });
