@@ -94,7 +94,7 @@ test('organizer plans a trip, splits a receipt, settles up and switches trips',a
  await expect(sheet.getByRole('status')).toContainText('Totals match');
  await shot(page,testInfo,'receipt-review-top');
  // Two meals that day, so nothing is pre-assigned: send everything to dinner, then sunscreen to everyone.
- await expect(sheet.getByLabel('Assign item 1')).toHaveValue('');
+ await expect(sheet.getByRole('group',{name:'Who shares item 1'}).getByRole('button',{name:'Everyone'})).toHaveAttribute('aria-pressed','true');
  const dinnerId=await sheet.getByLabel('Assign every item to').locator('option',{hasText:'Sardine dinner'}).getAttribute('value');
  await sheet.getByLabel('Assign every item to').selectOption(dinnerId!);await sheet.getByRole('button',{name:'Apply to all'}).click();
  await expect(sheet.getByLabel('Assign item 1')).toHaveValue(dinnerId!);
@@ -118,6 +118,13 @@ test('organizer plans a trip, splits a receipt, settles up and switches trips',a
  await editor.scrollIntoViewIfNeeded();await shot(page,testInfo,'receipt-custom-split');
  await sheet.getByLabel('Assign item 2').selectOption(dinnerId!);
  await sheet.getByLabel('Paid by').selectOption({label:'Silva'});
+ // One tap: the paying family keeps an item, and the running totals show it at once.
+ const item3=sheet.getByRole('group',{name:'Who shares item 3'});
+ await item3.getByRole('button',{name:'Only Silva'}).click();
+ await expect(item3.getByRole('button',{name:'Only Silva'})).toHaveAttribute('aria-pressed','true');
+ await expect(sheet.locator('.receipt-tally')).toContainText('Only Silva');
+ await item3.getByRole('button',{name:'More…'}).click();await sheet.getByLabel('Assign item 3').selectOption(dinnerId!);
+ await expect(sheet.locator('.receipt-tally')).not.toContainText('Only Silva');
  await expect(sheet.getByLabel('Totals by meal or activity')).toContainText('Sardine dinner');
  await shot(page,testInfo,'receipt-review');
  await sheet.getByRole('button',{name:'Confirm expense'}).click();
