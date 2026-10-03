@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {draftFromReceipt,expenseFromDraft,parseCents,reviewSummary} from '../apps/web/src/receipt-draft.js';
+import {draftFromReceipt,expenseFromDraft,familyTarget,parseCents,reviewSummary} from '../apps/web/src/receipt-draft.js';
 import {allocateExpense} from '../packages/domain/src/accounting.js';
 import {freshTrip} from '../apps/server/src/store.js';
 import type {Receipt} from '../packages/domain/src/model.js';
@@ -34,5 +34,19 @@ describe('receipt review draft',()=>{
   const byFamily=(f:string)=>allocations.filter(a=>a.familyId===f).reduce((s,a)=>s+a.amount,0);
   // Pasta night (350) split Ana/Ben; sunscreen (900) split Ana 1, Leo .5, Ben 1.
   expect(byFamily('A')).toBe(175+360+180);expect(byFamily('B')).toBe(175+360);
+ });
+ it('charges an item to one family only, split among its people',()=>{
+  const draft=draftFromReceipt(receipt,trip,'2026-10-04',key);draft.payer='B';
+  draft.items[1].target=familyTarget('A');
+  const summary=reviewSummary(draft,trip);
+  expect(summary.ready).toBe(true);
+  expect(summary.groups.find(g=>g.target===familyTarget('A'))).toMatchObject({name:'Only Rossi',people:2,amount:900});
+  const expense=expenseFromDraft(draft,trip,'r',key);
+  const sunscreen=expense.lines.find(l=>l.label==='Sunscreen')!;
+  expect(sunscreen.splits[0]).toMatchObject({eventId:null,weights:[{id:'a1',weight:1},{id:'a2',weight:.5}]});
+  const alloc=allocateExpense({total:expense.total,payers:expense.payers,splits:expense.lines.flatMap(l=>l.splits)},trip.people);
+  const byFamily=(f:string)=>alloc.filter(a=>a.familyId===f).reduce((n,a)=>n+a.amount,0);
+  // Pasta night (350) split Ana/Ben; sunscreen (900) only the Rossis.
+  expect(byFamily('A')).toBe(175+900);expect(byFamily('B')).toBe(175);
  });
 });

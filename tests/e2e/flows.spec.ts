@@ -98,6 +98,11 @@ test('organizer plans a trip, splits a receipt, settles up and switches trips',a
  await sheet.getByLabel('Assign every item to').selectOption(dinnerId!);await sheet.getByRole('button',{name:'Apply to all'}).click();
  await expect(sheet.getByLabel('Assign item 1')).toHaveValue(dinnerId!);
  await sheet.getByLabel('Assign item 4').selectOption('');
+ // One family only: the summary counts that family's people (Ben); then back to dinner.
+ await sheet.getByLabel('Assign item 2').selectOption({label:'Only Weber'});
+ await expect(sheet.getByLabel('Totals by meal or activity')).toContainText('Only Weber');
+ await expect(sheet.getByLabel('Totals by meal or activity').locator('.assignment-row',{hasText:'Only Weber'})).toContainText('1 person');
+ await sheet.getByLabel('Assign item 2').selectOption(dinnerId!);
  await sheet.getByLabel('Paid by').selectOption({label:'Silva'});
  await expect(sheet.getByLabel('Totals by meal or activity')).toContainText('Sardine dinner');
  await shot(page,testInfo,'receipt-review');

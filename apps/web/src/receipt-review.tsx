@@ -2,7 +2,7 @@ import {useMemo,useState} from 'react';
 import {CalendarDays,Check,Plus,Trash2,Users,X} from 'lucide-react';
 import type {Expense,ExpenseInput,Receipt,Trip} from '../../../packages/domain/src/model.js';
 import {fmt} from './common.js';
-import {draftFromReceipt,expenseFromDraft,formatCents,reviewSummary,type ReceiptDraft} from './receipt-draft.js';
+import {draftFromReceipt,expenseFromDraft,familyTarget,formatCents,reviewSummary,type ReceiptDraft} from './receipt-draft.js';
 const euro=(n:number)=>new Intl.NumberFormat('en-IE',{style:'currency',currency:'EUR'}).format(n/100);
 const shortDate=fmt;
 export function ReceiptReview({trip,receipt,today,busy,onClose,onConfirm,onDismiss}:{trip:Trip;receipt:Receipt;today:string;busy:boolean;onClose:()=>void;onConfirm:(expense:ExpenseInput)=>void;onDismiss:()=>void}){
@@ -12,7 +12,9 @@ export function ReceiptReview({trip,receipt,today,busy,onClose,onConfirm,onDismi
  const events=[...trip.events].sort((a,b)=>a.date.localeCompare(b.date));
  const setItem=(key:string,patch:Partial<ReceiptDraft['items'][number]>)=>setDraft(d=>({...d,items:d.items.map(i=>i.key===key?{...i,...patch}:i)}));
  const confirm=()=>{try{onConfirm(expenseFromDraft(draft,trip,receipt.id,()=>crypto.randomUUID()));}catch{/* the summary already lists the problem */}};
- const targetOptions=<><option value="">General · everyone</option>{events.map(e=><option key={e.id} value={e.id} disabled={!e.participants.length}>{e.title} · {shortDate(e.date)}{e.participants.length?'':' (nobody joining)'}</option>)}</>;
+ // Everyone, a meal or activity (its people), or one family only, e.g. the croissants only the Schupps had.
+ const families=trip.families.filter(f=>trip.people.some(p=>p.familyId===f.id));
+ const targetOptions=<><option value="">General · everyone</option>{families.length>1&&<optgroup label="Only one family">{families.map(f=><option key={f.id} value={familyTarget(f.id)}>Only {f.name}</option>)}</optgroup>}{events.length>0&&<optgroup label="A meal or activity">{events.map(e=><option key={e.id} value={e.id} disabled={!e.participants.length}>{e.title} · {shortDate(e.date)}{e.participants.length?'':' (nobody joining)'}</option>)}</optgroup>}</>;
  return <div className="modal-backdrop"><div className="modal receipt-modal" role="dialog" aria-modal="true" aria-labelledby="receipt-review-title">
   <div className="modal-head"><div><span className="eyebrow">Check · Assign · Confirm</span><h2 id="receipt-review-title">Review {receipt.merchant||'receipt'}</h2></div><button className="icon-button" onClick={onClose} aria-label="Close"><X/></button></div>
   <div className="receipt-layout">
@@ -36,7 +38,7 @@ export function ReceiptReview({trip,receipt,today,busy,onClose,onConfirm,onDismi
     </div>
     <div className="assignment-summary" aria-label="Totals by meal or activity">
      <span className="eyebrow">Who shares what</span>
-     {summary.groups.map(g=><div className={`assignment-row ${g.people?'':'empty'}`} key={g.target||'general'}><span className="list-icon">{g.target?<CalendarDays size={16}/>:<Users size={16}/>}</span><div><strong>{g.name}</strong><small>{g.items} item{g.items===1?'':'s'} · {g.people} {g.people===1?'person':'people'}</small></div><b>{euro(g.amount)}</b></div>)}
+     {summary.groups.map(g=><div className={`assignment-row ${g.people?'':'empty'}`} key={g.target||'general'}><span className="list-icon">{g.target&&!g.target.startsWith('family:')?<CalendarDays size={16}/>:<Users size={16}/>}</span><div><strong>{g.name}</strong><small>{g.items} item{g.items===1?'':'s'} · {g.people} {g.people===1?'person':'people'}</small></div><b>{euro(g.amount)}</b></div>)}
     </div>
     <div className={`receipt-total ${summary.difference===0?'matched':'mismatch'}`} role="status"><span>Items {euro(summary.reviewed)} · Receipt {summary.total===null?'—':euro(summary.total)}</span><strong>{summary.difference===0?'Totals match':summary.difference===null?'Total missing':`Difference ${euro(summary.difference)}`}</strong></div>
     {summary.problems.length>0&&<ul className="review-problems">{summary.problems.map(p=><li key={p}>{p}</li>)}</ul>}

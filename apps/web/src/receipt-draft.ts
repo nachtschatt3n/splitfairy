@@ -18,7 +18,21 @@ export function draftFromReceipt(receipt:Receipt,trip:Trip,fallbackDate:string,m
  return {title:receipt.merchant||'Receipt',date,category:'food',payer:trip.families[0]?.id??'',total:receipt.total===null?'':formatCents(receipt.total),
   items:receipt.items.map(item=>({key:makeKey(),label:item.label,amount:formatCents(item.amount),target}))};
 }
-export function targetName(trip:Trip,target:string){return target?trip.events.find(e=>e.id===target)?.title??'Removed event':'General · everyone';}
+/** An item goes to everyone (''), a meal or activity (its id), or one family only ('family:<id>'). */
+const FAMILY='family:';
+export const familyTarget=(familyId:string)=>`${FAMILY}${familyId}`;
+const familyOf=(trip:Trip,target:string)=>target.startsWith(FAMILY)?trip.families.find(f=>f.id===target.slice(FAMILY.length)):undefined;
+/** Who shares an item, with their weights. */
+function sharers(trip:Trip,target:string){
+ if(!target)return trip.people.map(p=>({id:p.id,weight:p.weight}));
+ if(target.startsWith(FAMILY)){const f=familyOf(trip,target);return f?trip.people.filter(p=>p.familyId===f.id).map(p=>({id:p.id,weight:p.weight})):[];}
+ return trip.events.find(e=>e.id===target)?.participants??[];
+}
+export function targetName(trip:Trip,target:string){
+ if(!target)return 'General · everyone';
+ if(target.startsWith(FAMILY))return `Only ${familyOf(trip,target)?.name??'a removed family'}`;
+ return trip.events.find(e=>e.id===target)?.title??'Removed event';
+}
 export function reviewSummary(draft:ReceiptDraft,trip:Trip){
  const invalid=draft.items.filter(i=>i.label.trim()===''||parseCents(i.amount)===null).map(i=>i.key);
  const reviewed=draft.items.reduce((n,i)=>n+(parseCents(i.amount)??0),0);
@@ -26,8 +40,7 @@ export function reviewSummary(draft:ReceiptDraft,trip:Trip){
  const groups=new Map<string,TargetTotal>();
  for(const item of draft.items){
   const amount=parseCents(item.amount)??0;
-  const event=trip.events.find(e=>e.id===item.target);
-  const group=groups.get(item.target)??{target:item.target,name:targetName(trip,item.target),people:item.target?event?.participants.length??0:trip.people.length,amount:0,items:0};
+  const group=groups.get(item.target)??{target:item.target,name:targetName(trip,item.target),people:sharers(trip,item.target).length,amount:0,items:0};
   group.amount+=amount;group.items++;groups.set(item.target,group);
  }
  const emptyTargets=[...groups.values()].filter(g=>g.people===0);
@@ -43,15 +56,14 @@ export function reviewSummary(draft:ReceiptDraft,trip:Trip){
  if(!draft.title.trim())problems.push('Give the expense a name.');
  return {reviewed,total,difference,groups:[...groups.values()].sort((a,b)=>b.amount-a.amount),invalid,problems,ready:problems.length===0};
 }
-/** Turns a reviewed draft into an expense with one line per item, each split by its meal/activity participants or everyone. */
+/** Turns a reviewed draft into an expense with one line per item, each split by its meal/activity participants, one family, or everyone. */
 export function expenseFromDraft(draft:ReceiptDraft,trip:Trip,receiptId:string,makeId:()=>string):ExpenseInput{
  const summary=reviewSummary(draft,trip);
  if(!summary.ready)throw new Error(summary.problems[0]);
- const everyone=trip.people.map(p=>({id:p.id,weight:p.weight}));
  const lines=draft.items.map(item=>{
   const amount=parseCents(item.amount)!;
   const event=item.target?trip.events.find(e=>e.id===item.target):undefined;
-  return {id:makeId(),label:item.label.trim(),amount,splits:[{amount,eventId:event?.id??null,eventVersion:event?.version,weights:event?event.participants:everyone,fixed:[],personFixed:[]}]};
+  return {id:makeId(),label:item.label.trim(),amount,splits:[{amount,eventId:event?.id??null,eventVersion:event?.version,weights:sharers(trip,item.target),fixed:[],personFixed:[]}]};
  });
  return {id:makeId(),title:draft.title.trim(),date:draft.date,category:draft.category,total:summary.total!,payers:[{familyId:draft.payer,amount:summary.total!}],lines,notes:'',receiptIds:[receiptId],status:'posted',version:0};
 }
