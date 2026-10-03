@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {draftFromReceipt,expenseFromDraft,familyTarget,parseCents,reviewSummary} from '../apps/web/src/receipt-draft.js';
+import {CUSTOM,draftFromReceipt,expenseFromDraft,familyTarget,parseCents,personTarget,reviewSummary} from '../apps/web/src/receipt-draft.js';
 import {allocateExpense} from '../packages/domain/src/accounting.js';
 import {freshTrip} from '../apps/server/src/store.js';
 import type {Receipt} from '../packages/domain/src/model.js';
@@ -48,5 +48,23 @@ describe('receipt review draft',()=>{
   const byFamily=(f:string)=>alloc.filter(a=>a.familyId===f).reduce((n,a)=>n+a.amount,0);
   // Pasta night (350) split Ana/Ben; sunscreen (900) only the Rossis.
   expect(byFamily('A')).toBe(175+900);expect(byFamily('B')).toBe(175);
+ });
+ it('charges an item to one person, or to a custom split from the split editor',()=>{
+  const draft=draftFromReceipt(receipt,trip,'2026-10-04',key);draft.payer='B';
+  draft.items[1].target=personTarget('a2');
+  let summary=reviewSummary(draft,trip);
+  expect(summary.groups.find(g=>g.target===personTarget('a2'))).toMatchObject({name:'Only Leo',people:1,amount:900});
+  // A custom split that is not finished blocks confirming and says why.
+  draft.items[1].target=CUSTOM;draft.items[1].custom={error:'The amounts add up to €5.00, not €9.00.'};
+  summary=reviewSummary(draft,trip);
+  expect(summary.ready).toBe(false);expect(summary.problems.join(' ')).toMatch(/Sunscreen: The amounts add up/);
+  draft.items[1].custom={mode:'exact',weights:[],fixed:[],personFixed:[{personId:'a1',amount:600},{personId:'b1',amount:300}],people:2};
+  summary=reviewSummary(draft,trip);
+  expect(summary.ready).toBe(true);
+  expect(summary.groups.find(g=>g.name==='Sunscreen · custom split')).toMatchObject({people:2,amount:900});
+  const expense=expenseFromDraft(draft,trip,'r',key);
+  const alloc=allocateExpense({total:expense.total,payers:expense.payers,splits:expense.lines.flatMap(l=>l.splits)},trip.people);
+  const byFamily=(f:string)=>alloc.filter(a=>a.familyId===f).reduce((n,a)=>n+a.amount,0);
+  expect(byFamily('A')).toBe(175+600);expect(byFamily('B')).toBe(175+300);
  });
 });

@@ -92,6 +92,7 @@ test('organizer plans a trip, splits a receipt, settles up and switches trips',a
  await review.click();
  const sheet=page.getByRole('dialog');
  await expect(sheet.getByRole('status')).toContainText('Totals match');
+ await shot(page,testInfo,'receipt-review-top');
  // Two meals that day, so nothing is pre-assigned: send everything to dinner, then sunscreen to everyone.
  await expect(sheet.getByLabel('Assign item 1')).toHaveValue('');
  const dinnerId=await sheet.getByLabel('Assign every item to').locator('option',{hasText:'Sardine dinner'}).getAttribute('value');
@@ -102,6 +103,19 @@ test('organizer plans a trip, splits a receipt, settles up and switches trips',a
  await sheet.getByLabel('Assign item 2').selectOption({label:'Only Weber'});
  await expect(sheet.getByLabel('Totals by meal or activity')).toContainText('Only Weber');
  await expect(sheet.getByLabel('Totals by meal or activity').locator('.assignment-row',{hasText:'Only Weber'})).toContainText('1 person');
+ await sheet.getByLabel('Assign item 2').selectOption({label:'Only Ana'});
+ await expect(sheet.getByLabel('Totals by meal or activity').locator('.assignment-row',{hasText:'Only Ana'})).toContainText('1 person');
+ // Custom split: the same editor as a new expense, here exact amounts for two people.
+ await sheet.getByLabel('Assign item 2').selectOption({label:'Custom split…'});
+ const editor=sheet.locator('.receipt-item-split');
+ await expect(editor.getByRole('group',{name:'Split options'})).toBeVisible();
+ await editor.getByRole('button',{name:'Exact amounts',exact:true}).click();
+ const item2=Number((await sheet.getByLabel('Amount for item 2').inputValue()).replace(',','.'));
+ await editor.getByLabel(/^Ana:/).fill((item2-1).toFixed(2));
+ await expect(sheet.locator('.review-problems')).toContainText('add up to');
+ await editor.getByLabel(/^Ben:/).fill('1.00');
+ await expect(sheet.getByLabel('Totals by meal or activity')).toContainText('custom split');
+ await editor.scrollIntoViewIfNeeded();await shot(page,testInfo,'receipt-custom-split');
  await sheet.getByLabel('Assign item 2').selectOption(dinnerId!);
  await sheet.getByLabel('Paid by').selectOption({label:'Silva'});
  await expect(sheet.getByLabel('Totals by meal or activity')).toContainText('Sardine dinner');

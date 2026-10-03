@@ -695,3 +695,8 @@ input[type=date]{min-width:150px}
 .done-divider::before,.done-divider::after{content:"";flex:1;height:1px;background:var(--line)}
 .done-divider::before{flex:0 0 12px}
 @media(prefers-reduced-motion:reduce){.just-ticked{animation:none}::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none!important}}
+/* Receipt review: an item with its own split editor, full width under the item */
+.receipt-item-split{grid-column:1/-1;margin:4px 0 6px}
+.receipt-item-split .split-editor{margin:0}
+/* iOS gives date inputs an intrinsic width that can push past the screen edge */
+.receipt-fields input[type=date],.form-row input[type=date]{display:block;width:100%;min-width:0;max-width:100%;-webkit-appearance:none;appearance:none}
