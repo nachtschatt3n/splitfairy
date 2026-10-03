@@ -700,3 +700,11 @@ input[type=date]{min-width:150px}
 .receipt-item-split .split-editor{margin:0}
 /* iOS gives date inputs an intrinsic width that can push past the screen edge */
 .receipt-fields input[type=date],.form-row input[type=date]{display:block;width:100%;min-width:0;max-width:100%;-webkit-appearance:none;appearance:none}
+/* Scanning receipts: camera or files, several at once */
+.upload-buttons{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:6px}
+.upload-buttons label{position:relative;cursor:pointer;min-height:44px}
+.upload-buttons input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer}
+.scan-thumbs{list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px;margin:12px 0 0;padding:0}
+.scan-thumbs li{position:relative;aspect-ratio:3/4;max-width:100%;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:var(--surface-2)}
+.scan-thumbs img{width:100%;height:100%;object-fit:cover;display:block}
+.scan-thumbs .icon-button{position:absolute;top:4px;right:4px;width:32px;height:32px;min-height:32px;padding:0;background:rgba(0,0,0,.55);color:#fff}

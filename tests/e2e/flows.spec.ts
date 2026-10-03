@@ -84,7 +84,7 @@ test('organizer plans a trip, splits a receipt, settles up and switches trips',a
  // Receipt: photo -> real worker -> (fake) vision model -> human review -> expense.
  await page.getByRole('button',{name:'Add new'}).click();
  await page.getByRole('dialog').getByRole('button',{name:/Scan a receipt/}).click();
- await page.locator('.upload-zone input[type=file]').setInputFiles({name:'receipt.jpg',mimeType:'image/jpeg',buffer:await receiptPhoto()});
+ await page.getByLabel('Choose receipt photos or files').setInputFiles({name:'receipt.jpg',mimeType:'image/jpeg',buffer:await receiptPhoto()});
  await page.getByRole('button',{name:/Extract items/}).click();
  const review=page.getByRole('button',{name:'Review'});
  // The worker picks the photo up within seconds; the app refreshes the trip every 15 s.
