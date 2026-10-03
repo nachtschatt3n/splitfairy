@@ -23,7 +23,13 @@ export const FILES_PER_STAY=10;
 const tokenHash=(token:string)=>createHash('sha256').update(token).digest('hex');
 export const freshTrip=(id:string,name:string,start:string,end:string):Trip=>({id,name,start,end,version:0,archived:false,families:[],people:[],events:[],shopping:[],gear:[],transport:[],stays:[],legs:[],expenses:[],payments:[],receipts:[],activity:[]});
 
+type TripListener=(tripId:string)=>void;
 export class Store{
+ /** Open apps listen here (server-sent events) to refresh as soon as anyone changes their trip. */
+ private listeners=new Set<TripListener>();
+ onTripChange(listener:TripListener){this.listeners.add(listener);return()=>{this.listeners.delete(listener);};}
+ // After the current transaction has committed.
+ private changed(tripId:string){setImmediate(()=>{for(const l of this.listeners)try{l(tripId);}catch{/* a closed stream */}});}
  constructor(public db:DatabaseSync){
   db.exec(`PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL;
   CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,email TEXT UNIQUE NOT NULL,name TEXT NOT NULL,admin INTEGER NOT NULL DEFAULT 0);
@@ -79,7 +85,7 @@ export class Store{
    else{if(!['failed','review'].includes(receipt.status))throw new InputError('This receipt cannot be dismissed');receipt.status='dismissed';}
    receipt.version++;trip.version++;
    trip.activity.unshift({id:randomUUID(),at:new Date().toISOString(),actor:actor.name,description:`${action} receipt`});trip.activity=trip.activity.slice(0,300);
-   this.db.prepare('UPDATE trips SET data=? WHERE id=?').run(JSON.stringify(trip),tripId);this.db.exec('COMMIT');return trip;
+   this.db.prepare('UPDATE trips SET data=? WHERE id=?').run(JSON.stringify(trip),tripId);this.changed(tripId);this.db.exec('COMMIT');return trip;
   }catch(error){this.db.exec('ROLLBACK');throw error;}
  }
  /** Per-email sign-in budget that survives new codes and spoofed client IPs: 5 codes and 10 wrong guesses per hour. */
@@ -166,7 +172,7 @@ export class Store{
    const snapshot=()=>JSON.stringify([trip.photos??[],trip.files??[]]);const before=snapshot();const result=change(trip);
    if(snapshot()!==before){
     trip.version++;trip.activity.unshift({id:randomUUID(),at:new Date().toISOString(),actor:actor.name,description});trip.activity=trip.activity.slice(0,300);
-    this.db.prepare('UPDATE trips SET data=? WHERE id=?').run(JSON.stringify(trip),tripId);
+    this.db.prepare('UPDATE trips SET data=? WHERE id=?').run(JSON.stringify(trip),tripId);this.changed(tripId);
    }
    this.db.exec('COMMIT');return result;
   }catch(error){this.db.exec('ROLLBACK');throw error;}
@@ -256,7 +262,7 @@ export class Store{
      if(command.entity==='family'||command.entity==='person')for(const st of trip.stays??[]){const kept=(st.schedule??[]).filter(e=>e.familyId!==value.id&&e.personId!==value.id);if(kept.length!==(st.schedule??[]).length){st.schedule=kept;st.version++;}}
      if(command.entity==='event')trip.photos=(trip.photos??[]).filter(p=>p.eventId!==value.id);
      // Things a removed family was bringing go back to "not decided yet".
-     if(command.entity==='family'){for(const item of trip.shopping)if(item.buyerId===value.id){item.buyerId=null;item.version++;}for(const item of trip.gear??[])if(item.familyId===value.id){item.familyId=null;item.version++;}for(const t of trip.transport??[])if(t.familyId===value.id){t.familyId=null;t.version++;}}
+     if(command.entity==='family'){for(const item of trip.shopping)if(item.buyerId===value.id||item.boughtBy===value.id){if(item.buyerId===value.id)item.buyerId=null;if(item.boughtBy===value.id)item.boughtBy=null;item.version++;}for(const item of trip.gear??[])if(item.familyId===value.id){item.familyId=null;item.version++;}for(const t of trip.transport??[])if(t.familyId===value.id){t.familyId=null;t.version++;}}
      // Items that were going in a removed car or flight stay on the list without a transport.
      if(command.entity==='transport')for(const item of trip.gear??[])if(item.transportId===value.id||(item.route??[]).includes(value.id)){item.route=(item.route??[]).filter(t=>t!==value.id);item.transportId=item.route[0]??null;item.version++;}
     }else{
@@ -273,7 +279,7 @@ export class Store{
       case 'stay':parsed=staySchema.parse(value);for(const g of parsed.guests)if(!trip.people.some(x=>x.id===g.id))throw new InputError('Unknown guest');for(const e of parsed.schedule){if(e.familyId&&!trip.families.some(f=>f.id===e.familyId))throw new InputError('Unknown family in arrivals');if(e.personId&&!trip.people.some(p=>p.id===e.personId))throw new InputError('Unknown person in arrivals');}if(parsed.expenseId&&!trip.expenses.some(e=>e.id===parsed.expenseId))throw new InputError('Unknown booking cost');break;
       case 'leg':parsed=legSchema.parse(value);if(!(trip.transport??[]).some(t=>t.id===parsed.transportId))throw new InputError('Unknown car or flight');for(const p of parsed.people)if(!trip.people.some(x=>x.id===p))throw new InputError('Unknown traveller');break;
       case 'transport':parsed=transportSchema.parse(value);if(parsed.familyId&&!trip.families.some(f=>f.id===parsed.familyId))throw new InputError('Unknown family');break;
-      case 'shopping':{parsed=shoppingSchema.parse(value);const ev=parsed.eventId?trip.events.find(e=>e.id===parsed.eventId):null;if(parsed.eventId&&!ev)throw new InputError('Unknown event');if(ev?.kind==='restaurant')throw new InputError('Restaurants have no shopping list');if(parsed.buyerId&&!trip.families.some(f=>f.id===parsed.buyerId))throw new InputError('Unknown family');break;}
+      case 'shopping':{parsed=shoppingSchema.parse(value);const ev=parsed.eventId?trip.events.find(e=>e.id===parsed.eventId):null;if(parsed.eventId&&!ev)throw new InputError('Unknown event');if(ev?.kind==='restaurant')throw new InputError('Restaurants have no shopping list');if(parsed.buyerId&&!trip.families.some(f=>f.id===parsed.buyerId))throw new InputError('Unknown family');if(!parsed.done)parsed.boughtBy=null;if(parsed.boughtBy&&!trip.families.some(f=>f.id===parsed.boughtBy))throw new InputError('Unknown family');break;}
       case 'expense':{
        const e=expenseSchema.parse(value);
        if(old&&role!=='organizer'&&old.authorId!==actor.id)throw new AccessError();
@@ -317,7 +323,7 @@ export class Store{
     }
    }
    trip.version++;trip.activity.unshift({id:randomUUID(),at:new Date().toISOString(),actor:actor.name,description:`${command.action} ${command.entity}`});trip.activity=trip.activity.slice(0,300);
-   this.db.prepare('UPDATE trips SET data=? WHERE id=?').run(JSON.stringify(trip),tripId);
+   this.db.prepare('UPDATE trips SET data=? WHERE id=?').run(JSON.stringify(trip),tripId);this.changed(tripId);
    this.db.prepare('INSERT INTO mutations(id,trip_id,user_id,created) VALUES(?,?,?,?)').run(command.mutationId,tripId,actor.id,Date.now());this.db.exec('COMMIT');return trip;
   }catch(error){this.db.exec('ROLLBACK');throw error;}
  }

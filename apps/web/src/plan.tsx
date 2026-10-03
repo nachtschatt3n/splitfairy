@@ -7,7 +7,6 @@ import type {Event,Leg,Shopping,Stay,Trip} from '../../../packages/domain/src/mo
 import {Button,Empty,Sheet,euro,fmt,fmtTime,today,uid,type Remove,type Save} from './common.js';
 import {api} from './api.js';
 import {MealShopping,ShoppingSheet,ShoppingSummary} from './shopping.js';
-import {TickProvider} from './tick.js';
 
 const KINDS:[Event['kind'],string][]=[['breakfast','Breakfast'],['lunch','Lunch'],['dinner','Dinner'],['restaurant','Restaurant'],['activity','Activity']];
 const ORDER=KINDS.map(([k])=>k);
@@ -108,7 +107,7 @@ export function Plan({trip,save,remove,busy,photos,who,intent,onAddBill,routeDay
  const spent=(id:string)=>trip.expenses.filter(x=>x.status==='posted').flatMap(x=>x.lines.flatMap(l=>l.splits.filter(s=>s.eventId===id).map(s=>s.amount))).reduce((a,b)=>a+b,0);
  const addItem=(text:string,eventId:string|null)=>save('shopping',{id:uid(),text,eventId,buyerId:null,done:false,version:0});
 
- return <TickProvider>
+ return <>
   <TripOverview trip={trip} day={day} onDay={setDay}/>
   <div className="day-strip" role="tablist" aria-label="Trip days">{days.map(d=><button key={d} role="tab" aria-selected={day===d} onClick={()=>setDay(d)} className={day===d?'selected':''}><span>{new Date(`${d}T12:00:00`).toLocaleDateString('en-GB',{weekday:'short'})}</span><strong>{d.slice(-2)}</strong>{(trip.events.some(e=>e.date===d)||(trip.legs??[]).some(l=>l.departDate===d))&&<i className="day-dot" aria-hidden="true"/>}</button>)}</div>
   <div className="two-column plan-grid">
@@ -119,7 +118,7 @@ export function Plan({trip,save,remove,busy,photos,who,intent,onAddBill,routeDay
      {entries.map(x=><div className={`tl-item ${x.kind}`} key={x.key}>
       <time className="tl-time" dateTime={x.time||undefined}>{fmtTime(x.time)}</time>
       <span className="tl-dot" aria-hidden="true">{x.kind==='event'?(x.event!.kind==='activity'?<Sun size={13}/>:x.event!.kind==='restaurant'?<Wine size={13}/>:<UtensilsCrossed size={13}/>):x.kind==='leg'||x.kind==='arrive'?<TransportIcon kind={(trip.transport??[]).find(t=>t.id===x.leg!.transportId)?.kind??'other'} size={13}/>:<BedDouble size={13}/>}</span>
-      {x.kind==='event'?(()=>{const e=x.event!;const items=trip.shopping.filter(s=>s.eventId===e.id).sort((a,b)=>Number(a.done)-Number(b.done));const cost=spent(e.id);return <article className="event-card tl-card" aria-label={e.title}>
+      {x.kind==='event'?(()=>{const e=x.event!;const items=trip.shopping.filter(s=>s.eventId===e.id);const cost=spent(e.id);return <article className="event-card tl-card" aria-label={e.title}>
        <div className="event-head">{photosOf(trip,e.id).length>0&&<StayCover trip={trip} place={eventPlace(e)} compact onOpen={index=>setViewer({place:eventPlace(e),index})}/>}<div><span className="event-type">{e.kind}</span><h3>{e.title}</h3><p>{joiningLabel(e,trip)}{e.owner?` · ${e.owner} organizes`:''}{cost?` · ${euro(cost)} spent`:''}</p>{e.address&&<a className="map-link" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.address)}`} target="_blank" rel="noreferrer"><MapPin size={14}/> {e.address}</a>}{e.recipeUrl&&<a className="map-link" href={e.recipeUrl} target="_blank" rel="noreferrer"><BookOpen size={14}/> Recipe · {(()=>{try{return new URL(e.recipeUrl).hostname.replace(/^www\./,'');}catch{return 'link';}})()}</a>}{e.notes&&<p className="event-notes">{e.notes}</p>}</div>
         <button type="button" className="icon-button subtle" aria-label={`Edit ${e.title}`} onClick={()=>setSheet({event:e})}><Pencil size={16}/></button></div>
        {e.kind==='restaurant'?<div className="event-bill">{cost?<p>The bill: <strong>{euro(cost)}</strong></p>:<p className="helper">No bill yet.</p>}<Button kind="secondary" disabled={!e.participants.length} onClick={()=>onAddBill?.(e.id)}><ReceiptText size={16}/> {cost?'Add another bill':'Add the bill'}</Button>{!e.participants.length&&<p className="helper">Choose who is joining first.</p>}</div>
@@ -140,5 +139,5 @@ export function Plan({trip,save,remove,busy,photos,who,intent,onAddBill,routeDay
   {viewer&&<PhotoViewer key={`${viewer.place.id}-${viewer.index}`} trip={trip} place={viewer.place} start={viewer.index} actions={photos} onClose={closeViewer}/>}
   {sheet&&<EventSheet trip={trip} event={sheet.event} day={day} save={save} remove={remove} busy={busy} photos={photos} onPhoto={index=>sheet.event&&setViewer({place:eventPlace(sheet.event),index})} onClose={()=>setSheet(null)}/>}
   {itemSheet&&<ShoppingSheet key={itemSheet.id} trip={trip} item={trip.shopping.find(s=>s.id===itemSheet.id)??itemSheet} save={save} remove={remove} busy={busy} onClose={()=>setItemSheet(null)}/>}
- </TickProvider>;
+ </>;
 }

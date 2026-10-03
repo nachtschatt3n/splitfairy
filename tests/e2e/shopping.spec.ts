@@ -33,13 +33,15 @@ test('grocery items say which family buys them, can be claimed, and filtered',as
  await page.getByRole('dialog').getByLabel('Who buys it').selectOption({label:'Everyone'});await page.getByRole('dialog').getByRole('button',{name:'Save changes'}).click();
  await expect(list.locator('.shop-row',{hasText:'Sardines'}).locator('.buyer-tag')).toHaveCount(0);
 
- // At the store: ours first, then anyone; Moncrief's olive oil is not shown; ticked items move to the basket.
- await list.getByRole('button',{name:'Shopping trip'}).click();
- await expect(list.locator('.shop-group').first()).toContainText('Uhl buys');
- await expect(list).not.toContainText('Olive oil');
+ // At the store: everything still to buy, ours first (Uhl's lemons), others' with their tag; ticked items land in our cart.
+ await list.getByRole('button',{name:'We’re at the store'}).click();
+ await expect(list.locator('.shop-row').first()).toContainText('Lemons');
+ await expect(list.locator('.shop-row',{hasText:'Olive oil'})).toContainText('Moncrief buys');
  await shot(page,testInfo,'shopping-trip');
  await list.locator('.shop-row',{hasText:'Lemons'}).getByRole('checkbox').click();
- await expect(list.locator('.shop-group',{hasText:'In the basket'})).toContainText('Lemons');
+ // Saved at once, but it stays in "To buy" for a moment, then moves to our cart.
+ await expect(list.locator('.shop-row',{hasText:'Lemons'})).toContainText('In Uhl’s cart');
+ await expect(list.locator('.shop-group',{hasText:'Our cart'})).toContainText('Lemons',{timeout:8000});
  await list.getByRole('button',{name:'Done shopping'}).click();
  await expect(list.getByLabel('Add to the list')).toBeVisible();
 
@@ -67,9 +69,9 @@ test('meal ingredients added in the plan appear on the shopping list under the m
  const dinner=page.getByRole('article',{name:'Pasta night'});
  await dinner.getByLabel('Add to shopping for Pasta night').fill('Basil');await dinner.getByLabel('Add to shopping for Pasta night').press('Enter');
  await openSection(page,'Shop');
- await expect(page.locator('.shop-group',{hasText:'Pasta night'})).toContainText('Basil');
+ await expect(page.getByRole('region',{name:'Shopping list'}).locator('.shop-row',{hasText:'Basil'})).toContainText('for Pasta night');
  // Adding for a meal from the list.
  await page.getByLabel('For',{exact:true}).selectOption((await page.getByLabel('For',{exact:true}).locator('option',{hasText:'Pasta night'}).getAttribute('value'))!);
  await page.getByLabel('Add to the list').fill('Parmesan');await page.getByLabel('Add to the list').press('Enter');
- await expect(page.locator('.shop-group',{hasText:'Pasta night'})).toContainText('Parmesan');
+ await expect(page.getByRole('region',{name:'Shopping list'}).locator('.shop-row',{hasText:'Parmesan'})).toContainText('for Pasta night');
 });

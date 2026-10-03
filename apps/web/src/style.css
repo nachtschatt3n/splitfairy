@@ -689,12 +689,10 @@ input[type=date]{min-width:150px}
 @keyframes tick-flash{0%{background:rgba(61,139,253,.32)}100%{background:rgba(61,139,253,0)}}
 .shop-check input,.pack-check input{transition:transform .12s ease-out}
 .shop-check input:active,.pack-check input:active{transform:scale(.88)}
-::view-transition-group(*){animation-duration:.34s;animation-timing-function:cubic-bezier(.2,0,0,1)}
-::view-transition-old(root),::view-transition-new(root){animation:none}
 .done-divider{display:flex;align-items:center;gap:10px;margin:10px 0 2px;color:var(--muted);font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
 .done-divider::before,.done-divider::after{content:"";flex:1;height:1px;background:var(--line)}
 .done-divider::before{flex:0 0 12px}
-@media(prefers-reduced-motion:reduce){.just-ticked{animation:none}::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none!important}}
+@media(prefers-reduced-motion:reduce){.just-ticked{animation:none}}
 /* Receipt review: an item with its own split editor, full width under the item */
 .receipt-item-split{grid-column:1/-1;margin:4px 0 6px}
 .receipt-item-split .split-editor{margin:0}
@@ -708,3 +706,20 @@ input[type=date]{min-width:150px}
 .scan-thumbs li{position:relative;aspect-ratio:3/4;max-width:100%;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:var(--surface-2)}
 .scan-thumbs img{width:100%;height:100%;object-fit:cover;display:block}
 .scan-thumbs .icon-button{position:absolute;top:4px;right:4px;width:32px;height:32px;min-height:32px;padding:0;background:rgba(0,0,0,.55);color:#fff}
+/* Shopping list: one list, the meal on each item, whose cart it is in */
+.shop-check>span{min-width:0}
+.meal-tag{display:block;margin-top:1px;color:var(--muted);font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.shop-check span.done .meal-tag{display:block}
+.cart-tag{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;background:rgba(61,139,253,.16);color:var(--ink);font-size:12px;font-weight:700;white-space:nowrap}
+.shop-row .done .cart-tag,.shop-row .done .meal-tag{text-decoration:none}
+.shop-check span.done{text-decoration:line-through;text-decoration-color:var(--muted)}
+.shop-check span.done small:not(.meal-tag){text-decoration:none;display:inline-block}
+.cart-group h3 svg{vertical-align:-2px}
+.settle-in{animation:settle-in .45s cubic-bezier(.2,0,0,1)}
+@keyframes settle-in{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+/* Live notes, above the phone menu */
+.live-notices{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + var(--safe-bottom,0px));z-index:60;display:grid;gap:8px;width:min(420px,calc(100% - 32px));pointer-events:none}
+.live-notice{pointer-events:auto;display:flex;align-items:center;gap:10px;min-height:44px;padding:10px 14px;border:0;border-radius:14px;background:var(--ink);color:var(--bg);font:600 14px 'DM Sans',sans-serif;text-align:left;box-shadow:0 8px 24px rgba(0,0,0,.22);animation:notice-in .3s cubic-bezier(.2,0,0,1);cursor:pointer}
+@media(min-width:741px){.live-notices{bottom:24px}}
+@keyframes notice-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.settle-in,.live-notice{animation:none}}

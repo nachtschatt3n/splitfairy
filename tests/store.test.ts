@@ -192,6 +192,17 @@ describe('journey: stays, travel legs and routes',()=>{
   expect(l.legs![0].flightNo).toBe('LH1172');
   expect(()=>store.mutate(actor,id,cmd('leg',{id:'g',transportId:'plane',from:'FRA',to:'LIS',departDate:'2026-10-01',arriveDate:'2026-10-01',flightNo:'not a flight',version:0},0,'k4'))).toThrow(/flight number/);
  });
+ it('remembers whose cart a ticked item is in, forgets it when unticked, and tells listeners about every change',async()=>{
+  store.addUser(actor);const {id}=store.createTrip(actor,'Italy','2026-10-01','2026-10-09');
+  const seen:string[]=[];const off=store.onTripChange(t=>seen.push(t));
+  store.mutate(actor,id,cmd('family',{id:'W',name:'Wolf',version:0},0,'c1'));
+  const item=store.mutate(actor,id,cmd('shopping',{id:'s',text:'Butter',eventId:null,done:true,boughtBy:'W',version:0},0,'c2')).shopping[0];
+  expect(item.boughtBy).toBe('W');
+  expect(store.mutate(actor,id,cmd('shopping',{...item,done:false},item.version,'c3')).shopping[0].boughtBy).toBeNull();
+  expect(()=>store.mutate(actor,id,cmd('shopping',{id:'x',text:'Milk',eventId:null,done:true,boughtBy:'ghost',version:0},0,'c4'))).toThrow(/Unknown family/);
+  await new Promise(r=>setImmediate(r));off();
+  expect(seen.filter(t=>t===id).length).toBeGreaterThanOrEqual(3);
+ });
  it('records which family buys a shopping item, and frees it when the family goes',()=>{
   const id=base();
   store.mutate(actor,id,cmd('family',{id:'M',name:'Moncrief',version:0},0,'b0'));

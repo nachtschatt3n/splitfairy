@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 import {createTrip,openSection,signInAsAdmin,unique} from './helpers.js';
 
-test('a ticked item flashes, waits a moment, then moves below the open ones; a second tap undoes it',async({page},testInfo)=>{
+test('a ticked item is saved at once, stays in place and can be unticked, then moves below after a few seconds',async({page},testInfo)=>{
  test.setTimeout(90_000);
  await signInAsAdmin(page);
  await createTrip(page,unique(testInfo,'Tick'));
@@ -11,40 +11,38 @@ test('a ticked item flashes, waits a moment, then moves below the open ones; a s
  const rows=list.locator('.shop-row');
  const names=async()=>(await rows.allInnerTexts()).map(t=>t.split('\n')[0].trim());
  await expect.poll(names).toEqual(['Bread','Milk','Eggs','Olives']);
- // No "Saved." note pushing the list down on every tick.
  if(await page.locator('.toast').count())await page.locator('.toast').click();
+ const tripId=decodeURIComponent(new URL(page.url()).pathname.split('/')[2]);
+ const saved=async(text:string)=>(await (await page.request.get(`/api/v1/trips/${tripId}`)).json()).trip.shopping.find((i:any)=>i.text===text).done;
  const dir=process.env.SHOT_DIR,p=testInfo.project.name;
- await rows.filter({hasText:'Bread'}).getByRole('checkbox').click();
- // At once: ticked and flashing, but still in place.
- await expect(rows.filter({hasText:'Bread'}).getByRole('checkbox')).toBeChecked();
+ const bread=rows.filter({hasText:'Bread'}).getByRole('checkbox');
+ await bread.click();
+ await expect(bread).toBeChecked();
  await expect(rows.filter({hasText:'Bread'})).toHaveClass(/just-ticked/);
  if(dir)await page.screenshot({path:`${dir}/${p}-tick-1-flash.png`});
+ // Saved right away, so the others see it; still in its place.
+ await expect.poll(()=>saved('Bread')).toBe(true);
  expect((await names())[0]).toBe('Bread');
  await expect(page.locator('.toast')).toHaveCount(0);
- // A second item ticked quickly: both wait for the last tap and move together.
- await page.waitForTimeout(500);
- await rows.filter({hasText:'Eggs'}).getByRole('checkbox').click();
- await page.waitForTimeout(600);
- expect(await names()).toEqual(['Bread','Milk','Eggs','Olives']);
- if(dir)await page.screenshot({path:`${dir}/${p}-tick-2-waiting.png`});
- await expect.poll(names,{timeout:5000}).toEqual(['Milk','Olives','Bread','Eggs']);
- await expect(list.locator('.done-divider')).toContainText('Bought · 2');
- if(dir){await page.waitForTimeout(500);await page.screenshot({path:`${dir}/${p}-tick-3-moved.png`});}
- // Tapping twice within the pause changes nothing.
+ // Other items can be ticked meanwhile, and a slip is undone with a second tap.
  const milk=rows.filter({hasText:'Milk'}).getByRole('checkbox');
- await milk.click();await milk.click();
- await page.waitForTimeout(1500);
- expect((await names())[0]).toBe('Milk');await expect(milk).not.toBeChecked();
- // Unticking moves it back up after the pause, and it is saved.
+ await milk.click();await expect(milk).toBeChecked();
+ await milk.click();await expect(milk).not.toBeChecked();
+ await expect.poll(()=>saved('Milk')).toBe(false);
+ await rows.filter({hasText:'Eggs'}).getByRole('checkbox').click();
+ expect(await names()).toEqual(['Bread','Milk','Eggs','Olives']);
+ // After about five seconds the ticked ones settle below the open ones.
+ await expect.poll(names,{timeout:9000}).toEqual(['Milk','Olives','Bread','Eggs']);
+ await expect(list.locator('.done-divider')).toContainText('Bought · 2');
+ if(dir){await page.waitForTimeout(600);await page.screenshot({path:`${dir}/${p}-tick-2-settled.png`});}
+ // Unticking a settled item brings it straight back up.
  await rows.filter({hasText:'Bread'}).getByRole('checkbox').click();
- await expect.poll(names,{timeout:5000}).toEqual(['Bread','Milk','Olives','Eggs']);
- await page.reload();
- await expect(list.locator('.done-divider')).toContainText('Bought · 1');
- // A dialog opened during the pause stays open when the tick is saved.
+ await expect.poll(names).toEqual(['Bread','Milk','Olives','Eggs']);
+ await expect.poll(()=>saved('Bread')).toBe(false);
+ // A dialog opened while an item is settling stays open.
  await rows.filter({hasText:'Olives'}).getByRole('checkbox').click();
  await page.getByRole('button',{name:'Add new'}).click();
  await expect(page.getByRole('dialog')).toBeVisible();
- await expect.poll(async()=>(await (await page.request.get(`/api/v1/trips/${decodeURIComponent(new URL(page.url()).pathname.split('/')[2])}`)).json()).trip.shopping.find((i:any)=>i.text==='Olives').done,{timeout:5000}).toBe(true);
- await page.waitForTimeout(400);
+ await page.waitForTimeout(6000);
  await expect(page.getByRole('dialog')).toBeVisible();
 });

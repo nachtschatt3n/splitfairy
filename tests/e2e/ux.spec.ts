@@ -98,7 +98,7 @@ for(const scheme of ['light','dark'] as const){
    {name:'plan',open:p=>openSection(p,'Plan')},
    {name:'packing',open:p=>openSection(p,'Pack')},
    {name:'shopping',open:p=>openSection(p,'Shop')},
-   {name:'shopping-trip',open:async p=>{await openSection(p,'Shop');await p.getByRole('button',{name:'Shopping trip'}).click();}},
+   {name:'shopping-trip',open:async p=>{await openSection(p,'Shop');await p.getByRole('button',{name:'We’re at the store'}).click();}},
    {name:'packing-by-transport',open:async p=>{await openSection(p,'Pack');await p.getByRole('button',{name:'By transport'}).click();}},
    {name:'transport-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Pack');await p.getByRole('button',{name:'Edit Silva car'}).click();}},
    {name:'packing-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Pack');await p.getByRole('button',{name:'Edit Grill'}).click();}},

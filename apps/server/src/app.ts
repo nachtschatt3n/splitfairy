@@ -161,6 +161,16 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
  app.post('/api/v1/auth/logout',async(request,reply)=>{const token=request.cookies.splitfairy_session;if(token)config.store.db.prepare('DELETE FROM sessions WHERE token_hash=?').run(sha(token));reply.clearCookie('splitfairy_session',{path:'/'});return {ok:true};});
  app.get('/api/v1/trips',async(request)=>config.store.listTrips(auth(request)).map(t=>{const status=settleStatus(t,localDay(config.timeZone));return {id:t.id,name:t.name,start:t.start,end:t.end,archived:t.archived,theme:t.theme??'classic',cover:t.photos?.[0]?.id??null,settle:{open:status.open,overdueDays:status.overdueDays}};}));
  app.post('/api/v1/trips',async(request,reply)=>{const body=z.object({name:z.string().trim().min(1).max(160),start:z.iso.date(),end:z.iso.date(),theme:z.enum(TRIP_THEMES).default('classic')}).parse(request.body);const trip=config.store.createTrip(auth(request),body.name,body.start,body.end,body.theme,signupOpen());reply.status(201);return trip;});
+ // Live updates while the app is open: a tiny event whenever the trip changes; the app then fetches it.
+ app.get('/api/v1/trips/:tripId/events',async(request,reply)=>{
+  const user=auth(request),id=(request.params as any).tripId;config.store.role(user,id);
+  reply.hijack();
+  reply.raw.writeHead(200,{'content-type':'text/event-stream','cache-control':'no-cache, no-transform','connection':'keep-alive','x-accel-buffering':'no'});
+  reply.raw.write('retry: 3000\n\n');
+  const off=config.store.onTripChange(tripId=>{if(tripId===id)reply.raw.write(`data: ${JSON.stringify({trip:id})}\n\n`);});
+  const ping=setInterval(()=>reply.raw.write(': ping\n\n'),25_000);
+  request.raw.on('close',()=>{off();clearInterval(ping);});
+ });
  app.get('/api/v1/trips/:tripId',async(request)=>{const user=auth(request),id=(request.params as any).tripId;return {trip:visibleTrip(config.store.getTrip(user,id),user),role:config.store.role(user,id),members:config.store.members(user,id)};});
  app.post('/api/v1/trips/:tripId/invites',async(request)=>{const user=auth(request),id=(request.params as any).tripId,body=inviteSchema.parse(request.body);config.store.addMember(user,id,body.email,body.role);const mail=inviteEmail({inviter:user.name,tripName:config.store.getTrip(user,id).name,url:siteUrl(request)});await config.sendMail(body.email,mail.subject,mail.text,mail.html);return {ok:true};});
  const siteUrl=(request:{protocol:string;host:string})=>`${request.protocol}://${request.host}`;

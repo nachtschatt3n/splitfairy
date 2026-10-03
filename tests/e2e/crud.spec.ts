@@ -59,8 +59,8 @@ test('every entity can be created, changed and removed from the interface',async
  await dinner.getByLabel('Add to shopping for Fish dinner').fill('Lemon');await dinner.getByLabel('Add to shopping for Fish dinner').press('Enter');
  await openSection(page,'Shop');
  await page.getByLabel('Add to the list').fill('Sun cream');await page.getByRole('button',{name:'Add item'}).click();
- await expect(page.locator('.shop-group',{hasText:'General'})).toContainText('Sun cream');
- await page.locator('.shop-group',{hasText:'General'}).getByRole('button',{name:'Edit Sun cream'}).click();
+ await expect(page.locator('.shop-group',{hasText:'Sun cream'})).toContainText('Sun cream');
+ await page.locator('.shop-group',{hasText:'Sun cream'}).getByRole('button',{name:'Edit Sun cream'}).click();
  await sheet(page).getByLabel('Item').fill('Sun cream SPF 50');
  const dinnerOption=await sheet(page).getByLabel('For').locator('option',{hasText:'Fish dinner'}).getAttribute('value');
  await sheet(page).getByLabel('For').selectOption(dinnerOption!);await sheet(page).getByLabel('Already bought').check();

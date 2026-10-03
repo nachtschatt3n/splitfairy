@@ -2,7 +2,7 @@ import {useRef,useState,type FormEvent} from 'react';
 import {ArrowRight,Bus,Car,Eye,Lock,Luggage,Package,Pencil,Plane,Plus,TrainFront,Trash2,Users} from 'lucide-react';
 import type {Gear,Transport,Trip,User} from '../../../packages/domain/src/model.js';
 import {Button,Empty,Sheet,uid,type Remove,type Save} from './common.js';
-import {TickProvider,useTick,withDone} from './tick.js';
+import {useSettled,useTick,withDone} from './tick.js';
 
 const NONE='__none';
 const KINDS:[Transport['kind'],string][]=[['car','Car'],['plane','Plane'],['train','Train'],['bus','Bus'],['other','Other']];
@@ -89,7 +89,7 @@ function PackRow({trip,item,myFamily,groupBy,save,remove,onMore}:{trip:Trip;item
   <button type="button" className="icon-button subtle" aria-label={`Delete ${item.text}`} onPointerDown={e=>e.preventDefault()} onClick={()=>{setEditing(false);void remove('gear',item);}}><Trash2 size={16}/></button>
   <button type="button" className="text-button" onPointerDown={e=>e.preventDefault()} onClick={()=>{setEditing(false);onMore();}}>More</button>
  </div>;
- return <div className={t.flashing?'pack-row just-ticked':'pack-row'} style={t.style}>
+ return <div className={`pack-row${t.className}`}>
   <label className="pack-check"><input type="checkbox" aria-label={`Packed: ${item.text}`} checked={t.checked} onChange={t.toggle}/></label>
   <button type="button" className={t.checked?'pack-name done':'pack-name'} onClick={()=>{setDraft(`${item.quantity>1?`${item.quantity}x `:''}${item.text}`);setEditing(true);}} aria-label={`Rename ${item.text}`}>
    <span>{item.quantity>1?`${item.quantity} × `:''}{item.text}{item.visibility==='family'&&<Lock size={13} className="pack-lock" aria-label="Only your family sees this"/>}</span>
@@ -101,6 +101,7 @@ function PackRow({trip,item,myFamily,groupBy,save,remove,onMore}:{trip:Trip;item
 }
 
 export function Packing({trip,user,save,remove,busy}:{trip:Trip;user:User|null|undefined;save:Save;remove:Remove;busy:boolean}){
+ const settled=useSettled();
  const gear=trip.gear??[],transport=trip.transport??[];
  // The signed-in person's family, when their login is linked to a person on the trip.
  const myFamily=trip.people.find(p=>p.email&&p.email===user?.email)?.familyId??null;
@@ -118,11 +119,11 @@ export function Packing({trip,user,save,remove,busy}:{trip:Trip;user:User|null|u
  const inGroup=(i:Gear,id:string|null)=>groupBy==='family'?(i.familyId??null)===id:id===null?!routeOf(i).length:routeOf(i).includes(id);
  const buckets=groupBy==='family'?[...trip.families.map(f=>({id:f.id as string|null,name:f.name,kind:undefined as Transport['kind']|undefined})),{id:null,name:'Not decided yet',kind:undefined}]
   :[...transport.map(t=>({id:t.id as string|null,name:t.name,kind:t.kind as Transport['kind']|undefined})),{id:null,name:'No transport yet',kind:undefined}];
- const groups=buckets.map(g=>({...g,items:gear.filter(i=>inGroup(i,g.id)).sort((a,b)=>Number(a.packed)-Number(b.packed)||a.text.localeCompare(b.text))}))
+ const groups=buckets.map(g=>({...g,items:gear.filter(i=>inGroup(i,g.id)).sort((a,b)=>a.text.localeCompare(b.text))}))
   .filter(g=>g.items.length&&(filter==='all'||(filter===NONE?g.id===null:g.id===filter)));
  const options=[['all','Everything'],...buckets.filter(b=>b.id&&gear.some(i=>inGroup(i,b.id))).map(b=>[b.id!,b.name]),...(gear.some(i=>inGroup(i,null))?[[NONE,buckets.at(-1)!.name]]:[])];
  const packed=gear.filter(i=>i.packed).length;
- return <TickProvider>
+ return <>
   <section className="card packing" aria-label="Packing list">
    <div className="pack-head"><div><h2 className="sr-only">Packing & equipment</h2>{gear.length>0&&<small>{packed} of {gear.length} packed{gear.some(i=>!i.familyId)?` · ${gear.filter(i=>!i.familyId).length} not decided`:''}</small>}</div>
     {gear.length>0&&<div className="progress" role="img" aria-label={`${packed} of ${gear.length} packed`}><div style={{width:`${Math.round(packed/gear.length*100)}%`}}/></div>}</div>
@@ -147,11 +148,11 @@ export function Packing({trip,user,save,remove,busy}:{trip:Trip;user:User|null|u
    </div>}
    {groups.map(g=><div className="shop-group" key={g.id??'none'}>
     <h3>{g.kind&&<TransportIcon kind={g.kind} size={14}/>} {g.name} <small>{g.items.filter(i=>i.packed).length}/{g.items.length}</small></h3>
-    {withDone(g.items,i=>i.packed,'Packed',i=><PackRow key={i.id} trip={trip} item={i} myFamily={myFamily} groupBy={groupBy} save={save} remove={remove} onMore={()=>setEditing(i)}/>)}
+    {withDone(g.items,i=>settled(i.id,i.packed),'Packed',i=><PackRow key={i.id} trip={trip} item={i} myFamily={myFamily} groupBy={groupBy} save={save} remove={remove} onMore={()=>setEditing(i)}/>)}
    </div>)}
    {!gear.length&&<Empty icon={<Luggage/>} heading="Nothing to pack yet" body="Type an item above and press Enter; keep typing to add the next. Shared things like the grill or travel cot, or your own list, visible only to your family."/>}
   </section>
   {editing&&<GearSheet key={editing.id} trip={trip} item={gear.find(i=>i.id===editing.id)??editing} myFamily={myFamily} save={save} remove={remove} busy={busy} onClose={()=>setEditing(null)}/>}
   {transportSheet&&<TransportSheet key={transportSheet.transport?.id??'new'} trip={trip} transport={transportSheet.transport} save={save} remove={remove} busy={busy} onClose={()=>setTransportSheet(null)}/>}
- </TickProvider>;
+ </>;
 }
