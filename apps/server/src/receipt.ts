@@ -35,8 +35,10 @@ const cents=(n:number)=>Math.round(n*100);
 const gap=(r:Reading)=>Math.abs(r.items.reduce((sum,i)=>sum+cents(i.amount),0)-cents(r.total));
 
 /** Asks the vision model; a second message can show it its first answer and what does not add up. */
-async function ask(url:string,model:string,image:Buffer,fetcher:typeof fetch,previous?:Reading){
- const messages:any[]=[{role:'user',content:PROMPT,images:[image.toString('base64')]}];
+async function ask(url:string,model:string,images:Buffer[],fetcher:typeof fetch,previous?:Reading){
+ // A long receipt comes in several photos, top to bottom, that may overlap.
+ const parts=images.length>1?`This receipt was photographed in ${images.length} parts, given in order from top to bottom. Read them as one receipt; where the photos overlap, a line that appears in two photos is listed only once. `:'';
+ const messages:any[]=[{role:'user',content:parts+PROMPT,images:images.map(i=>i.toString('base64'))}];
  if(previous){
   const sum=previous.items.reduce((n,i)=>n+cents(i.amount),0)/100;
   messages.push({role:'assistant',content:JSON.stringify(previous)},{role:'user',content:`Your items add up to ${sum.toFixed(2)} but the total is ${previous.total.toFixed(2)}. Look at the receipt again line by line: pair every label with the price on its own line, check the sign of discounts and deposits, and leave out total and payment lines. Return the corrected JSON only.`});
@@ -46,13 +48,18 @@ async function ask(url:string,model:string,image:Buffer,fetcher:typeof fetch,pre
  const envelope=await response.json() as any;return extracted.parse(JSON.parse(envelope.message?.content??'{}'));
 }
 
+/** Where page `n` (from 1) of a receipt's photos is stored. */
+export const receiptPage=(dataDir:string,tripId:string,receiptId:string,n:number)=>join(dataDir,'receipts',tripId,n<=1?`${receiptId}.jpg`:`${receiptId}.p${n}.jpg`);
+export const MAX_RECEIPT_PAGES=8;
+
 /** Greyscale, stretched contrast and a little sharpening help the model read phone photos; the stored photo is untouched. */
 async function forModel(image:Buffer){try{return await sharp(image).rotate().grayscale().normalize().sharpen({sigma:1}).jpeg({quality:90}).toBuffer();}catch{return image;}}
 
 export async function processReceipt(store:Store,dataDir:string,url:string,model:string,job:{tripId:string;receiptId:string},fetcher:typeof fetch=fetch){
  const row=store.db.prepare('SELECT data FROM trips WHERE id=?').get(job.tripId) as {data:string}|undefined;if(!row)return;
  try{
-  const image=await forModel(await readFile(join(dataDir,'receipts',job.tripId,`${job.receiptId}.jpg`)));
+  const pages=Math.max(1,JSON.parse(row.data).receipts?.find((r:{id:string})=>r.id===job.receiptId)?.pages??1);
+  const image=await Promise.all(Array.from({length:pages},async(_,i)=>forModel(await readFile(receiptPage(dataDir,job.tripId,job.receiptId,i+1)))));
   let parsed=await ask(url,model,image,fetcher);
   // Items that do not add up to the total usually mean a misread line: one self-check, kept only if it is closer.
   if(gap(parsed)>0){try{const second=await ask(url,model,image,fetcher,parsed);if(gap(second)<gap(parsed))parsed=second;}catch{/* keep the first reading */}}

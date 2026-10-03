@@ -723,3 +723,16 @@ input[type=date]{min-width:150px}
 @media(min-width:741px){.live-notices{bottom:24px}}
 @keyframes notice-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){.settle-in,.live-notice{animation:none}}
+/* Receipts in several photos */
+.scan-kind{display:flex;width:100%;margin-top:12px}.scan-kind button{flex:1}
+.scan-order{position:absolute;left:6px;top:6px;min-width:26px;height:26px;padding:0 6px;border-radius:999px;background:var(--primary);color:var(--on-primary);font:700 13px/26px 'DM Sans',sans-serif;text-align:center}
+.receipt-thumb{width:44px;height:56px;flex:none;object-fit:cover;border-radius:8px;border:1px solid var(--line);background:var(--surface-2)}
+.receipt-row.picked{background:rgba(61,139,253,.12);border-radius:12px}
+.combine-pick{display:flex;align-items:center;gap:6px;min-width:44px;min-height:44px;flex:none}
+.combine-pick input{width:22px;height:22px;accent-color:var(--link)}
+.combine-pick b{min-width:22px;height:22px;border-radius:999px;background:var(--primary);color:var(--on-primary);font-size:12px;line-height:22px;text-align:center}
+.review-section>.btn{width:100%;margin-top:10px}
+.receipt-photos{display:grid;gap:12px;align-self:start;position:sticky;top:0;max-height:calc(100vh - 120px);overflow:auto}
+.receipt-photos .receipt-photo{position:static}
+@media(max-width:740px){.receipt-photos{position:static;max-height:none;display:flex;overflow-x:auto;scroll-snap-type:x mandatory}.receipt-photos .receipt-photo{flex:0 0 min(80%,320px);scroll-snap-align:start}.receipt-photos .receipt-photo:only-child{flex-basis:100%}}
+.receipt-row .receipt-text{flex:1 1 140px;min-width:0}.receipt-row .receipt-actions-row{margin-left:auto}

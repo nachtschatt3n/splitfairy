@@ -80,6 +80,25 @@ describe('receipt upload',()=>{
   const svg=Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="400"><rect width="300" height="400" fill="#fff"/><text x="10" y="20">receipt text padding padding padding</text></svg>');
   expect((await app.inject({method:'POST',url:`/api/v1/trips/${trip.id}/receipts`,headers,payload:{image:svg.toString('base64')}})).statusCode).toBe(400);
  });
+ it('takes a long receipt in several photos, and combines receipts uploaded one by one',async()=>{
+  const sharp=(await import('sharp')).default;
+  const cookie=await login();const headers={cookie:`splitfairy_session=${cookie}`};
+  const trip=(await app.inject({method:'POST',url:'/api/v1/trips',headers,payload:{name:'Lisbon',start:'2026-10-01',end:'2026-10-09'}})).json();
+  const photo=async(background:string)=>(await sharp({create:{width:300,height:400,channels:3,background}}).jpeg().toBuffer()).toString('base64');
+  const long=await app.inject({method:'POST',url:`/api/v1/trips/${trip.id}/receipts`,headers,payload:{image:await photo('#fff'),more:[await photo('#eee')]}});
+  expect(long.statusCode).toBe(201);expect(long.json().pages).toBe(2);
+  const image=(page:number,id=long.json().id)=>app.inject({method:'GET',url:`/api/v1/trips/${trip.id}/receipts/${id}/image?page=${page}`,headers});
+  expect((await image(2)).statusCode).toBe(200);expect((await image(3)).statusCode).toBe(400);
+  // Two more photos uploaded as separate receipts belong to it: combine all three receipts into the first.
+  const a=(await app.inject({method:'POST',url:`/api/v1/trips/${trip.id}/receipts`,headers,payload:{image:await photo('#ddd')}})).json();
+  const b=(await app.inject({method:'POST',url:`/api/v1/trips/${trip.id}/receipts`,headers,payload:{image:await photo('#ccc')}})).json();
+  const merged=await app.inject({method:'POST',url:`/api/v1/trips/${trip.id}/receipts/merge`,headers,payload:{ids:[long.json().id,a.id,b.id]}});
+  expect(merged.statusCode).toBe(200);
+  const receipts=merged.json().trip.receipts;
+  expect(receipts).toHaveLength(1);expect(receipts[0]).toMatchObject({id:long.json().id,pages:4,status:'queued'});
+  expect((await image(4)).statusCode).toBe(200);expect((await image(1,a.id)).statusCode).toBe(403);
+  expect((await app.inject({method:'POST',url:`/api/v1/trips/${trip.id}/receipts/merge`,headers,payload:{ids:[long.json().id]}})).statusCode).toBe(400);
+ });
 });
 describe('people with accounts',()=>{
  it('invites a person saved with an email once, links them when they sign in, and keeps children without one',async()=>{

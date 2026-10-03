@@ -43,3 +43,16 @@ it('asks once more when the items do not add up, and keeps the reading that does
  expect(asked[1].messages[2].content).toContain('add up to 1.21 but the total is 1.37');
  expect(store.getTrip(user,trip.id).receipts[0].items).toEqual([{label:'Weissbier',amount:129},{label:'Pfand',amount:8}]);
 });
+it('reads a receipt in several photos as one, top to bottom',async()=>{
+ const store=new Store(new DatabaseSync(':memory:'));
+ const user={id:'u',email:'a@example.com',name:'A',admin:true};store.addUser(user);
+ const trip=store.createTrip(user,'Italy','2026-10-01','2026-10-03');trip.receipts.push({id:'r',status:'queued',items:[],total:null,merchant:'',date:'',error:null,version:1,authorId:'u',pages:3});
+ store.db.prepare('UPDATE trips SET data=? WHERE id=?').run(JSON.stringify(trip),trip.id);
+ const dir=await mkdtemp(join(tmpdir(),'splitfairy-receipt-'));await mkdir(join(dir,'receipts',trip.id),{recursive:true});
+ for(const name of ['r.jpg','r.p2.jpg','r.p3.jpg'])await writeFile(join(dir,'receipts',trip.id,name),Buffer.from([1,2,3]));
+ await processReceipt(store,dir,'http://ollama.local:11434','gemma4:26b-mlx',claimReceipt(store)!,async(_url,init)=>{
+  const payload=JSON.parse(String(init?.body));expect(payload.messages[0].images).toHaveLength(3);expect(payload.messages[0].content).toMatch(/3 parts/);
+  return new Response(JSON.stringify({message:{content:JSON.stringify({merchant:'Shop',date:'2026-10-01',total:3,items:[{label:'A',amount:1},{label:'B',amount:2}]})}}),{status:200});
+ });
+ expect(store.getTrip(user,trip.id).receipts[0]).toMatchObject({status:'review',total:300});
+});

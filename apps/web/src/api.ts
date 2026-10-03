@@ -42,5 +42,7 @@ export const api={
  deleteFile:(id:string,fileId:string)=>request<TripView>(`/trips/${id}/files/${fileId}`,{method:'DELETE'}),
  photo:async(id:string,target:{stayId?:string;eventId?:string},file:File,uploadId:string)=>request<Photo>(`/trips/${id}/photos`,{method:'POST',body:JSON.stringify({image:await base64(file),...target,uploadId})},90_000),
  deletePhoto:(id:string,photoId:string)=>request<TripView>(`/trips/${id}/photos/${photoId}`,{method:'DELETE'}),
- receipt:async(id:string,file:File,uploadId?:string)=>{const image=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(reader.error);reader.readAsDataURL(file);});return request<{id:string}>(`/trips/${id}/receipts`,{method:'POST',body:JSON.stringify({image,uploadId})},120_000);},
+ /** One receipt; further photos of the same long receipt go in `more`, top to bottom. */
+ receipt:async(id:string,file:File,uploadId?:string,more:File[]=[])=>{const encode=(f:File)=>new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(reader.error);reader.readAsDataURL(f);});const image=await encode(file),rest=[];for(const f of more)rest.push(await encode(f));return request<{id:string}>(`/trips/${id}/receipts`,{method:'POST',body:JSON.stringify({image,uploadId,...(rest.length?{more:rest}:{})})},180_000);},
+ mergeReceipts:(id:string,ids:string[])=>request<TripView>(`/trips/${id}/receipts/merge`,{method:'POST',body:JSON.stringify({ids})},60_000),
 };

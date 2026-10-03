@@ -3,7 +3,7 @@ import {createHash,randomBytes,randomUUID} from 'node:crypto';
 import {allocateExpense} from '../../../packages/domain/src/accounting.js';
 import {settleStatus} from '../../../packages/domain/src/settle-status.js';
 import {localDay} from './day.js';
-import {TRIP_THEMES,commandSchema,eventSchema,gearSchema,legSchema,staySchema,transportSchema,paymentSchema,expenseSchema,familySchema,personSchema,shoppingSchema,type Command,type Expense,type Photo,type StayFile,type Trip,type User} from '../../../packages/domain/src/model.js';
+import {TRIP_THEMES,commandSchema,eventSchema,gearSchema,legSchema,staySchema,transportSchema,paymentSchema,expenseSchema,familySchema,personSchema,shoppingSchema,type Command,type Expense,type Photo,type Receipt,type StayFile,type Trip,type User} from '../../../packages/domain/src/model.js';
 
 export class ConflictError extends Error{statusCode=409;constructor(message='This item changed on another device'){super(message);}}
 export class AccessError extends Error{statusCode=403;constructor(){super('Access denied');}}
@@ -85,6 +85,32 @@ export class Store{
    else{if(!['failed','review'].includes(receipt.status))throw new InputError('This receipt cannot be dismissed');receipt.status='dismissed';}
    receipt.version++;trip.version++;
    trip.activity.unshift({id:randomUUID(),at:new Date().toISOString(),actor:actor.name,description:`${action} receipt`});trip.activity=trip.activity.slice(0,300);
+   this.db.prepare('UPDATE trips SET data=? WHERE id=?').run(JSON.stringify(trip),tripId);this.changed(tripId);this.db.exec('COMMIT');return trip;
+  }catch(error){this.db.exec('ROLLBACK');throw error;}
+ }
+ /** Checks that receipts can be combined (same trip, yours or you organize, not read or posted yet) and returns them in order with their photo counts. */
+ receiptsToMerge(actor:User,tripId:string,ids:string[]):{id:string;pages:number}[]{
+  const role=this.role(actor,tripId),trip=this.getTrip(actor,tripId);
+  if(trip.archived)throw new InputError('Trip is archived');
+  if(new Set(ids).size!==ids.length)throw new InputError('Choose different receipts');
+  return ids.map(id=>{
+   const receipt=trip.receipts.find(r=>r.id===id);if(!receipt)throw new InputError('Receipt not found');
+   if(receipt.authorId!==actor.id&&role!=='organizer')throw new AccessError();
+   if(!['queued','review','failed'].includes(receipt.status))throw new InputError(receipt.status==='processing'?'A receipt is being read right now; try again in a moment':'Only receipts in the inbox can be combined');
+   return {id,pages:receipt.pages??1};
+  });
+ }
+ /** After the photos were copied: the first receipt gets them all and is read again; the others leave the inbox. */
+ mergeReceipts(actor:User,tripId:string,plan:{id:string;pages:number}[],pages:number):Trip{
+  this.db.exec('BEGIN IMMEDIATE');
+  try{
+   const row=this.db.prepare('SELECT data FROM trips WHERE id=?').get(tripId) as {data:string}|undefined;if(!row)throw new AccessError();const trip:Trip=JSON.parse(row.data);
+   const receipts=plan.map(p=>trip.receipts.find(r=>r.id===p.id));
+   if(receipts.some(r=>!r||!['queued','review','failed'].includes(r.status)||(r.pages??1)!==plan.find(p=>p.id===r.id)!.pages))throw new ConflictError('The receipts changed; try again');
+   const [target]=receipts as Receipt[];
+   Object.assign(target,{status:'queued',items:[],total:null,merchant:'',date:'',error:null,pages,version:target.version+1});
+   trip.receipts=trip.receipts.filter(r=>r===target||!plan.some(p=>p.id===r.id));trip.version++;
+   trip.activity.unshift({id:randomUUID(),at:new Date().toISOString(),actor:actor.name,description:`combined ${plan.length} receipt photos into one receipt`});trip.activity=trip.activity.slice(0,300);
    this.db.prepare('UPDATE trips SET data=? WHERE id=?').run(JSON.stringify(trip),tripId);this.changed(tripId);this.db.exec('COMMIT');return trip;
   }catch(error){this.db.exec('ROLLBACK');throw error;}
  }

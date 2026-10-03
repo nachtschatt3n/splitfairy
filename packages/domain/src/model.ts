@@ -51,7 +51,8 @@ export type Split=z.infer<typeof splitSchema>;
 export type Expense=ExpenseInput & {allocations:Allocation[];authorId:string};
 export type Payment={id:string;from:string;to:string;amount:number;date:string;authorId:string;version:number};
 export type ReceiptStatus='queued'|'processing'|'review'|'failed'|'posted'|'dismissed';
-export type Receipt={id:string;status:ReceiptStatus;items:{label:string;amount:number}[];total:number|null;merchant:string;date:string;error:string|null;version:number;authorId:string;expenseId?:string|null};
+/** `pages`: how many photos the receipt has (a long one in several parts); 1 when missing. */
+export type Receipt={id:string;status:ReceiptStatus;items:{label:string;amount:number}[];total:number|null;merchant:string;date:string;error:string|null;version:number;authorId:string;expenseId?:string|null;pages?:number};
 /** A picture of a place (a stay); the image lives on the server, next to the receipts. */
 /** A document attached to a stay, such as a booking confirmation. */
 export type StayFile={id:string;stayId:string;name:string;mime:string;size:number;authorId:string;author:string;at:string};

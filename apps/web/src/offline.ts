@@ -7,7 +7,7 @@ export type Pending={id:string;tripId:string;command:Command;state:'pending'|'co
 class OfflineDb extends Dexie{
  snapshots!:Table<{id:string;view:TripView},string>;
  outbox!:Table<Pending,string>;
- photos!:Table<{id:string;tripId:string;file:File},string>;
+ photos!:Table<{id:string;tripId:string;file:File;more?:File[]},string>;
  constructor(){super('splitfairy');this.version(1).stores({snapshots:'id',outbox:'id,tripId,state'});this.version(2).stores({snapshots:'id',outbox:'id,tripId,state',photos:'id,tripId'});this.version(3).stores({snapshots:'id',outbox:'id,tripId,state,seq',photos:'id,tripId'});}
 }
 export const localDb=new OfflineDb();
@@ -42,7 +42,7 @@ export async function cachedTrip(id:string){return (await localDb.snapshots.get(
 export async function saveTrip(view:TripView){await localDb.snapshots.put({id:view.trip.id,view});}
 export async function queue(tripId:string,command:Command){await localDb.outbox.put({id:command.mutationId,tripId,command,state:'pending',seq:nextSeq()});}
 export async function pendingFor(tripId:string){return replayOrder(await localDb.outbox.where('tripId').equals(tripId).toArray());}
-export async function queuePhoto(tripId:string,file:File){await localDb.photos.put({id:crypto.randomUUID(),tripId,file});}
+export async function queuePhoto(tripId:string,file:File,more:File[]=[]){await localDb.photos.put({id:crypto.randomUUID(),tripId,file,...(more.length?{more}:{})});}
 export async function photoCount(tripId:string){return localDb.photos.where('tripId').equals(tripId).count();}
 const running=new Map<string,Promise<TripView>>();
 /** Replays queued photos and edits, then returns the server state with anything still unsynced laid over it. */
@@ -55,7 +55,7 @@ async function replay(tripId:string):Promise<TripView>{
  try{
   const photos=await localDb.photos.where('tripId').equals(tripId).toArray();
   for(const photo of photos){
-   try{await api.receipt(tripId,photo.file,photo.id);await localDb.photos.delete(photo.id);}
+   try{await api.receipt(tripId,photo.file,photo.id,photo.more??[]);await localDb.photos.delete(photo.id);}
    // A photo the server refuses (unreadable, too large) must not hold back every later edit.
    catch(error){if(classifyFailure(error)!=='rejected')throw error;await localDb.photos.delete(photo.id);rejectedPhotos++;}
   }

@@ -3,13 +3,13 @@ import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import {createHash,createHmac,randomBytes,randomInt,randomUUID,timingSafeEqual} from 'node:crypto';
 import {join} from 'node:path';
-import {mkdir,readFile,readdir,rm,writeFile} from 'node:fs/promises';
+import {copyFile,mkdir,readFile,readdir,rm,writeFile} from 'node:fs/promises';
 import sharp from 'sharp';
 import {z,ZodError} from 'zod';
 import {Store,AccessError,ConflictError,InputError,visibleTrip} from './store.js';
 import {balances,settle} from '../../../packages/domain/src/accounting.js';
 import {TRIP_THEMES,commandSchema,type Trip,type User,type Receipt} from '../../../packages/domain/src/model.js';
-import {processReceipt,claimReceipt,resetInterruptedReceipts} from './receipt.js';
+import {processReceipt,claimReceipt,resetInterruptedReceipts,receiptPage,MAX_RECEIPT_PAGES} from './receipt.js';
 import {inviteEmail,signInEmail} from './mail.js';
 import {registerMcp} from './mcp.js';
 import {sendSettleReminders} from './reminders.js';
@@ -197,13 +197,18 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
  });
  app.post('/api/v1/trips/:tripId/receipts',async(request,reply)=>{
   const user=auth(request),tripId=(request.params as any).tripId;if(config.store.getTrip(user,tripId).archived)throw new InputError('Trip is archived');
-  const body=z.object({image:z.string().max(15_000_000),uploadId:z.uuid().optional()}).parse(request.body);
+  // `more`: further photos of the same long receipt, top to bottom.
+  const body=z.object({image:z.string().max(15_000_000),more:z.array(z.string().max(15_000_000)).max(MAX_RECEIPT_PAGES-1).default([]),uploadId:z.uuid().optional()}).parse(request.body);
   if(body.uploadId){const prior=config.store.getTrip(user,tripId).receipts.find(r=>r.id===body.uploadId);if(prior)return prior;}
-  const source=Buffer.from(body.image,'base64');if(source.length<100||source.length>10_000_000)throw new InputError('Invalid image size');
-  let image:Buffer;try{const format=(await sharp(source).metadata()).format;if(!['jpeg','png','webp','heif'].includes(format??''))throw new Error('format');image=await sharp(source,{limitInputPixels:30_000_000}).rotate().resize({width:1800,withoutEnlargement:true}).jpeg({quality:83}).toBuffer();}catch{throw new InputError('Invalid photo');}
-  const id=body.uploadId??randomUUID(),folder=join(config.dataDir,'receipts',tripId);await mkdir(folder,{recursive:true});try{await writeFile(join(folder,`${id}.jpg`),image,{flag:'wx',mode:0o600});}catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error;}
+  const normalize=async(data:string)=>{
+   const source=Buffer.from(data,'base64');if(source.length<100||source.length>10_000_000)throw new InputError('Invalid image size');
+   try{const format=(await sharp(source).metadata()).format;if(!['jpeg','png','webp','heif'].includes(format??''))throw new Error('format');return await sharp(source,{limitInputPixels:30_000_000}).rotate().resize({width:1800,withoutEnlargement:true}).jpeg({quality:83}).toBuffer();}catch{throw new InputError('Invalid photo');}
+  };
+  const pages=[await normalize(body.image)];for(const page of body.more)pages.push(await normalize(page));
+  const id=body.uploadId??randomUUID();await mkdir(join(config.dataDir,'receipts',tripId),{recursive:true});
+  for(const [i,page] of pages.entries()){try{await writeFile(receiptPage(config.dataDir,tripId,id,i+1),page,{flag:'wx',mode:0o600});}catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error;}}
   const trip=config.store.getTrip(user,tripId);const prior=trip.receipts.find(r=>r.id===id);if(prior)return prior;
-  const receipt:Receipt={id,status:'queued',items:[],total:null,merchant:'',date:'',error:null,version:1,authorId:user.id};trip.receipts.push(receipt);trip.version++;
+  const receipt:Receipt={id,status:'queued',items:[],total:null,merchant:'',date:'',error:null,version:1,authorId:user.id,...(pages.length>1?{pages:pages.length}:{})};trip.receipts.push(receipt);trip.version++;
   config.store.db.prepare('UPDATE trips SET data=? WHERE id=?').run(JSON.stringify(trip),tripId);reply.status(201);return receipt;
  });
  const photoFolder=(tripId:string)=>join(config.dataDir,'photos',tripId);
@@ -294,6 +299,18 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
  const memberParams=(request:any)=>({user:auth(request),id:request.params.tripId as string,email:emailSchema.parse(decodeURIComponent(request.params.email))});
  app.delete('/api/v1/trips/:tripId/members/:email',async(request)=>{const {user,id,email}=memberParams(request);config.store.removeMember(user,id,email);return {members:config.store.members(user,id)};});
  app.put('/api/v1/trips/:tripId/members/:email',async(request)=>{const {user,id,email}=memberParams(request);config.store.setRole(user,id,email,z.object({role:z.enum(['organizer','member'])}).parse(request.body).role);return {members:config.store.members(user,id)};});
+ // Photos uploaded as separate receipts that belong to one long receipt: their photos become pages of the first, read again together.
+ app.post('/api/v1/trips/:tripId/receipts/merge',async(request)=>{
+  const user=auth(request),tripId=(request.params as any).tripId;
+  const {ids}=z.object({ids:z.array(z.uuid()).min(2).max(MAX_RECEIPT_PAGES)}).parse(request.body);
+  const plan=config.store.receiptsToMerge(user,tripId,ids);
+  const total=plan.reduce((n,r)=>n+r.pages,0);if(total>MAX_RECEIPT_PAGES)throw new InputError(`A receipt can have at most ${MAX_RECEIPT_PAGES} photos`);
+  let next=plan[0].pages;
+  for(const source of plan.slice(1))for(let p=1;p<=source.pages;p++)await copyFile(receiptPage(config.dataDir,tripId,source.id,p),receiptPage(config.dataDir,tripId,plan[0].id,++next));
+  const trip=config.store.mergeReceipts(user,tripId,plan,total);
+  for(const source of plan.slice(1))for(let p=1;p<=source.pages;p++)await rm(receiptPage(config.dataDir,tripId,source.id,p),{force:true});
+  return {trip:visibleTrip(trip,user),role:config.store.role(user,tripId)};
+ });
  app.post('/api/v1/trips/:tripId/receipts/:receiptId/:action',async(request)=>{
   const user=auth(request),{tripId,receiptId,action}=request.params as {tripId:string;receiptId:string;action:string};
   if(action!=='retry'&&action!=='dismiss')throw Object.assign(new Error('Not found'),{statusCode:404});
@@ -301,8 +318,9 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
  });
  app.get('/api/v1/trips/:tripId/receipts/:receiptId/image',async(request,reply)=>{
   const user=auth(request),{tripId,receiptId}=request.params as any,trip=config.store.getTrip(user,tripId);
-  if(!trip.receipts.some(r=>r.id===receiptId))throw new AccessError();
-  const image=await readFile(join(config.dataDir,'receipts',tripId,`${receiptId}.jpg`));reply.header('Content-Type','image/jpeg').header('Cache-Control','private, max-age=3600');return reply.send(image);
+  const receipt=trip.receipts.find(r=>r.id===receiptId);if(!receipt)throw new AccessError();
+  const page=Math.trunc(Number((request.query as any)?.page??1));if(!(page>=1&&page<=(receipt.pages??1)))throw new InputError('No such page');
+  const image=await readFile(receiptPage(config.dataDir,tripId,receiptId,page));reply.header('Content-Type','image/jpeg').header('Cache-Control','private, max-age=3600');return reply.send(image);
  });
  if(config.startWorker!==false){resetInterruptedReceipts(config.store);let working=false;const timer=setInterval(async()=>{if(working)return;working=true;try{const job=claimReceipt(config.store);if(job)await processReceipt(config.store,config.dataDir,config.ollamaUrl??'http://192.168.30.111:11434',config.ollamaModel??'gemma4:26b-mlx',job);}catch(error){app.log.error(error);}finally{working=false;}},5000);timer.unref();app.addHook('onClose',async()=>clearInterval(timer));}
  registerMcp(app);
