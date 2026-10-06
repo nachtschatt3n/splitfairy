@@ -20,10 +20,29 @@ const plain=(n:number)=>String(Math.round(n*1000)/1000);
 const money=(amount:number)=>(Math.abs(amount)/100).toFixed(2);
 
 /** One short phrase for how an expense is split, for lists and details. */
-export function describeSplit(trip:Trip,e:Expense){
- if(e.lines.length>1)return `${e.lines.length} items`;
- const s=e.lines[0]?.splits.length===1?e.lines[0].splits[0]:null;if(!s)return 'custom split';
+/** Who shares one split, in words: "for Eggslut breakfast", "everyone", "only Uhl", "only Ana" or "5 people". */
+export function splitWho(trip:Trip,s:Split):string{
  if(s.eventId)return `for ${trip.events.find(x=>x.id===s.eventId)?.title??'a removed plan'}`;
+ const families=s.fixed.map(f=>f.familyId);
+ const ids=new Set([...s.weights.filter(w=>w.weight>0).map(w=>w.id),...(s.personFixed??[]).map(f=>f.personId),...trip.people.filter(p=>families.includes(p.familyId)).map(p=>p.id)]);
+ if(trip.people.length&&trip.people.every(p=>ids.has(p.id)))return 'everyone';
+ if(ids.size===1)return `only ${trip.people.find(p=>ids.has(p.id))?.name??'one person'}`;
+ const family=trip.families.find(f=>{const members=trip.people.filter(p=>p.familyId===f.id);return members.length===ids.size&&members.every(p=>ids.has(p.id));});
+ return family?`only ${family.name}`:`${ids.size} people`;
+}
+
+export function describeSplit(trip:Trip,e:Expense){
+ // A receipt with many items: say what it was for, e.g. "13 items · for Eggslut breakfast" or "13 items · for Eggslut €30.10, everyone €15.50".
+ if(e.lines.length>1){
+  const groups=new Map<string,number>();
+  for(const l of e.lines){const who=l.splits.length===1?splitWho(trip,l.splits[0]):'custom split';groups.set(who,(groups.get(who)??0)+l.amount);}
+  const sorted=[...groups].sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]));
+  if(sorted.length===1)return `${e.lines.length} items · ${sorted[0][0]}`;
+  const shown=sorted.slice(0,2).map(([who,amount])=>`${who} ${euro(amount)}`).join(', ');
+  return `${e.lines.length} items · ${shown}${sorted.length>2?` +${sorted.length-2} more`:''}`;
+ }
+ const s=e.lines[0]?.splits.length===1?e.lines[0].splits[0]:null;if(!s)return 'custom split';
+ if(s.eventId)return splitWho(trip,s);
  const n=new Set([...s.weights.map(w=>w.id),...(s.personFixed??[]).map(f=>f.personId)]).size;const people=`${n} ${n===1?'person':'people'}`;
  switch(s.mode){
   case 'equal':return `split equally · ${people}`;
@@ -31,7 +50,7 @@ export function describeSplit(trip:Trip,e:Expense){
   case 'percent':return `by percentage · ${people}`;
   case 'shares':return `by shares · ${people}`;
   case 'adjust':return `equally with adjustments · ${people}`;
-  case 'families':return `equally by family · ${s.fixed.length} families`;
+  case 'families':return s.fixed.length===1?`only ${trip.families.find(f=>f.id===s.fixed[0].familyId)?.name??'one family'}`:`equally by family · ${s.fixed.length} families`;
   default:return s.fixed.length&&!s.weights.length?`by family amounts · ${s.fixed.length} families`:`by trip shares · ${people}`;
  }
 }

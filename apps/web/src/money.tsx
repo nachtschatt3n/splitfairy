@@ -1,5 +1,5 @@
 import {useState,type FormEvent} from 'react';
-import {SplitEditor,compileSplit,describeSplit,initialSplit,type SplitState} from './split.js';
+import {SplitEditor,compileSplit,describeSplit,initialSplit,splitWho,type SplitState} from './split.js';
 import {ArrowRight,Pencil,RotateCcw} from 'lucide-react';
 import type {Expense,Payment,Trip,User} from '../../../packages/domain/src/model.js';
 import {Button,Sheet,cents,euro,fmt,money,today,uid,type Remove,type Save} from './common.js';
@@ -40,7 +40,7 @@ export function ExpenseSheet({trip,expense,editable,save,busy,onClose}:{trip:Tri
   {!editing?<div className="detail">
    <dl className="facts"><div><dt>Amount</dt><dd>{euro(expense.total)}</dd></div><div><dt>Date</dt><dd>{fmt(expense.date)}</dd></div><div><dt>Paid by</dt><dd>{expense.payers.map(p=>`${familyName(trip,p.familyId)}${expense.payers.length>1?` ${euro(p.amount)}`:''}`).join(', ')}</dd></div><div><dt>Category</dt><dd>{CATEGORIES.find(([c])=>c===expense.category)?.[1]}</dd></div><div className="wide"><dt>Split</dt><dd>{describeSplit(trip,expense).replace(/^./,c=>c.toUpperCase())}</dd></div></dl>
    {expense.notes&&<p className="event-notes expense-notes">{expense.notes}</p>}
-   {expense.lines.length>1&&<div className="detail-block"><h3>Items</h3>{expense.lines.map(l=><div className="detail-row" key={l.id}><span>{l.label}<small>{l.splits.map(s=>s.eventId?trip.events.find(x=>x.id===s.eventId)?.title??'Removed plan':'Everyone').join(', ')}</small></span><b>{euro(l.amount)}</b></div>)}</div>}
+   {expense.lines.length>1&&<div className="detail-block"><h3>Items</h3>{expense.lines.map(l=><div className="detail-row" key={l.id}><span>{l.label}<small>{l.splits.map(s=>splitWho(trip,s).replace(/^./,c=>c.toUpperCase())).join(', ')}</small></span><b>{euro(l.amount)}</b></div>)}</div>}
    {expense.status!=='void'&&<div className="detail-block"><h3>Who pays what</h3>{shares.map(s=>{const members=perPerson.filter(p=>p.familyId===s.id);return <div className="detail-row" key={s.id}><span>{familyName(trip,s.id)}{members.length>0&&<small>{members.map(m=>`${m.name} ${euro(m.amount)}`).join(' · ')}</small>}</span><b>{euro(s.amount)}</b></div>;})}</div>}
    {editable?<div className="sheet-actions">
     {expense.status!=='void'&&<Button onClick={()=>setEditing(true)}><Pencil size={16}/> Edit</Button>}

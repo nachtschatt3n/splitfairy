@@ -130,6 +130,8 @@ test('organizer plans a trip, splits a receipt, settles up and switches trips',a
  await sheet.getByRole('button',{name:'Confirm expense'}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);
  await expect(page.locator('.list-row',{hasText:'Mercado da Ribeira'})).toContainText('€23.10');
+ // The list says what the receipt was for: most of it the dinner, the sunscreen for everyone.
+ await expect(page.locator('.list-row',{hasText:'Mercado da Ribeira'})).toContainText('for Sardine dinner €18.30, everyone €4.80');
  await expect(page.getByText('Receipt inbox')).toHaveCount(0);
 
  await openSection(page,'Settle');
