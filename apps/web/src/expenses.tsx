@@ -1,6 +1,6 @@
 import {useEffect,useState,type FormEvent} from 'react';
 import {ArrowRight,BedDouble,Camera,Car,ChevronDown,Coins,Plus,ReceiptText,Sun,UtensilsCrossed} from 'lucide-react';
-import type {Command,Expense,Trip,User} from '../../../packages/domain/src/model.js';
+import type {Command,Expense,Receipt,Trip,User} from '../../../packages/domain/src/model.js';
 import {ReceiptReview} from './receipt-review.js';
 import {Button,Empty,Sheet,cents,euro,fmt,today,uid} from './common.js';
 import {ExpenseSheet,canChange} from './money.js';
@@ -71,11 +71,17 @@ export function Expenses({trip,user,role,save,onScan,onReceiptAction,onCombine,b
  const byCategory=CATEGORIES.map(([c,label])=>({c,label,amount:posted.filter(e=>e.category===c).reduce((n,e)=>n+e.total,0)})).filter(x=>x.amount>0);
  const voided=trip.expenses.filter(e=>e.status==='void');
  const shown=trip.expenses.filter(e=>(showVoid||e.status!=='void')&&(filter==='all'||e.category===filter)).slice().sort((a,b)=>b.date.localeCompare(a.date));
- const days=[...new Set(shown.map(e=>e.date))];
+ // Read receipts waiting for a check show in the overview on their day too, so nothing scanned goes unnoticed.
+ // Once confirmed (even before the server has caught up), the expense stands for it.
+ const confirmed=new Set(trip.expenses.flatMap(e=>e.receiptIds??[]));
+ const toCheck=trip.receipts.filter(r=>r.status==='review'&&!confirmed.has(r.id)&&(filter==='all'||filter==='food'));
+ const checkDate=(r:Receipt)=>/^\d{4}-\d{2}-\d{2}$/.test(r.date)?r.date:today();
+ const pendingTotal=trip.receipts.filter(r=>r.status==='review'&&!confirmed.has(r.id)).reduce((n,r)=>n+(r.total??0),0);
+ const days=[...new Set([...shown.map(e=>e.date),...toCheck.map(checkDate)])].sort((a,b)=>b.localeCompare(a));
  const payerName=(e:Expense)=>e.payers.length>1?`${e.payers.length} families`:trip.families.find(f=>f.id===e.payers[0]?.familyId)?.name??'Unknown';
  return <>
   <section className="card spend-summary" aria-label="Trip spending">
-   <div className="spend-total"><span className="eyebrow">Spent so far</span><strong>{euro(spent)}</strong><small>{posted.length} expense{posted.length===1?'':'s'}{trip.people.length&&spent>0?` · about ${euro(Math.round(spent/trip.people.length))} per person`:''}</small></div>
+   <div className="spend-total"><span className="eyebrow">Spent so far</span><strong>{euro(spent)}</strong><small>{posted.length} expense{posted.length===1?'':'s'}{trip.people.length&&spent>0?` · about ${euro(Math.round(spent/trip.people.length))} per person`:''}{pendingTotal>0?` · ${euro(pendingTotal)} in receipts to check`:''}</small></div>
    <div className="spend-actions"><Button onClick={()=>setAdding({})} disabled={!trip.families.length||!trip.people.length}><Plus size={17}/> Add expense</Button><Button kind="secondary" onClick={onScan}><Camera size={17}/> Scan a receipt</Button></div>
    {byCategory.length>0&&<div className="spend-breakdown">
     <div className="spend-bar" aria-hidden="true">{byCategory.map(x=><span key={x.c} className={`cat-${x.c}`} style={{flexGrow:x.amount}}/>)}</div>
@@ -92,6 +98,10 @@ export function Expenses({trip,user,role,save,onScan,onReceiptAction,onCombine,b
    {trip.expenses.length>0&&<div className="filter-chips" role="group" aria-label="Show category">{[['all','All'] as const,...CATEGORIES.map(([c,l])=>[c,l] as const)].map(([c,l])=><button key={c} type="button" className={filter===c?'on':''} aria-pressed={filter===c} onClick={()=>setFilter(c)}>{l}</button>)}</div>}
    {days.map(d=>{const list=shown.filter(e=>e.date===d),sum=list.filter(e=>e.status==='posted').reduce((n,e)=>n+e.total,0);
     return <div className="expense-day" key={d}><h3 className="day-head"><span>{fmt(d)}</span><span>{euro(sum)}</span></h3>
+     {toCheck.filter(r=>checkDate(r)===d).map(r=><button type="button" className="list-row row-button to-check" key={r.id} onClick={()=>setReview(r.id)} aria-label={`Review receipt ${r.merchant||'photo'}`}>
+       <span className="list-icon"><ReceiptText size={19}/></span>
+       <div><strong>{r.merchant||'Receipt'}</strong><small><span className="check-tag">To check</span> {r.items.length} items · not in the totals yet</small></div>
+       <b className="row-amount">{r.total===null?'':euro(r.total)}</b><span className="review-link">Review</span></button>)}
      {list.map(e=>{const [,label,Icon]=categoryOf(e.category);
       return <button type="button" className={`list-row row-button ${e.status==='void'?'voided':''}`} key={e.id} onClick={()=>setOpenExpense(e.id)} aria-label={`Open ${e.title}`}>
        <span className={`list-icon cat-${e.category}`} title={label}><Icon size={19}/></span>

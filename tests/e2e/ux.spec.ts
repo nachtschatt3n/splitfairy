@@ -104,7 +104,7 @@ for(const scheme of ['light','dark'] as const){
    {name:'packing-sheet',scope:'[role=dialog]',open:async p=>{await openSection(p,'Pack');await p.getByRole('button',{name:'Edit Grill'}).click();}},
    {name:'spend',open:p=>openSection(p,'Spend')},
    {name:'spend-options',scope:'[role=dialog]',open:async p=>{await openSection(p,'Spend');await openExpenseForm(p);await p.getByText('Several payers or a refund').click();}},
-   {name:'receipt-review',scope:'[role=dialog]',open:async p=>{await openSection(p,'Spend');await p.getByRole('button',{name:'Review'}).click();}},
+   {name:'receipt-review',scope:'[role=dialog]',open:async p=>{await openSection(p,'Spend');await p.getByRole('button',{name:'Review',exact:true}).click();}},
    {name:'settle',open:p=>openSection(p,'Settle')},
    {name:'people',open:p=>openSection(p,'People')},
    {name:'add-new',scope:'[role=dialog]',open:p=>p.getByRole('button',{name:'Add new'}).click()},

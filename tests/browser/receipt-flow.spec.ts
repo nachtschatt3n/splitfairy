@@ -43,7 +43,7 @@ for(const viewport of [{name:'mobile',width:390,height:844},{name:'desktop',widt
   await expect(page.getByText("Here's what's happening in Summer in Liguria.")).toBeVisible();
   await shot(page,`${viewport.name}-today`);
   await page.getByRole('button',{name:viewport.name==='mobile'?'Spend':'Expenses'}).click();
-  await page.getByRole('button',{name:'Review'}).click();
+  await page.getByRole('button',{name:'Review',exact:true}).click();
   const dialog=page.getByRole('dialog');
   await expect(dialog.getByText('Totals match')).toBeVisible();
   // Receipt date matches the only dinner, so food items start assigned to it; sunscreen is for everyone.

@@ -209,7 +209,7 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
   for(const [i,page] of pages.entries()){try{await writeFile(receiptPage(config.dataDir,tripId,id,i+1),page,{flag:'wx',mode:0o600});}catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error;}}
   const trip=config.store.getTrip(user,tripId);const prior=trip.receipts.find(r=>r.id===id);if(prior)return prior;
   const receipt:Receipt={id,status:'queued',items:[],total:null,merchant:'',date:'',error:null,version:1,authorId:user.id,...(pages.length>1?{pages:pages.length}:{})};trip.receipts.push(receipt);trip.version++;
-  config.store.db.prepare('UPDATE trips SET data=? WHERE id=?').run(JSON.stringify(trip),tripId);reply.status(201);return receipt;
+  config.store.db.prepare('UPDATE trips SET data=? WHERE id=?').run(JSON.stringify(trip),tripId);config.store.notifyChange(tripId);reply.status(201);return receipt;
  });
  const photoFolder=(tripId:string)=>join(config.dataDir,'photos',tripId);
  /** Removes image files whose photo is no longer on the trip (after a stay was deleted). */

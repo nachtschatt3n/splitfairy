@@ -29,6 +29,8 @@ export class Store{
  private listeners=new Set<TripListener>();
  onTripChange(listener:TripListener){this.listeners.add(listener);return()=>{this.listeners.delete(listener);};}
  // After the current transaction has committed.
+ /** For writes outside `mutate` (receipt uploads and the receipt reader). */
+ notifyChange(tripId:string){this.changed(tripId);}
  private changed(tripId:string){setImmediate(()=>{for(const l of this.listeners)try{l(tripId);}catch{/* a closed stream */}});}
  constructor(public db:DatabaseSync){
   db.exec(`PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL;

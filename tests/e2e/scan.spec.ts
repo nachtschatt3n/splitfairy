@@ -33,6 +33,10 @@ test('receipts come from the camera or from files, several at once, one receipt 
  const inbox=page.getByRole('region',{name:'Receipt inbox'});
  await expect(inbox.locator('.receipt-row')).toHaveCount(2);
  await expect.poll(async()=>(await (await page.request.get(`/api/v1/trips/${tripId}`)).json()).trip.receipts.every((r:any)=>r.status!=='processing'&&r.status!=='queued'),{timeout:30_000}).toBe(true);
+ // Both read receipts show up in the expenses overview by themselves (live update, no reload), marked to check.
+ await expect(page.getByRole('button',{name:/^Review receipt/})).toHaveCount(2,{timeout:8000});
+ await expect(page.locator('.list-row.to-check').first()).toContainText('not in the totals yet');
+ await shot(page,testInfo,'receipts-to-check');
  await page.reload();
  await inbox.getByRole('button',{name:'Combine photos'}).click();
  const picks=inbox.getByRole('checkbox');
