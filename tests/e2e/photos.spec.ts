@@ -61,7 +61,8 @@ test('everyone can add photos of a place, open them, and they become the trip co
  await sheet(page).getByLabel('Attach files').setInputFiles({name:'Booking confirmation.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.4\n% test booking\n')});
  await expect(sheet(page).locator('.file-list')).toContainText('Booking confirmation.pdf',{timeout:30_000});
  const [download]=await Promise.all([page.waitForEvent('download'),sheet(page).getByRole('link',{name:/Booking confirmation\.pdf/}).click()]);
- expect(download.suggestedFilename()).toBe('Booking confirmation.pdf');
+ // Some browsers (WebKit on Linux) save spaces as underscores; the name we send has the space.
+ expect(download.suggestedFilename().replace(/_/g,' ')).toBe('Booking confirmation.pdf');
  await sheet(page).getByRole('button',{name:'Save changes'}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
  const checkin=day.getByRole('article',{name:'Check in · Casa das Dunas'});
  await expect(checkin.getByRole('list',{name:'Arrivals'})).toContainText('Ana arrives at 18:30');
