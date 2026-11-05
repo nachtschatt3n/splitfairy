@@ -1,0 +1,43 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  // Library fixes arrive as PRs by themselves; safe ones merge once CI (unit, e2e, container smoke test) is green.
+  // Merging to main does not deploy: a release tag does. Updates ship with the next release.
+  "extends": ["config:recommended", ":dependencyDashboard"],
+  // The hosted app has injected silent mode / dashboard approval on other repos; be explicit.
+  "mode": "full",
+  "dependencyDashboardApproval": false,
+  "timezone": "Europe/Berlin",
+  "schedule": ["before 6am on monday"],
+  // A few days' wait lets broken releases be pulled before they reach us.
+  "minimumReleaseAge": "3 days",
+  "labels": ["dependencies"],
+  "packageRules": [
+    {
+      // One weekly PR for everything that is not a major update, merged when CI passes.
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "groupName": "non-major dependencies",
+      "groupSlug": "non-major",
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": false
+    },
+    {
+      // Majors get their own PR and a human look.
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "dependencyDashboardApproval": false
+    },
+    {
+      // Stay on the Node 24 LTS line (Docker image, engines, CI); types follow the runtime.
+      "matchPackageNames": ["node", "@types/node"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
+      // The Babel pin in "overrides" is coupled to Workbox (still on Babel 7).
+      "matchPackageNames": ["@babel/plugin-transform-runtime"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    }
+  ]
+}
