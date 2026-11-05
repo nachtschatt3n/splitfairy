@@ -46,7 +46,9 @@ describe('API hardening',()=>{
  it('tells the user when the sign-in email cannot be sent',async()=>{
   const store=new Store(new DatabaseSync(':memory:'));
   const failing=await createApp({store,adminEmail:'admin@example.com',secret:'a very long integration test secret',sendMail:async()=>{throw new Error('smtp down');},dataDir:'/tmp/splitfairy-api-tests',startWorker:false});
-  expect((await failing.inject({method:'POST',url:'/api/v1/auth/request',payload:{email:'admin@example.com'}})).statusCode).toBe(502);
+  const failed=await failing.inject({method:'POST',url:'/api/v1/auth/request',payload:{email:'admin@example.com'}});
+  // 503, not 502: Cloudflare replaces 502 answers with its own page, which the app cannot read.
+  expect(failed.statusCode).toBe(503);expect(failed.json().error).toMatch(/sign-in email could not be sent/);
  });
 });
 describe('sign-in throttling per email',()=>{

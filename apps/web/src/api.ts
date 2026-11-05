@@ -4,7 +4,8 @@ export class ApiError extends Error{constructor(message:string,public status:num
 async function request<T>(path:string,init:RequestInit={},timeoutMs=15_000):Promise<T>{
  // A request must never hang the app (seen on iOS Safari): time out and let callers treat it as offline.
  const response=await fetch(`/api/v1${path}`,{credentials:'same-origin',headers:init.body?{'Content-Type':'application/json',...init.headers}:{...init.headers},signal:AbortSignal.timeout(timeoutMs),...init});
- const result=await response.json().catch(()=>({error:'Invalid response'}));
+ // A proxy in between (Cloudflare) can answer with its own HTML page instead of ours: say something useful.
+ const result=await response.json().catch(()=>({error:response.status>=500?'The server could not finish this right now. Please try again in a few minutes.':'Unexpected answer from the server. Please try again.'}));
  if(!response.ok)throw new ApiError(result.error??'Request failed',response.status);
  return result as T;
 }

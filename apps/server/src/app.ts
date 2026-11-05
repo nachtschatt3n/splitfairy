@@ -31,7 +31,8 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
  app.setErrorHandler((error,request,reply)=>{
   const status=error instanceof ZodError||error instanceof InputError?400:error instanceof ConflictError?409:error instanceof AccessError?403:(error as any).statusCode??500;
   if(status>=500)request.log.error(error);
-  reply.status(status).send({error:status>=500?'Internal server error':error instanceof Error?error.message:'Invalid request'});
+  // Server errors stay vague unless written for people (`expose`), like a sign-in email that could not be sent.
+  reply.status(status).send({error:status>=500&&!(error as any).expose?'Internal server error':error instanceof Error?error.message:'Invalid request'});
  });
  let seenOrigin:string|null=null;
  app.addHook('onRequest',async(request,reply)=>{
@@ -104,7 +105,7 @@ export async function createApp(config:Config):Promise<FastifyInstance>{
    config.store.issueCode(email,codeHash(config.secret,email,code),Date.now()+30*60_000);
    const mail=signInEmail(code);
    try{await config.sendMail(email,mail.subject,mail.text,mail.html);}
-   catch(error){request.log.error({err:error},'sign-in email failed');throw Object.assign(new Error('The sign-in email could not be sent. Please try again later.'),{statusCode:502});}
+   catch(error){request.log.error({err:error},'sign-in email failed');throw Object.assign(new Error('The sign-in email could not be sent. Please try again later.'),{statusCode:503,expose:true});}
   }
   return {ok:true};
  });
