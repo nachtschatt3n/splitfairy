@@ -28,10 +28,13 @@
       "dependencyDashboardApproval": false
     },
     {
-      // Stay on the Node 24 LTS line (Docker image, engines, CI); types follow the runtime.
-      "matchPackageNames": ["node", "@types/node"],
+      // A new Node major (Docker image, CI, types) comes as one PR, together, and is merged by hand.
+      // Move only to an LTS line (even majors, from October of their release year).
+      "matchDepNames": ["node", "@types/node"],
       "matchUpdateTypes": ["major"],
-      "enabled": false
+      "groupName": "Node runtime",
+      "groupSlug": "node-major",
+      "automerge": false
     },
     {
       // The Babel pin in "overrides" is coupled to Workbox (still on Babel 7).
